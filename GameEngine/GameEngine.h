@@ -226,9 +226,6 @@ Mesh Cube = Mesh({
 	{ {1.0f, 0.0f, 1.0f}, {0.0f, 0.0f, 0.0f}, {1.0f, 0.0f, 0.0f} },
 	}, "Cube");
 
-Mesh TeaPot = Mesh("C:\\Users\\griff\\3D Objects\\TeaPot.obj");
-Mesh Pyramid = Mesh("C:\\Users\\griff\\3D Objects\\Pyramid.obj");
-
 typedef void(__fastcall* DoDraw_t)(const GdiPP&, const float);
 
 class Camera

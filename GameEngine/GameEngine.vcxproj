@@ -157,6 +157,11 @@
     <ClInclude Include="GameEngine.h" />
     <ClInclude Include="Math.h" />
   </ItemGroup>
+  <ItemGroup>
+    <None Include="TeaPot.obj">
+      <FileType>Document</FileType>
+    </None>
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>

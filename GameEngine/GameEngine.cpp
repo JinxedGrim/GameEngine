@@ -16,6 +16,8 @@ bool DoLighting = true;
 bool WireFrame = false;
 bool ShowTriLines = false;
 bool ShowStrs = false;
+Mesh TeaPot = Mesh(("TeaPot.obj"));
+Mesh Pyramid = Mesh("Pyramid.obj");
 std::vector<Mesh> Meshes = {Cube, TeaPot};
 int CurrMesh = 0;
 

@@ -13,6 +13,9 @@
       <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
       <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
     </Filter>
+    <Filter Include="ObjectFIles">
+      <UniqueIdentifier>{7ff05088-d900-49c1-842e-f27d942f0548}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="GameEngine.cpp">
@@ -32,5 +35,10 @@
     <ClInclude Include="..\..\..\..\Desktop\My Stuff\My Librarys\Graphics\GdiPP.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="TeaPot.obj">
+      <Filter>ObjectFIles</Filter>
+    </None>
   </ItemGroup>
 </Project>
