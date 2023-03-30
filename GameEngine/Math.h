@@ -23,6 +23,8 @@ float Clamp(float Min, float Max, float Val)
 	return Val;
 }
 
+class Vec3;
+
 class Matrix
 {
 public:
@@ -106,17 +108,6 @@ public:
 		Out->_44 = 1;
 	}
 
-	static void CreateTranslationMatrix(Matrix* Out, float x, float y, float z)
-	{
-		Out->fMatrix[0][0] = 1.0f;
-		Out->fMatrix[1][1] = 1.0f;
-		Out->fMatrix[2][2] = 1.0f;
-		Out->fMatrix[3][3] = 1.0f;
-		Out->fMatrix[3][0] = x;
-		Out->fMatrix[3][1] = y;
-		Out->fMatrix[3][2] = z;
-	}
-
 	static Matrix CreateIdentity()
 	{
 		Matrix Out;
@@ -166,6 +157,22 @@ public:
 		}
 
 		return result;
+	}
+
+	static Matrix CreateTranslationMatrix(Vec3);
+
+	Matrix Inversed() // Only for Rotation/Translation Matrices
+	{
+		Matrix OutMat;
+		OutMat.fMatrix[0][0] = this->fMatrix[0][0]; OutMat.fMatrix[0][1] = this->fMatrix[1][0]; OutMat.fMatrix[0][2] = this->fMatrix[2][0]; OutMat.fMatrix[0][3] = 0.0f;
+		OutMat.fMatrix[1][0] = this->fMatrix[0][1]; OutMat.fMatrix[1][1] = this->fMatrix[1][1]; OutMat.fMatrix[1][2] = this->fMatrix[2][1]; OutMat.fMatrix[1][3] = 0.0f;
+		OutMat.fMatrix[2][0] = this->fMatrix[0][2]; OutMat.fMatrix[2][1] = this->fMatrix[1][2]; OutMat.fMatrix[2][2] = this->fMatrix[2][2]; OutMat.fMatrix[2][3] = 0.0f;
+		OutMat.fMatrix[3][0] = -(this->fMatrix[3][0] * OutMat.fMatrix[0][0] + this->fMatrix[3][1] * OutMat.fMatrix[1][0] + this->fMatrix[3][2] * OutMat.fMatrix[2][0]);
+		OutMat.fMatrix[3][1] = -(this->fMatrix[3][0] * OutMat.fMatrix[0][1] + this->fMatrix[3][1] * OutMat.fMatrix[1][1] + this->fMatrix[3][2] * OutMat.fMatrix[2][1]);
+		OutMat.fMatrix[3][2] = -(this->fMatrix[3][0] * OutMat.fMatrix[0][2] + this->fMatrix[3][1] * OutMat.fMatrix[1][2] + this->fMatrix[3][2] * OutMat.fMatrix[2][2]);
+		OutMat.fMatrix[3][3] = 1.0f;
+
+		return OutMat;
 	}
 
 public:
@@ -562,6 +569,20 @@ public:
 	float y;
 	float z;
 };
+
+
+Matrix Matrix::CreateTranslationMatrix(Vec3 Translation)
+{
+	Matrix Out;
+	Out.fMatrix[0][0] = 1.0f;
+	Out.fMatrix[1][1] = 1.0f;
+	Out.fMatrix[2][2] = 1.0f;
+	Out.fMatrix[3][3] = 1.0f;
+	Out.fMatrix[3][0] = Translation.x;
+	Out.fMatrix[3][1] = Translation.y;
+	Out.fMatrix[3][2] = Translation.z;
+	return Out;
+}
 
 std::ostream& operator << (std::ostream& os, const Vec3& v)
 {

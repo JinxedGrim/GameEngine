@@ -7,9 +7,9 @@
 float FOV_ = 90.f;
 float FNEAR = 0.1f;
 float FFAR = 1000.f;
-float ZTRANSLATE = 8;
+float ZTRANSLATE = 10;
 float RotSpeedX = 0.0f;
-float RotSpeedY = 0.35;
+float RotSpeedY = 0.15f;
 float RotSpeedZ = 0.0f;
 bool DoCull = true;
 bool DoLighting = true;
@@ -18,7 +18,8 @@ bool ShowTriLines = false;
 bool ShowStrs = false;
 Mesh TeaPot = Mesh(("TeaPot.obj"));
 Mesh Pyramid = Mesh("Pyramid.obj");
-std::vector<Mesh> Meshes = {Cube, TeaPot};
+Mesh Axis = Mesh("axis.obj");
+std::vector<Mesh> Meshes = {Cube, TeaPot, Axis};
 int CurrMesh = 0;
 
 void Settings()
@@ -105,7 +106,7 @@ void Settings()
 	}
 }
 
-DoDraw_t Draw(GdiPP& Gdi, const float ElapsedTime)
+DoTick_T Draw(GdiPP& Gdi, const float ElapsedTime)
 {
 	static float FTheta = 0;
 	static Camera Cam = Camera(Vec3(0, 0, 0), (float)((float)Engine::sy / (float)Engine::sx), FOV_, FNEAR, FFAR);
@@ -119,14 +120,22 @@ DoDraw_t Draw(GdiPP& Gdi, const float ElapsedTime)
 	static Matrix RotY;
 	static Vec3 LightSrc = { 0, 0, -1 };
 	static float Intensity = 1.0f;
+	static Vec3 CamUp = { 0, 1, 0 };
+	static Vec3 LookDir = {0, 0, 1};
 
 	FTheta += 1.0f * ElapsedTime;
 
-	Matrix::CreateRotationX(&RotX, FTheta * RotSpeedX);
-	Matrix::CreateRotationY(&RotY, FTheta * RotSpeedY);
-	Matrix::CreateRotationZ(&RotZ, FTheta * RotSpeedZ);
-
 	Matrix RotM = Matrix::CreateRotationMatrix(FTheta * RotSpeedX, FTheta * RotSpeedY, FTheta * RotSpeedZ);
+	Matrix TransMat = Matrix::CreateTranslationMatrix(Vec3(1, 1, ZTRANSLATE));
+	Matrix WorldMatrix = Matrix::CreateIdentity();
+	WorldMatrix = (WorldMatrix * RotM) * TransMat;
+
+	Vec3 Target = Cam.Pos - LookDir;
+
+	if (GetAsyncKeyState(VK_UP))
+	{
+		Cam.Pos *= Matrix::CreateTranslationMatrix(Vec3(0, 1.0f, 0));
+	}
 
 	if (Engine::FpsEngineCounter && ShowStrs)
 	{
@@ -157,23 +166,20 @@ DoDraw_t Draw(GdiPP& Gdi, const float ElapsedTime)
 
 	std::vector<Triangle> TrisToRender = {};
 
+	// Project and translate object 
 	for (const auto &Tri : Meshes.at(CurrMesh).Triangles)
 	{
 		// 3D Space
-		Triangle Proj, Rxyz;
+		Triangle Proj;
 
-		Rxyz = Tri;
+		Proj = Tri;
 
-		// Apply XYZ Rotation Matrice
-		Rxyz.Rotate(RotM);
-
-		//Translate The 3D Triangle Into Camera View
-		Rxyz.Translate(Vec3(0, -0.5f, ZTRANSLATE));
+		Proj.ApplyMatrix(WorldMatrix);
 
 		// calc surface normal
-		Vec3 TriNormal = (Rxyz.Points[1] - Rxyz.Points[0]).CrossNormalized((Rxyz.Points[2] - Rxyz.Points[0])); // this line and the if statement is used for culling
+		Vec3 TriNormal = (Proj.Points[1] - Proj.Points[0]).CrossNormalized((Proj.Points[2] - Proj.Points[0])); // this line and the if statement is used for culling
 		
-		if((TriNormal.Dot(Rxyz.Points[0] - Cam.Pos) <= 0.0f) || !DoCull) // culling
+		if((TriNormal.Dot(Proj.Points[0] - Cam.Pos) < 0.0f) || !DoCull) // culling
 		{
 			Intensity = 1.0f;
 
@@ -182,33 +188,22 @@ DoDraw_t Draw(GdiPP& Gdi, const float ElapsedTime)
 				Intensity = TriNormal.Dot(LightSrc.Normalized());
 
 			// 3d Space -> Screen Space
-			Cam.ProjectTriangle(&Rxyz, Proj); // Project from 3D Space To Screen Space
+			Proj = Cam.ProjectTriangle(&Proj); // Project from 3D Space To Screen Space
 
 			// Offset to normalized space
 			Proj.Translate(Vec3(1.0f, 1.0f, 0.0f));		    
 			Proj.Scale(Vec3((float)(Engine::sx * 0.5f), (float)(Engine::sy * 0.5f), 1));
-			//Proj.Translate(Vec3(-1, -2, 0));
+			Proj.Translate(Vec3(-1,  -1, 0));
 
 			Proj.r *= Intensity;
 			Proj.g *= Intensity;
 			Proj.b *= Intensity;
 
 			TrisToRender.push_back(Proj);
-
-			//if (!WireFrame)
-			//{
-			//	if (!ShowTriLines)
-			//		Gdi.DrawFilledTriangle((Proj.Points[0].x), (Proj.Points[0].y), (Proj.Points[1].x), (Proj.Points[1].y), (Proj.Points[2].x), (Proj.Points[2].y), BrushPP(RGB(Proj.r * Intensity, Proj.g * Intensity, Proj.b * Intensity)), PenPP(PS_SOLID, 1, RGB(Proj.r * Intensity, Proj.g * Intensity, Proj.b * Intensity)));
-			//	else
-			//		Gdi.DrawFilledTriangle(Proj.Points[0].x, Proj.Points[0].y, Proj.Points[1].x, Proj.Points[1].y, Proj.Points[2].x, Proj.Points[2].y, BrushPP(RGB(Proj.r * Intensity, Proj.g * Intensity, Proj.b * Intensity)), PenPP(PS_SOLID, 1, RGB(1, 1, 1)));
-			//}
-			//else
-			//{
-			//	Gdi.DrawTriangle(Proj.Points[0].x, Proj.Points[0].y, Proj.Points[1].x, Proj.Points[1].y, Proj.Points[2].x, Proj.Points[2].y, PenPP(PS_SOLID, 1, RGB(Proj.r * Intensity, Proj.g * Intensity, Proj.b * Intensity)));
-			//}
 		}
 	}
 
+	// sort faces 
 	std::sort(TrisToRender.begin(), TrisToRender.end(), [](Triangle& t1, Triangle& t2)
 		{
 			float z1 = (t1.Points[0].z + t1.Points[1].z + t1.Points[2].z) / 3.0f;
@@ -217,6 +212,7 @@ DoDraw_t Draw(GdiPP& Gdi, const float ElapsedTime)
 			return z1 > z2;
 		});
 
+	// draw
 	for (const auto& Proj : TrisToRender)
 	{
 		if (!WireFrame)
@@ -249,7 +245,7 @@ int main()
 
 	std::thread Sett(Settings);
 
-	Engine::Run(Wnd, Gdi, ClearBrush, (DoDraw_t)Draw);
+	Engine::Run(Wnd, Gdi, ClearBrush, (DoTick_T)Draw);
 
 	Sett.detach();
 

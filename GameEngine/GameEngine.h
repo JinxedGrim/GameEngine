@@ -18,7 +18,7 @@ public:
 		this->Points[2] = Vec3();
 	}
 
-	Triangle(Vec3 P1, Vec3 P2, Vec3 P3)
+	Triangle(const Vec3 P1, const Vec3 P2, const Vec3 P3)
 	{
 		this->Points[0] = P1;
 		this->Points[1] = P2;
@@ -32,39 +32,46 @@ public:
 		this->Points[2] += Value;
 	}
 
-	void Translated(Triangle* Out, Vec3 Value)
+	const void Translated(Triangle* Out, const Vec3 Value)
 	{
 		Out->Points[0] = this->Points[0] + Value;
 		Out->Points[1] = this->Points[1] + Value;
 		Out->Points[2] = this->Points[2] + Value;
 	}
 
-	void Scale(Vec3 Value)
+	void Scale(const Vec3 &Value)
 	{
 		this->Points[0] *= Value;
 		this->Points[1] *= Value;
 		this->Points[2] *= Value;
 	}
 
-	void Scaled(Triangle* Out, Vec3 Value)
+	const void Scaled(Triangle* Out, const Vec3 Value)
 	{
 		Out->Points[0] = this->Points[0] * Value;
 		Out->Points[1] = this->Points[1] * Value;
 		Out->Points[2] = this->Points[2] * Value;
 	}
 
-	void Rotate(Matrix Rot)
+	void Rotate(const Matrix &Rot)
 	{
 		this->Points[0] *= Rot;
 		this->Points[1] *= Rot;
 		this->Points[2] *= Rot;
 	}
 
-	void Rotated(Triangle* Out, Matrix Rot)
+	const void Rotated(Triangle* Out, const Matrix &Rot)
 	{
 		Out->Points[0] = this->Points[0] * Rot;
 		Out->Points[1] = this->Points[1] * Rot;
 		Out->Points[2] = this->Points[2] * Rot;
+	}
+
+	void ApplyMatrix(const Matrix &Mat)
+	{
+		this->Points[0] *= Mat;
+		this->Points[1] *= Mat;
+		this->Points[2] *= Mat;
 	}
 
 	Vec3 Points[3];
@@ -226,7 +233,7 @@ Mesh Cube = Mesh({
 	{ {1.0f, 0.0f, 1.0f}, {0.0f, 0.0f, 0.0f}, {1.0f, 0.0f, 0.0f} },
 	}, "Cube");
 
-typedef void(__fastcall* DoDraw_t)(const GdiPP&, const float);
+typedef void(__fastcall* DoTick_T)(const GdiPP&, const float);
 
 class Camera
 {
@@ -338,6 +345,32 @@ public:
 		OutTri.Points[2] = InTriangle->Points[2] * this->ProjectionMatrix;
 	}
 
+	Triangle TriangleProjected(const Triangle* InTriangle)
+	{
+		return
+		{
+			InTriangle->Points[0] * this->ProjectionMatrix,
+			InTriangle->Points[1] * this->ProjectionMatrix,
+			InTriangle->Points[2] * this->ProjectionMatrix
+		};
+	}
+
+	void PointAt(Vec3 &Pos, Vec3 &Target, Vec3 &Up)
+	{
+		Vec3 NewForward = (Target - Pos).Normalized();
+
+		Vec3 NewUp = (Up - (NewForward * Up.Dot(NewForward))).Normalized();
+
+		Vec3 NewRight = NewUp.Cross(NewForward);
+
+		Matrix DimensioningAndTrans;
+		DimensioningAndTrans.fMatrix[0][0] = NewRight.x;	    DimensioningAndTrans.fMatrix[0][1] = NewRight.y;	    DimensioningAndTrans.fMatrix[0][2] = NewRight.z;      DimensioningAndTrans.fMatrix[0][3] = 0.0f;
+		DimensioningAndTrans.fMatrix[1][0] = NewUp.x;		    DimensioningAndTrans.fMatrix[1][1] = NewUp.y;		    DimensioningAndTrans.fMatrix[1][2] = NewUp.z;         DimensioningAndTrans.fMatrix[1][3] = 0.0f;
+		DimensioningAndTrans.fMatrix[2][0] = NewForward.x;		DimensioningAndTrans.fMatrix[2][1] = NewForward.y;		DimensioningAndTrans.fMatrix[2][2] = NewForward.z;    DimensioningAndTrans.fMatrix[2][3] = 0.0f;
+		DimensioningAndTrans.fMatrix[3][0] = Pos.x;				DimensioningAndTrans.fMatrix[3][1] = Pos.y;				DimensioningAndTrans.fMatrix[3][2] = Pos.z;			  DimensioningAndTrans.fMatrix[3][3] = 1.0f;
+
+		DimensioningAndTrans = DimensioningAndTrans.Inversed();
+	}
 
 	Vec3 Pos = Vec3(0, 0, 0);
 	Vec3 EulerRotation = Vec3(0, 0, 0);
@@ -357,7 +390,7 @@ namespace Engine
 
 	bool FpsEngineCounter = true;
 
-	void Run(WndCreatorW& Wnd, GdiPP& Gdi, BrushPP& ClearBrush, DoDraw_t DrawCallBack)
+	void Run(WndCreatorW& Wnd, GdiPP& Gdi, BrushPP& ClearBrush, DoTick_T DrawCallBack)
 	{
 		// Init Variables
 		sx = Wnd.GetWindowSz().x;
