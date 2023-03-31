@@ -7,6 +7,11 @@
 #include "Graphics/GdiPP.hpp"
 #include "Graphics/WndCreator.hpp"
 
+constexpr auto VK_W = 0x57;
+constexpr auto VK_A = 0x41;
+constexpr auto VK_S = 0x53;
+constexpr auto VK_D = 0x44;
+
 class Triangle
 {
 public:
@@ -249,7 +254,7 @@ public:
 
 		this->CalcProjectionMat();
 
-		this->EulerRotation = Vec3(0, 0, 0);
+		this->ViewAngles = Vec3(0, 0, 0);
 	}
 
 	static Matrix CalcProjectionMat(float AspectRatio, float Fov, float Near, float Far)
@@ -355,7 +360,7 @@ public:
 		};
 	}
 
-	void PointAt(Vec3 &Pos, Vec3 &Target, Vec3 &Up)
+	Matrix PointAt(Vec3 &Pos, Vec3 &Target, Vec3 &Up)
 	{
 		Vec3 NewForward = (Target - Pos).Normalized();
 
@@ -369,12 +374,18 @@ public:
 		DimensioningAndTrans.fMatrix[2][0] = NewForward.x;		DimensioningAndTrans.fMatrix[2][1] = NewForward.y;		DimensioningAndTrans.fMatrix[2][2] = NewForward.z;    DimensioningAndTrans.fMatrix[2][3] = 0.0f;
 		DimensioningAndTrans.fMatrix[3][0] = Pos.x;				DimensioningAndTrans.fMatrix[3][1] = Pos.y;				DimensioningAndTrans.fMatrix[3][2] = Pos.z;			  DimensioningAndTrans.fMatrix[3][3] = 1.0f;
 
-		DimensioningAndTrans = DimensioningAndTrans.Inversed();
+		return DimensioningAndTrans;
+	}
+
+	void CalcCamViewMatrix(Vec3 &Target, Vec3 &UpVec)
+	{
+		this->ViewMatrix = this->PointAt(this->Pos, Target, UpVec).Inversed();
 	}
 
 	Vec3 Pos = Vec3(0, 0, 0);
-	Vec3 EulerRotation = Vec3(0, 0, 0);
+	Vec3 ViewAngles = Vec3(0, 0, 0);
 	Matrix ProjectionMatrix = {};
+	Matrix ViewMatrix = {};
 	float Fov = 0.f;
 	float AspectRatio = 0.f;
 	float Near = 0.f;

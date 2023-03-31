@@ -7,9 +7,8 @@
 float FOV_ = 90.f;
 float FNEAR = 0.1f;
 float FFAR = 1000.f;
-float ZTRANSLATE = 10;
 float RotSpeedX = 0.0f;
-float RotSpeedY = 0.15f;
+float RotSpeedY = 0.0f;
 float RotSpeedZ = 0.0f;
 bool DoCull = true;
 bool DoLighting = true;
@@ -40,21 +39,13 @@ void Settings()
 		}
 		if (GetAsyncKeyState(VK_F3))
 		{
-			ZTRANSLATE += 1;
-			if (ZTRANSLATE > 20)
-			{
-				ZTRANSLATE = 0;
-			}
-		}
-		if (GetAsyncKeyState(VK_F4))
-		{
 			RotSpeedX += 0.1f;
 			if (RotSpeedX > 2.0f)
 			{
 				RotSpeedX = 0.f;
 			}
 		}
-		if (GetAsyncKeyState(VK_F5))
+		if (GetAsyncKeyState(VK_F4))
 		{
 			RotSpeedY += 0.1f;
 			if (RotSpeedY > 2.0f)
@@ -62,7 +53,7 @@ void Settings()
 				RotSpeedY = 0.f;
 			}
 		}
-		if (GetAsyncKeyState(VK_F6))
+		if (GetAsyncKeyState(VK_F5))
 		{
 			RotSpeedZ += 0.1f;
 			if (RotSpeedZ > 2.0f)
@@ -70,23 +61,23 @@ void Settings()
 				RotSpeedZ = 0;
 			}
 		}
-		if (GetAsyncKeyState(VK_F7))
+		if (GetAsyncKeyState(VK_F6))
 		{
 			DoCull = !DoCull;
 		}
-		if (GetAsyncKeyState(VK_F8))
+		if (GetAsyncKeyState(VK_F7))
 		{
 			DoLighting = !DoLighting;
 		}
-		if (GetAsyncKeyState(VK_F9))
+		if (GetAsyncKeyState(VK_F8))
 		{
 			WireFrame = !WireFrame;
 		}
-		if (GetAsyncKeyState(VK_F10))
+		if (GetAsyncKeyState(VK_F9))
 		{
 			ShowTriLines = !ShowTriLines;
 		}
-		if (GetAsyncKeyState(VK_F11))
+		if (GetAsyncKeyState(VK_F10))
 		{
 			ShowStrs = !ShowStrs;
 		}
@@ -121,48 +112,106 @@ DoTick_T Draw(GdiPP& Gdi, const float ElapsedTime)
 	static Vec3 LightSrc = { 0, 0, -1 };
 	static float Intensity = 1.0f;
 	static Vec3 CamUp = { 0, 1, 0 };
-	static Vec3 LookDir = {0, 0, 1};
+	static Vec3 Target = {0, 0, 1};
+	static Vec3 LookDir = { 0, 0, 0 };
+
 
 	FTheta += 1.0f * ElapsedTime;
 
 	Matrix RotM = Matrix::CreateRotationMatrix(FTheta * RotSpeedX, FTheta * RotSpeedY, FTheta * RotSpeedZ);
-	Matrix TransMat = Matrix::CreateTranslationMatrix(Vec3(1, 1, ZTRANSLATE));
+	Matrix TransMat = Matrix::CreateTranslationMatrix(Vec3(1, 1, 10.0f));
 	Matrix WorldMatrix = Matrix::CreateIdentity();
 	WorldMatrix = (WorldMatrix * RotM) * TransMat;
 
-	Vec3 Target = Cam.Pos - LookDir;
-
 	if (GetAsyncKeyState(VK_UP))
 	{
-		Cam.Pos *= Matrix::CreateTranslationMatrix(Vec3(0, 1.0f, 0));
+		Cam.ViewAngles += Vec3(0, (20.0f * ElapsedTime), 0);
+	}
+
+	if (GetAsyncKeyState(VK_DOWN))
+	{
+		Cam.ViewAngles -= Vec3(0, (20.0f * ElapsedTime), 0);
+	}
+
+	if (GetAsyncKeyState(VK_RIGHT) & 0x8000)
+	{
+		Cam.ViewAngles += Vec3((20.0f * ElapsedTime), 0, 0);
+	}
+
+	if (GetAsyncKeyState(VK_LEFT) & 0x8000)
+	{
+		Cam.ViewAngles -= Vec3((20.0f * ElapsedTime), 0, 0);
+	}
+
+	if (GetAsyncKeyState(VK_SPACE))
+	{
+		Cam.Pos.y += 8.0f * ElapsedTime;
+	}
+
+	if (GetAsyncKeyState(VK_LSHIFT))
+	{
+		Cam.Pos.y -= 8.0f * ElapsedTime;
+	}
+
+	if (GetAsyncKeyState(VK_A))
+	{
+		Cam.Pos.x -= 8.0f * ElapsedTime;
+	}
+
+	if (GetAsyncKeyState(VK_D))
+	{
+		Cam.Pos.x += 8.0f * ElapsedTime;
+	}
+
+	if (GetAsyncKeyState(VK_W))
+	{
+		Cam.Pos.z += 8.0f * ElapsedTime;
+	}
+
+	if (GetAsyncKeyState(VK_S))
+	{
+		Cam.Pos.z -= 8.0f * ElapsedTime;
 	}
 
 	if (Engine::FpsEngineCounter && ShowStrs)
 	{
 		static std::string FovStr =      "(F2)  Fov: ";
-		static std::string ZTransStr =   "(F3)  ZTRANSLATE: ";
-		static std::string YawRotStr =   "(F4)  Yaw Rotation Speed: ";
-		static std::string PitchRotStr = "(F5)  Pitch Rotation Speed: ";
-		static std::string RollRotStr =  "(F6)  Roll Rotation Speed: ";
-		static std::string CullingStr =  "(F7)  Culling: ";
-		static std::string LightingStr = "(F8)  Lighting: ";
-		static std::string FilledStr =   "(F9)  Filled: ";
-		static std::string TriLinesStr = "(F10) Show Tri Lines: ";
+		static std::string YawRotStr =   "(F3)  Yaw Rotation Speed: ";
+		static std::string PitchRotStr = "(F4)  Pitch Rotation Speed: ";
+		static std::string RollRotStr =  "(F5)  Roll Rotation Speed: ";
+		static std::string CullingStr =  "(F6)  Culling: ";
+		static std::string LightingStr = "(F7)  Lighting: ";
+		static std::string FilledStr =   "(F8)  Filled: ";
+		static std::string TriLinesStr = "(F9) Show Tri Lines: ";
 		static std::string MeshStr = "(ESC) Mesh: ";
 		static std::string VertStr = " Verts: "; 
 		static std::string TriCountStr = ", Triangle Count: ";
+		static std::string CamRotXstr = "Camera Pos: ( X: ";
+		static std::string CamRotYstr = ", Y: ";
+		static std::string CamRotZstr = ", Z: ";
+		static std::string CamRotEndstr = ")";
+		static std::string CamPosXstr = "Camera Rot: ( Yaw: ";
+		static std::string CamPosYstr = ", Pitch: ";
+		static std::string CamPosZstr = ", Roll: ";
+		static std::string CamPosEndstr = ")";
 
 		Gdi.DrawStringA(20, 40,  FovStr + std::to_string(FOV_), RGB(255, 0, 0), TRANSPARENT);
-		Gdi.DrawStringA(20, 60,  ZTransStr + std::to_string(ZTRANSLATE), RGB(255, 0, 0), TRANSPARENT);
-		Gdi.DrawStringA(20, 80,  YawRotStr + std::to_string(RotSpeedX), RGB(255, 0, 0), TRANSPARENT);
-		Gdi.DrawStringA(20, 100, PitchRotStr + std::to_string(RotSpeedY), RGB(255, 0, 0), TRANSPARENT);
-		Gdi.DrawStringA(20, 120, RollRotStr + std::to_string(RotSpeedZ), RGB(255, 0, 0), TRANSPARENT);
-		Gdi.DrawStringA(20, 140, CullingStr + std::to_string(DoCull), RGB(255, 0, 0), TRANSPARENT);
-		Gdi.DrawStringA(20, 160, LightingStr + std::to_string(DoLighting), RGB(255, 0, 0), TRANSPARENT);
-		Gdi.DrawStringA(20, 180, FilledStr + std::to_string(WireFrame), RGB(255, 0, 0), TRANSPARENT);
-		Gdi.DrawStringA(20, 200, TriLinesStr + std::to_string(ShowTriLines), RGB(255, 0, 0), TRANSPARENT);
-		Gdi.DrawStringA(20, 220, MeshStr + Meshes.at(CurrMesh).MeshName + VertStr + std::to_string(Meshes.at(CurrMesh).VertexCount) + TriCountStr + std::to_string(Meshes.at(CurrMesh).TriangleCount), RGB(255, 0, 0), TRANSPARENT);
+		Gdi.DrawStringA(20, 60,  YawRotStr + std::to_string(RotSpeedX), RGB(255, 0, 0), TRANSPARENT);
+		Gdi.DrawStringA(20, 80, PitchRotStr + std::to_string(RotSpeedY), RGB(255, 0, 0), TRANSPARENT);
+		Gdi.DrawStringA(20, 100, RollRotStr + std::to_string(RotSpeedZ), RGB(255, 0, 0), TRANSPARENT);
+		Gdi.DrawStringA(20, 120, CullingStr + std::to_string(DoCull), RGB(255, 0, 0), TRANSPARENT);
+		Gdi.DrawStringA(20, 140, LightingStr + std::to_string(DoLighting), RGB(255, 0, 0), TRANSPARENT);
+		Gdi.DrawStringA(20, 160, FilledStr + std::to_string(WireFrame), RGB(255, 0, 0), TRANSPARENT);
+		Gdi.DrawStringA(20, 180, TriLinesStr + std::to_string(ShowTriLines), RGB(255, 0, 0), TRANSPARENT);
+		Gdi.DrawStringA(20, 200, MeshStr + Meshes.at(CurrMesh).MeshName + VertStr + std::to_string(Meshes.at(CurrMesh).VertexCount) + TriCountStr + std::to_string(Meshes.at(CurrMesh).TriangleCount), RGB(255, 0, 0), TRANSPARENT);
+		Gdi.DrawStringA(20, 220, CamPosXstr + std::to_string(Cam.Pos.x) + CamPosYstr + std::to_string(Cam.Pos.y) + CamPosZstr + std::to_string(Cam.Pos.z) + CamPosEndstr, RGB(255, 0, 0), TRANSPARENT);
+		Gdi.DrawStringA(20, 240, CamRotXstr + std::to_string(Cam.ViewAngles.x) + CamRotYstr + std::to_string(Cam.ViewAngles.y) + CamRotZstr + std::to_string(Cam.ViewAngles.z) + CamRotEndstr, RGB(255, 0, 0), TRANSPARENT);
 	}
+
+	Matrix CamRot = Matrix::CreateRotationMatrix(ToRad(Cam.ViewAngles.y), ToRad(Cam.ViewAngles.x), ToRad(Cam.ViewAngles.z));
+	LookDir = Target * CamRot;
+	Vec3 T = Cam.Pos + LookDir;
+	Cam.CalcCamViewMatrix(T, CamUp);
 
 	std::vector<Triangle> TrisToRender = {};
 
@@ -186,6 +235,9 @@ DoTick_T Draw(GdiPP& Gdi, const float ElapsedTime)
 			// Calc lighting intensity
 			if (DoLighting)
 				Intensity = TriNormal.Dot(LightSrc.Normalized());
+
+			// 3d Space -> Viewed Space
+			Proj.ApplyMatrix(Cam.ViewMatrix);
 
 			// 3d Space -> Screen Space
 			Proj = Cam.ProjectTriangle(&Proj); // Project from 3D Space To Screen Space
