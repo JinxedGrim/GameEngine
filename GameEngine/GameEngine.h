@@ -413,10 +413,11 @@ namespace Engine
 		int FrameCounter = 0;
 		int Fps = 0;
 
-		while (PeekMessageW(&msg, NULL, 0, 0, PM_NOREMOVE) && !GetAsyncKeyState(VK_RETURN))
+		while (!GetAsyncKeyState(VK_RETURN))
 		{
 			auto Start = std::chrono::system_clock::now();
-			// Some computation here
+
+			PeekMessageW(&msg, Wnd.Wnd, 0, 0, PM_REMOVE);
 
 			// Translate and Dispatch message to WindowProc
 			TranslateMessage(&msg);

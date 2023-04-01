@@ -291,7 +291,7 @@ int main()
 
 	BrushPP ClearBrush = (HBRUSH)GetStockObject(BLACK_BRUSH);
 
-	WndCreator Wnd = WndCreator(CS_CLASSDC, GetModuleHandle(NULL), L"GameEngine", ClearBrush, 0, WS_POPUP | WS_VISIBLE, 0, 0, Engine::sx, Engine::sy);
+	WndCreator Wnd = WndCreator(CS_CLASSDC, GetModuleHandle(NULL), L"GameEngine", LoadCursorW(NULL, IDC_ARROW), ClearBrush, WndExModes::BorderLessEx, WndModes::BorderLess, 0, 0, Engine::sx, Engine::sy);
 
 	GdiPP Gdi = GdiPP(Wnd.Wnd, true);
 
