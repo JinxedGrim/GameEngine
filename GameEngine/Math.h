@@ -78,9 +78,9 @@ public:
 		Out->_22 = 1;
 		Out->_23 = 0;
 		Out->_24 = 0;
-		Out->_31 = -sin(AngleRads);
+		Out->_31 = -sinf(AngleRads);
 		Out->_32 = 0;
-		Out->_33 = cos(AngleRads);
+		Out->_33 = cosf(AngleRads);
 		Out->_34 = 0;
 		Out->_41 = 0;
 		Out->_42 = 0;
@@ -119,24 +119,21 @@ public:
 		return Out;
 	}
 
-	static Matrix CreateRotationMatrix(float RotationXRads, float RotationYRads, float RotationZRads)
+	static Matrix CreateScalarMatrix(float ScalarX, float ScalarY, float ScalerZ)
 	{
-		if (RotationZRads == 0.0f)
-		{
-			RotationZRads = ToRad(180);
-		}
+		Matrix Out;
 
-		Matrix A;
-		Matrix B;
-		Matrix C;
-		CreateRotationX(&A, RotationXRads);
-		CreateRotationY(&B, RotationYRads);
-		CreateRotationZ(&C, RotationZRads);
+		Out.fMatrix[0][0] = 1.f * ScalarX;
+		Out.fMatrix[1][1] = 1.f * ScalarY;
+		Out.fMatrix[2][2] = 1.f * ScalerZ;
+		Out.fMatrix[3][3] = 1.f;
 
-		A = A * B * C;
-
-		return A;
+		return Out;
 	}
+
+	static Matrix CreateRotationMatrix(Vec3);
+
+	static Matrix CreateTranslationMatrix(Vec3);
 
 	Matrix operator*(const Matrix b) const
 	{
@@ -159,9 +156,18 @@ public:
 		return result;
 	}
 
-	static Matrix CreateTranslationMatrix(Vec3);
+	void operator *= (const float b)
+	{
+		for (int row = 0; row < 4; row++)
+		{
+			for (int col = 0; col < 4; col++)
+			{
+				this->fMatrix[row][col] = this->fMatrix[row][col] * b;
+			}
+		}
+	}
 
-	Matrix Inversed() // Only for Rotation/Translation Matrices
+	Matrix QuickInversed() // Only for Rotation/Translation Matrices
 	{
 		Matrix OutMat;
 		OutMat.fMatrix[0][0] = this->fMatrix[0][0]; OutMat.fMatrix[0][1] = this->fMatrix[1][0]; OutMat.fMatrix[0][2] = this->fMatrix[2][0]; OutMat.fMatrix[0][3] = 0.0f;
@@ -268,7 +274,7 @@ public:
 	}
 
 	// clamps angles to keep them in between 2 values
-	Vec3 Clamped(float MinPitch = -89, float MaxPitch = 89, float MinYaw = -180, float MaxYaw = 180)
+	Vec3 Clamped(float MinPitch = -89, float MaxPitch = 89, float MinYaw = -180, float MaxYaw = 180) const
 	{
 		Vec3 NewAngles;
 		NewAngles.x = Clamp(MinPitch, MaxPitch, this->x);
@@ -279,19 +285,19 @@ public:
 	}
 
 	// Distance from one vec3 to another
-	float Distance(Vec3 b)
+	float Distance(Vec3 &b) const
 	{
 		return (float)sqrt(pow(b.x - this->x, 2) + pow(b.y - this->y, 2) + pow(b.z - this->z, 2));
 	}
 
 	// Magnitude / Length of the vector3
-	float Magnitude()
+	float Magnitude() const
 	{
 		return sqrt(this->x * this->x + this->y * this->y + this->z * this->z);
 	}
 
 	// Returns the unit vector aka a vector of magnitude 1 with a persisting direction
-	Vec3 Normalized()
+	Vec3 Normalized() const
 	{
 		float Mag = this->Magnitude();
 
@@ -315,30 +321,23 @@ public:
 	}
 
 	// Calculates Dot Product (How similar two vecs are)
-	float Dot(Vec3 Rhs) 
+	const float Dot(const Vec3 Rhs) const 
 	{
 		return { this->x * Rhs.x + this->y * Rhs.y + this->z * Rhs.z };
 	}
 
-	// Calculates Dot Product Then Normalizes The Answer
-	float DotNormalized(Vec3 Rhs)
-	{
-		Vec3 Lhs = this->Normalized();
-		Rhs = Rhs.Normalized();
-	}
-
 	// Calculates Cross Product
-	void Cross(const Vec3* Rhs, Vec3* Out)
+	void Cross(const Vec3* Rhs, Vec3* Out) const
 	{
 		*Out = Vec3((this->y * Rhs->z - this->z * Rhs->y), (this->z * Rhs->x - this->x * Rhs->z), (this->x * Rhs->y - this->y * Rhs->x));
 	}
 
-	Vec3 Cross(const Vec3* Rhs)
+	Vec3 Cross(const Vec3* Rhs) const
 	{
 		return Vec3((this->y * Rhs->z - this->z * Rhs->y), (this->z * Rhs->x - this->x * Rhs->z), (this->x * Rhs->y - this->y * Rhs->x));
 	}
 
-	Vec3 Cross(const Vec3 Rhs)
+	Vec3 Cross(const Vec3 Rhs) const
 	{
 		return Vec3((this->y * Rhs.z - this->z * Rhs.y), (this->z * Rhs.x - this->x * Rhs.z), (this->x * Rhs.y - this->y * Rhs.x));
 	}
@@ -350,28 +349,40 @@ public:
 		Out->Normalize();
 	}
 
-	Vec3 CrossNormalized(Vec3* Rhs)
+	Vec3 CrossNormalized(Vec3* Rhs) const
 	{
 		Vec3 Out = this->Cross(Rhs);
 		Out.Normalize();
 		return Out;
 	}
 
-	Vec3 CrossNormalized(Vec3 Rhs)
+	Vec3 CrossNormalized(Vec3 Rhs) const
 	{
 		Vec3 Out = this->Cross(Rhs);
 		Out.Normalize();
 		return Out;
+	}
+
+	Vec3 CalculateIntersectionPoint(const Vec3& LineEnd, const Vec3 &PointOnPlane, const Vec3 &PlaneNormalized) const
+	{
+		Vec3 LineStart = *this;
+		float Dist = -PlaneNormalized.Dot(PointOnPlane);
+		float ad = LineStart.Dot(PlaneNormalized);
+		float bd = LineEnd.Dot(PlaneNormalized);
+		float t = (-Dist - ad) / (bd - ad);
+		Vec3 LineStartToEnd = LineEnd - LineStart;
+		Vec3 LineToIntersect = LineStartToEnd * t;
+		return LineStart + LineToIntersect;
 	}
 
 	// Angle to a point
-	float Angle(const Vec3 To)
+	float Angle(const Vec3 To) const
 	{
-		return (float)ToDegree(acos(Clamp(-1.f, 1.f, this->DotNormalized(To))));
+		return (float)ToDegree(acos(Clamp(-1.f, 1.f, this->Dot(To))));
 	}
 
 	// returns euler angles needed to look at a point specified by B
-	Vec3 CalcAngle(const Vec3 b, const bool Degree = true)
+	Vec3 CalcAngle(const Vec3 b, const bool Degree = true) 
 	{
 		// this will only work on right up forward games
 		Vec3 Angles;
@@ -584,6 +595,25 @@ Matrix Matrix::CreateTranslationMatrix(Vec3 Translation)
 	return Out;
 }
 
+Matrix Matrix::CreateRotationMatrix(Vec3 RotationDeg) // pitch yaw roll
+{
+	if (RotationDeg.z == 0.0f)
+	{
+		RotationDeg.z = 180;
+	}
+
+	Matrix A;
+	Matrix B;
+	Matrix C;
+	Matrix::CreateRotationX(&A, -ToRad(RotationDeg.x));
+	Matrix::CreateRotationY(&B, ToRad(RotationDeg.y));
+	Matrix::CreateRotationZ(&C, ToRad(RotationDeg.z));
+
+	A = A * B * C;
+
+	return A;
+}
+
 std::ostream& operator << (std::ostream& os, const Vec3& v)
 {
 	os << "x: " << v.x << " y: " << v.y << " z: " << v.z;
@@ -596,7 +626,7 @@ public:
 	float x = 0;
 	float y = 0;
 	float z = 0;
-	float w = 0;
+	float w = 1;
 	friend std::ostream& operator<<(std::ostream& os, const Vec4& v);
 };
 
