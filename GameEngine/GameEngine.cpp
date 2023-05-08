@@ -76,6 +76,10 @@ void Settings()
 		{
 			Engine::ShowTriLines = !Engine::ShowTriLines;
 		}
+		if (GetAsyncKeyState(VK_F11))
+		{
+			Engine::DebugClip = !Engine::DebugClip;
+		}
 		if (GetAsyncKeyState(VK_F10))
 		{
 			ShowStrs = !ShowStrs;
@@ -110,25 +114,9 @@ static float Intensity = 1.0f;
 
 DoTick_T Draw(GdiPP& Gdi, const float ElapsedTime)
 {
-	if (GetAsyncKeyState(VK_UP))
-	{
-		Cam.ViewAngles += Vec3((30.0f * ElapsedTime), 0, 0);
-	}
-
-	if (GetAsyncKeyState(VK_DOWN))
-	{
-		Cam.ViewAngles -= Vec3((30.0f * ElapsedTime), 0, 0);
-	}
-
-	if (GetAsyncKeyState(VK_RIGHT) & 0x8000)
-	{
-		Cam.ViewAngles += Vec3(0, (30.0f * ElapsedTime), 0);
-	}
-
-	if (GetAsyncKeyState(VK_LEFT) & 0x8000)
-	{
-		Cam.ViewAngles -= Vec3(0, (30.0f * ElapsedTime), 0);
-	}
+	Cam.ViewAngles += Vec3(Engine::DeltaMouse.y, 0, 0);
+	
+	Cam.ViewAngles += Vec3(0, Engine::DeltaMouse.x, 0);
 
 	if (GetAsyncKeyState(VK_SPACE))
 	{
@@ -142,12 +130,12 @@ DoTick_T Draw(GdiPP& Gdi, const float ElapsedTime)
 
 	if (GetAsyncKeyState(VK_A))
 	{
-		Cam.Pos += (Cam.GetNewVelocity(Vec3(-1, 0, 0) * Cam.CamRotation)) * ElapsedTime;
+		Cam.Pos += (Cam.GetNewVelocity(Vec3(1, 0, 0) * Cam.CamRotation)) * ElapsedTime;
 	}
 
 	if (GetAsyncKeyState(VK_D))
 	{
-		Cam.Pos += (Cam.GetNewVelocity(Vec3(1, 0, 0) * Cam.CamRotation)) * ElapsedTime;
+		Cam.Pos += (Cam.GetNewVelocity(Vec3(-1, 0, 0) * Cam.CamRotation)) * ElapsedTime;
 	}
 
 	if (GetAsyncKeyState(VK_W))
@@ -169,7 +157,7 @@ DoTick_T Draw(GdiPP& Gdi, const float ElapsedTime)
 
 	FTheta += 1.0f * ElapsedTime;
 
-	SimpleLightSrc sl = SimpleLightSrc(0.5f, LightSrc);
+	SimpleLightSrc sl = SimpleLightSrc(0.25f, LightSrc);
 
 	Engine::RenderMesh(Gdi, Cam, Meshes.at(CurrMesh), Vec3(1.0f, 1.0f, 1.0f), Vec3(FTheta * RotSpeedX, FTheta * RotSpeedY, FTheta * RotSpeedZ), Vec3(1, 1, 10), sl.LightDir, sl.Ambient);	//Engine::RenderRenderable(Gdi, Cam, lightsrcrend, LightSrc, DoCull, DoLighting, ShowTriLines, WireFrame);
 

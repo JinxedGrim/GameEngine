@@ -635,7 +635,13 @@ namespace Engine
 	bool DoLighting = true;
 	bool WireFrame = false;
     bool ShowTriLines = false;
-	bool DebugClip = true;
+	bool DebugClip = false;
+	bool LockCursor = true;
+	bool ShowCursor = false;
+
+	POINT PrevMousePos;
+	POINT DeltaMouse;
+	float Sensitivity = 0.6f;
 	int Fps = 0;
 
 	void Run(WndCreatorW& Wnd, GdiPP& Gdi, BrushPP& ClearBrush, DoTick_T DrawCallBack)
@@ -651,6 +657,8 @@ namespace Engine
 		int FrameCounter = 0;
 		auto Start = std::chrono::system_clock::now();
 		auto End = std::chrono::system_clock::now();
+		SetCursorPos(sx / 2, sy / 2);
+		GetCursorPos(&PrevMousePos);
 
 		while (!GetAsyncKeyState(VK_RETURN))
 		{
@@ -661,6 +669,21 @@ namespace Engine
 			// Translate and Dispatch message to WindowProc
 			TranslateMessage(&msg);
 			DispatchMessageW(&msg);
+
+			if (Wnd.HasFocus())
+			{
+				POINT CurrMouse;
+				GetCursorPos(&CurrMouse);
+				DeltaMouse.x = CurrMouse.x - PrevMousePos.x;
+				DeltaMouse.y = -(CurrMouse.y - PrevMousePos.y);
+				DeltaMouse.x *= Sensitivity;
+				DeltaMouse.y *= Sensitivity;
+
+				if(LockCursor)
+					SetCursorPos(sx / 2, sy / 2);
+
+				GetCursorPos(&PrevMousePos);
+			}
 
 			// Check Msg
 			if (msg.message == WM_QUIT || msg.message == WM_CLOSE || msg.message == WM_DESTROY)
