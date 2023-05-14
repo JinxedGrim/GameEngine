@@ -558,6 +558,16 @@ public:
 		//return Out;
 	}
 
+	Vec3 operator-()
+	{
+		return
+		{
+			-this->x,
+			-this->y,
+			-this->z
+		};
+	}
+
 	bool operator != (const Vec3 b)
 	{
 		if (this->x != b.x)
@@ -580,7 +590,6 @@ public:
 	float y;
 	float z;
 };
-
 
 Matrix Matrix::CreateTranslationMatrix(Vec3 Translation)
 {

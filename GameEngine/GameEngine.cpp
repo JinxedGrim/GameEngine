@@ -15,9 +15,10 @@ Mesh TeaPot = Mesh(("TeaPot.obj"));
 Mesh Pyramid = Mesh("Pyramid.obj");
 Mesh Axis = Mesh("Axis.obj");
 Mesh Wrld = Mesh("World.obj");
-Mesh LightSrcMesh = CubeMesh;
+Mesh LightSrcMesh = Mesh(CubeMesh, Vec3(255, 255, 255), 0.0f);
 std::vector<Mesh> Meshes = { CubeMesh, TeaPot, Axis, Wrld};
 int CurrMesh = 0;
+bool IsFullScreen = true;
 static Camera Cam = Camera(Vec3(0, 0, 0), (float)((float)Engine::sy / (float)Engine::sx), FOV_, FNEAR, FFAR);
 
 void Settings()
@@ -110,13 +111,37 @@ static Matrix RotX;
 static Matrix RotZ;
 static Matrix RotY;
 static Vec3 LightSrc = { 0, 0, -1 };
-static float Intensity = 1.0f;
 
-DoTick_T Draw(GdiPP& Gdi, const float ElapsedTime)
+DoTick_T Draw(GdiPP& Gdi, WndCreatorW& Wnd, const float ElapsedTime)
 {
 	Cam.ViewAngles += Vec3(Engine::DeltaMouse.y, 0, 0);
 	
 	Cam.ViewAngles += Vec3(0, Engine::DeltaMouse.x, 0);
+
+	if (GetAsyncKeyState(VK_INSERT))
+	{
+		if (IsFullScreen)
+		{
+			Wnd.ResetStyle(WndModes::Windowed);
+			Wnd.ResetStyleEx(WndExModes::WindowedEx);
+			IsFullScreen = !IsFullScreen;
+		}
+		else
+		{
+			Wnd.ResetStyle(WndModes::FullScreen);
+			Wnd.ResetStyleEx(WndExModes::FullScreenEx);
+			IsFullScreen = !IsFullScreen;
+		}
+		Engine::UpdateScreenInfo(Gdi);
+		Cam.AspectRatio = (float)((float)Engine::sy / (float)Engine::sx);
+	}
+
+	if (GetAsyncKeyState(VK_DELETE))
+	{
+		Engine::LockCursor = !Engine::LockCursor;
+		Engine::CursorShow = !Engine::CursorShow;
+		Engine::UpdateMouseIn = !Engine::UpdateMouseIn;
+	}
 
 	if (GetAsyncKeyState(VK_SPACE))
 	{
@@ -157,9 +182,11 @@ DoTick_T Draw(GdiPP& Gdi, const float ElapsedTime)
 
 	FTheta += 1.0f * ElapsedTime;
 
-	SimpleLightSrc sl = SimpleLightSrc(0.25f, LightSrc);
+	SimpleLightSrc sl = SimpleLightSrc(LightSrc, LightSrc, Vec3(255, 255, 255), 0.35f, 0.5f, 0.5f, LightSrcMesh);
 
-	Engine::RenderMesh(Gdi, Cam, Meshes.at(CurrMesh), Vec3(1.0f, 1.0f, 1.0f), Vec3(FTheta * RotSpeedX, FTheta * RotSpeedY, FTheta * RotSpeedZ), Vec3(1, 1, 10), sl.LightDir, sl.Ambient);	//Engine::RenderRenderable(Gdi, Cam, lightsrcrend, LightSrc, DoCull, DoLighting, ShowTriLines, WireFrame);
+	Engine::RenderMesh(Gdi, Cam, Meshes.at(CurrMesh), Vec3(1.0f, 1.0f, 1.0f), Vec3(FTheta * RotSpeedX, FTheta * RotSpeedY, FTheta * RotSpeedZ), Vec3(1, 1, 10), sl.LightPos, sl.LightDir, sl.Color, sl.AmbientCoeff, sl.DiffuseCoeff, sl.SpecularCoeff);	//Engine::RenderRenderable(Gdi, Cam, lightsrcrend, LightSrc, DoCull, DoLighting, ShowTriLines, WireFrame);
+
+	Engine::RenderMesh(Gdi, Cam, sl.LightMesh, Vec3(1.0f, 1.0f, 1.0f), Vec3(0, 0, 0), sl.LightPos, sl.LightPos, sl.LightDir, sl.Color, 1.0f, 0.f, 0.f);	//Engine::RenderRenderable(Gdi, Cam, lightsrcrend, LightSrc, DoCull, DoLighting, ShowTriLines, WireFrame);
 
 	if (Engine::FpsEngineCounter && ShowStrs)
 	{

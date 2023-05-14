@@ -22,10 +22,6 @@ public:
 		this->Points[0] = Vec3();
 		this->Points[1] = Vec3();
 		this->Points[2] = Vec3();
-
-		this->r = 255;
-		this->b = 255;
-		this->g = 255;
 	}
 
 	Triangle(const Vec3 P1, const Vec3 P2, const Vec3 P3)
@@ -33,10 +29,6 @@ public:
 		this->Points[0] = P1;
 		this->Points[1] = P2;
 		this->Points[2] = P3;
-
-		this->r = 255;
-		this->b = 255;
-		this->g = 255;
 	}
 
 	void Translate(Vec3 Value)
@@ -88,7 +80,7 @@ public:
 		this->Points[2] *= Mat;
 	}
 
-	int ClipAgainstPlane(const Vec3& PointOnPlane, const Vec3& PlaneNormalized, Triangle &Out1, Triangle &Out2, bool DebugClip = false)
+	int ClipAgainstPlane(const Vec3& PointOnPlane, const Vec3& PlaneNormalized, Triangle& Out1, Triangle& Out2, bool DebugClip = false)
 	{
 		Vec3* InsidePoints[3];
 		Vec3* OutsidePoints[3];
@@ -147,17 +139,12 @@ public:
 				if (OutsideCount != 2)
 					break;
 
-				if (!DebugClip)
+				Out1 = *this;
+
+				if (DebugClip)
 				{
-					Out1.r = this->r;
-					Out1.g = this->g;
-					Out1.b = this->b;
-				}
-				else
-				{
-					Out1.r = 0;
-					Out1.g = 0;
-					Out1.b = 255;
+					Out1.Col = Vec3(0, 0, 255);
+					Out1.OverRideMaterialColor = true;
 				}
 
 				Out1.Points[0] = *InsidePoints[0];
@@ -168,44 +155,28 @@ public:
 			}
 			case 2:
 			{
-				if (OutsideCount == 1)
+				if (OutsideCount != 1)
+					break;
+
+				Out1 = *this;
+				Out2 = *this;
+				if (DebugClip)
 				{
-					if (!DebugClip)
-					{
-						Out1.r = this->r;
-						Out1.g = this->g;
-						Out1.b = this->b;
-					}
-					else
-					{
-						Out1.r = 0;
-						Out1.g = 255;
-						Out1.b = 0;
-					}
-
-					if (!DebugClip)
-					{
-						Out2.r = this->r;
-						Out2.g = this->g;
-						Out2.b = this->b;
-					}
-					else
-					{
-						Out2.r = 255;
-						Out2.g = 0;
-						Out2.b = 0;
-					}
-
-					Out1.Points[0] = *InsidePoints[0];
-					Out1.Points[1] = *InsidePoints[1];
-					Out1.Points[2] = InsidePoints[0]->CalculateIntersectionPoint(*OutsidePoints[0], PointOnPlane, PlaneNormalized);
-
-					Out2.Points[0] = *InsidePoints[1];
-					Out2.Points[1] = Out1.Points[2];
-					Out2.Points[2] = InsidePoints[1]->CalculateIntersectionPoint(*OutsidePoints[0], PointOnPlane, PlaneNormalized);
-
-					Count = 2;
+					Out1.Col = Vec3(0, 255, 0);
+					Out1.OverRideMaterialColor = true;
+					Out2.Col = Vec3(255, 0, 0);
+					Out2.OverRideMaterialColor = true;
 				}
+
+				Out1.Points[0] = *InsidePoints[0];
+				Out1.Points[1] = *InsidePoints[1];
+				Out1.Points[2] = InsidePoints[0]->CalculateIntersectionPoint(*OutsidePoints[0], PointOnPlane, PlaneNormalized);
+
+				Out2.Points[0] = *InsidePoints[1];
+				Out2.Points[1] = Out1.Points[2];
+				Out2.Points[2] = InsidePoints[1]->CalculateIntersectionPoint(*OutsidePoints[0], PointOnPlane, PlaneNormalized);
+
+				Count = 2;
 			}
 		}
 
@@ -213,9 +184,8 @@ public:
 	}
 
 	Vec3 Points[3];
-	int r = 255;
-	int b = 255;
-	int g = 255;
+	Vec3 Col = Vec3(255, 255, 255);
+	bool OverRideMaterialColor = false;
 };
 
 class Mesh
@@ -237,6 +207,13 @@ public:
 	Mesh(std::string Fn)
 	{
 		this->LoadMesh(Fn);
+	}
+
+	Mesh(Mesh m, Vec3 Color, float Shininess)
+	{
+		*this = m;
+		this->Color = Color;
+		this->Shininess = Shininess;
 	}
 
 	void TranslateTriangles(Vec3 Value)
@@ -268,6 +245,12 @@ public:
 		}
 	}
 
+	void ChangeMatInfo(Vec3 Color, float Shininess)
+	{
+		this->Color = Color;
+		this->Shininess = Shininess;
+	}
+
 	bool LoadMesh(std::string FnPath)
 	{
 		std::ifstream ifs = std::ifstream(FnPath);
@@ -287,14 +270,14 @@ public:
 
 			SS << Line;
 
-			if (Line[0] == 'v')
+			if (Line[0] == 'v' && Line[1] == ' ')
 			{
 				Vec3 Vert;
 				SS >> Unused >> Vert.x >> Vert.y >> Vert.z;
 				VertCache.push_back(Vert);
 			}
 
-			if (Line[0] == 'f')
+			if (Line[0] == 'f' && Line[3] != '/')
 			{
 				int idx[3];
 				SS >> Unused >> idx[0] >> idx[1] >> idx[2];
@@ -332,6 +315,88 @@ public:
 	std::vector<Triangle> Triangles = {};
 	int VertexCount = 0;
 	int TriangleCount = 0;
+
+
+	// Material Info
+	Vec3 Color = Vec3(255, 0, 0);
+	Vec3 AmbientColor = Vec3(255, 0, 0);
+	Vec3 DiffuseColor = Vec3(255, 0, 0);
+	Vec3 SpecularColor = Vec3(255, 0, 0);
+	float Shininess = 32.0f;
+};
+
+class SimpleLightSrc
+{
+	public:
+	SimpleLightSrc(Vec3 Pos, Vec3 LightDir, Vec3 LightColor, float AmbientCoeff, float DiffuseCoeff, float SpecularCoeff)
+	{
+		this->LightPos = Pos;
+		this->LightDir = LightDir;
+		this->Color = LightColor;
+		this->AmbientCoeff = AmbientCoeff;
+		this->DiffuseCoeff = DiffuseCoeff;
+		this->SpecularCoeff = SpecularCoeff;
+
+		this->LightMesh = Mesh();
+		this->Render = false;
+	}
+	SimpleLightSrc(Vec3 Pos, Vec3 LightDir, Vec3 LightColor, float AmbientCoeff, float DiffuseCoeff, float SpecularCoeff, Mesh LightMesh)
+	{
+		this->LightPos = Pos;
+		this->LightDir = LightDir;
+		this->Color = LightColor;
+		this->AmbientCoeff = AmbientCoeff;
+		this->DiffuseCoeff = DiffuseCoeff;
+		this->SpecularCoeff = SpecularCoeff;
+		this->LightMesh = LightMesh;
+		this->Render = false;
+	}
+
+	static float CalcDiffuse(Vec3 ObjNormal, Vec3 Dir)
+	{
+		return ObjNormal.Dot(Dir.Normalized());
+	}
+
+	float CalcDiffuse(Vec3 ObjNormal)
+	{
+		return ObjNormal.Dot(this->LightDir.Normalized());
+	}
+
+	Vec3 LightDir = Vec3(0, 0, -1);
+	Vec3 LightPos = Vec3(0, 0, 0);
+	Vec3 Color = Vec3(253, 251, 211);
+	//Vec3 Color = Vec3(255, 255, 255);
+	Mesh LightMesh = Mesh();
+	bool Render = false;
+
+	float AmbientCoeff = 0.1f;
+	float SpecularCoeff = 0.5f;
+	float DiffuseCoeff = 0.25f;
+};
+
+class Renderable
+{
+public:
+	Renderable()
+	{
+		this->mesh = Mesh();
+		this->Pos = Vec3();
+		this->RotationRads = Vec3();
+		this->Scalar = Vec3();
+	}
+
+	Renderable(Mesh mesh, Vec3 Scalar, Vec3 RotationRads, Vec3 Pos)
+	{
+		this->Pos = Pos;
+		this->mesh = mesh;
+		this->Scalar = Scalar;
+		this->RotationRads = RotationRads;
+	}
+
+	Mesh mesh = Mesh();
+	Vec3 Pos = Vec3();
+	Vec3 Scalar = Vec3();
+	Vec3 RotationRads = Vec3();
 };
 
 Mesh CubeMesh = Mesh({
@@ -360,31 +425,6 @@ Mesh CubeMesh = Mesh({
 	{ {1.0f, 0.0f, 1.0f}, {0.0f, 0.0f, 0.0f}, {1.0f, 0.0f, 0.0f} },
 	}, "Cube");
 
-class Renderable
-{
-public:
-	Renderable()
-	{
-		this->mesh = Mesh();
-		this->Pos = Vec3();
-		this->RotationRads = Vec3();
-		this->Scalar = Vec3();
-	}
-
-	Renderable(Mesh mesh, Vec3 Scalar, Vec3 RotationRads, Vec3 Pos)
-	{
-		this->Pos = Pos;
-		this->mesh = mesh;
-		this->Scalar = Scalar;
-		this->RotationRads = RotationRads;
-	}
-
-	Mesh mesh = Mesh();
-	Vec3 Pos = Vec3();
-	Vec3 Scalar = Vec3();
-	Vec3 RotationRads = Vec3();
-};
-
 class Cube : public Renderable
 {
 public:
@@ -397,49 +437,6 @@ public:
 
 	}
 };
-
-class SimpleLightSrc
-{
-public:
-	SimpleLightSrc(float Ambient)
-	{
-		this->Ambient = Ambient;
-		this->LightDir = Vec3(0, 0, -1);
-		this->LightMesh = Mesh();
-		this->Render = false;
-	}
-	SimpleLightSrc(float Ambient, Vec3 Dir)
-	{
-		this->Ambient = Ambient;
-		this->LightDir = Dir;
-		this->LightMesh = Mesh();
-		this->Render = false;
-	}
-	SimpleLightSrc(float Ambient, Vec3 Dir, Mesh m, bool Render)
-	{
-		this->Ambient = Ambient;
-		this->LightDir = Dir;
-		this->LightMesh = m;
-		this->Render = Render;
-	}
-
-	static float CalcDiffuse(Vec3 ObjNormal, Vec3 Dir)
-	{
-		return ObjNormal.Dot(Dir.Normalized());
-	}
-
-	float CalcDiffuse(Vec3 ObjNormal)
-	{
-		return ObjNormal.Dot(this->LightDir.Normalized());
-	}
-
-	float Ambient = 1.0f;
-	Vec3 LightDir = Vec3(0, 0, -1);
-	Mesh LightMesh = Mesh();
-	bool Render = false;
-};
-
-typedef void(__fastcall* DoTick_T)(const GdiPP&, const float);
 
 class Camera
 {
@@ -623,6 +620,8 @@ public:
 	float Far = 0.f;
 };
 
+typedef void(__fastcall* DoTick_T)(const GdiPP&, const WndCreatorW&, const float);
+
 namespace Engine
 {
 	std::string FpsStr = "Fps: ";
@@ -637,12 +636,20 @@ namespace Engine
     bool ShowTriLines = false;
 	bool DebugClip = false;
 	bool LockCursor = true;
-	bool ShowCursor = false;
+	bool CursorShow = false;
+	bool UpdateMouseIn = true;
 
 	POINT PrevMousePos;
 	POINT DeltaMouse;
-	float Sensitivity = 0.6f;
+	float Sensitivity = 0.45F;
 	int Fps = 0;
+
+	void UpdateScreenInfo(GdiPP& Gdi)
+	{
+		Gdi.UpdateClientRgn();
+		sx = Gdi.ClientRect.right - Gdi.ClientRect.left;
+		sy = Gdi.ClientRect.bottom - Gdi.ClientRect.top;
+	}
 
 	void Run(WndCreatorW& Wnd, GdiPP& Gdi, BrushPP& ClearBrush, DoTick_T DrawCallBack)
 	{
@@ -670,19 +677,32 @@ namespace Engine
 			TranslateMessage(&msg);
 			DispatchMessageW(&msg);
 
+			// Check window focus and calc mouse deltas
 			if (Wnd.HasFocus())
 			{
-				POINT CurrMouse;
-				GetCursorPos(&CurrMouse);
-				DeltaMouse.x = CurrMouse.x - PrevMousePos.x;
-				DeltaMouse.y = -(CurrMouse.y - PrevMousePos.y);
-				DeltaMouse.x *= Sensitivity;
-				DeltaMouse.y *= Sensitivity;
+				if (UpdateMouseIn)
+				{
+					POINT CurrMouse;
+					GetCursorPos(&CurrMouse);
+					DeltaMouse.x = CurrMouse.x - PrevMousePos.x;
+					DeltaMouse.y = -(CurrMouse.y - PrevMousePos.y);
+					DeltaMouse.x *= Sensitivity;
+					DeltaMouse.y *= Sensitivity;
+				}
 
 				if(LockCursor)
 					SetCursorPos(sx / 2, sy / 2);
 
 				GetCursorPos(&PrevMousePos);
+
+				if (CursorShow == false)
+				{
+					while (ShowCursor(FALSE) >= 0){}
+				}
+				else
+				{
+					while (ShowCursor(TRUE) <= 0) {}
+				}
 			}
 
 			// Check Msg
@@ -691,15 +711,18 @@ namespace Engine
 				break;
 			}
 
+			// clear the screen
 			Gdi.Clear(GDIPP_FILLRECT, ClearBrush);
 
-			DrawCallBack(Gdi, (float)ElapsedTime);
+			// call draw code
+			DrawCallBack(Gdi, Wnd, (float)ElapsedTime);
 
 			if (FpsEngineCounter)
 			{
 				Gdi.DrawStringA(20, 20, FpsStr + std::to_string(Fps), RGB(255, 0, 0), TRANSPARENT);
 			}
 
+			// Draw to screen
 			Gdi.DrawDoubleBuffer();
 
 			End = std::chrono::system_clock::now();
@@ -727,7 +750,7 @@ namespace Engine
 		Wnd.Destroy();
 	}
 
-	void RenderMesh(GdiPP& Gdi, Camera& Cam, Mesh& MeshToRender, Vec3 Scalar, Vec3 RotationRads, Vec3 Pos, Vec3 LightDir, float Ambient)
+	void RenderMesh(GdiPP& Gdi, Camera& Cam, Mesh& MeshToRender, Vec3 Scalar, Vec3 RotationRads, Vec3 Pos, Vec3 LightPos, Vec3 LightDir, Vec3 LightColor, float Ambient, float Diffuse, float Specular)
 	{
 		Matrix ObjectMatrix = Matrix::CreateScalarMatrix(Scalar.x, Scalar.y, Scalar.z); // Scalar Matrix
 		Matrix RotM = Matrix::CreateRotationMatrix(RotationRads); // Rotation Matrix
@@ -775,17 +798,22 @@ namespace Engine
 					ToProj.Scale(Vec3((float)(Engine::sx * 0.5f), (float)(Engine::sy * 0.5f), 1));
 					ToProj.Translate(Vec3(-1, -1, 0));
 
-					//Proj.r *= (Intensity);
-					//Proj.g *= (Intensity);
-					//Proj.b *= (Intensity);
-
-					// Calc lighting intensity
-					if (DoLighting)
+					// Calc lighting
+					if (DoLighting && !ToProj.OverRideMaterialColor)
 					{
-						Intensity = TriNormal.Dot(LightDir.Normalized());
-						ToProj.r = std::clamp<float>(((ToProj.r * Ambient) + (ToProj.r * abs(Intensity))), 0, 255);
-						ToProj.g = std::clamp<float>(((ToProj.g * Ambient) + (ToProj.g * abs(Intensity))), 0, 255);
-						ToProj.b = std::clamp<float>(((ToProj.b * Ambient) + (ToProj.b * abs(Intensity))), 0, 255);
+						Intensity = std::max<float>(0.0f, TriNormal.Dot(LightDir.Normalized()));
+						Vec3 RDir = LightDir.Normalized() - TriNormal * 2.0f * TriNormal.Dot(LightDir.Normalized());
+
+						// Calculate the specular intensity
+						float SpecularIntensity = pow(std::max<float>(0.0f, RDir.Dot(Cam.LookDir)), MeshToRender.Shininess);
+
+						Vec3 AmbientCol = MeshToRender.Color * Ambient;
+						Vec3 DiffuseCol = (LightColor * Diffuse) * Intensity;
+						Vec3 SpecularClr = (LightColor * SpecularIntensity) * Specular;
+
+						ToProj.Col.x = std::clamp<float>((AmbientCol.x + DiffuseCol.x + SpecularClr.x), 0.0f, 255.0f);
+						ToProj.Col.y = std::clamp<float>((AmbientCol.y + DiffuseCol.y + SpecularClr.y), 0.0f, 255.0f);
+						ToProj.Col.z = std::clamp<float>((AmbientCol.z + DiffuseCol.z + SpecularClr.z), 0.0f, 255.0f);
 					}
 
 					TrisToRender.push_back(ToProj);
@@ -803,13 +831,9 @@ namespace Engine
 
 		for (const auto& Proj : TrisToRender)
 		{
-			// Clip triangles against all four screen edges, this could yield
-			// a bunch of triangles, so create a queue that we traverse to 
-			//  ensure we only test new triangles generated against planes
 			Triangle Clipped[2];
 			std::list<Triangle> ListTris;
 
-			// Add initial triangle
 			ListTris.push_back(Proj);
 			int NewTris = 1;
 
@@ -818,16 +842,10 @@ namespace Engine
 				int NewTrisToAdd = 0;
 				while (NewTris > 0)
 				{
-					// Take triangle from front of queue
 					Triangle Test = ListTris.front();
 					ListTris.pop_front();
 					NewTris--;
 
-					// Clip it against a plane. We only need to test each 
-					// subsequent plane, against subsequent new triangles
-					// as all triangles after a plane clip are guaranteed
-					// to lie on the inside of the plane. I like how this
-					// comment is almost completely and utterly justified
 					switch (p)
 					{
 						case 0:
@@ -852,9 +870,6 @@ namespace Engine
 						}
 					}
 
-					// Clipping may yield a variable number of triangles, so
-					// add these new ones to the back of the queue for subsequent
-					// clipping against next planes
 					for (int w = 0; w < NewTrisToAdd; w++)
 					{
 						ListTris.push_back(Clipped[w]);
@@ -862,19 +877,20 @@ namespace Engine
 				}
 				NewTris = ListTris.size();
 			}
+
 			// draw
 			for (const auto& Proj : ListTris)
 			{
 				if (!WireFrame)
 				{
 					if (!ShowTriLines)
-						Gdi.DrawFilledTriangle((Proj.Points[0].x), (Proj.Points[0].y), (Proj.Points[1].x), (Proj.Points[1].y), (Proj.Points[2].x), (Proj.Points[2].y), BrushPP(RGB(Proj.r, Proj.g, Proj.b)), PenPP(PS_SOLID, 1, RGB(Proj.r, Proj.g, Proj.b)));
+						Gdi.DrawFilledTriangle((Proj.Points[0].x), (Proj.Points[0].y), (Proj.Points[1].x), (Proj.Points[1].y), (Proj.Points[2].x), (Proj.Points[2].y), BrushPP(RGB(Proj.Col.x, Proj.Col.y, Proj.Col.z)), PenPP(PS_SOLID, 1, RGB(Proj.Col.x, Proj.Col.y, Proj.Col.z)));
 					else
-						Gdi.DrawFilledTriangle(Proj.Points[0].x, Proj.Points[0].y, Proj.Points[1].x, Proj.Points[1].y, Proj.Points[2].x, Proj.Points[2].y, BrushPP(RGB(Proj.r, Proj.g, Proj.b)), PenPP(PS_SOLID, 1, RGB(1, 1, 1)));
+						Gdi.DrawFilledTriangle(Proj.Points[0].x, Proj.Points[0].y, Proj.Points[1].x, Proj.Points[1].y, Proj.Points[2].x, Proj.Points[2].y, BrushPP(RGB(Proj.Col.x, Proj.Col.y, Proj.Col.z)), PenPP(PS_SOLID, 1, RGB(1, 1, 1)));
 				}
 				else
 				{
-					Gdi.DrawTriangle(Proj.Points[0].x, Proj.Points[0].y, Proj.Points[1].x, Proj.Points[1].y, Proj.Points[2].x, Proj.Points[2].y, PenPP(PS_SOLID, 1, RGB(Proj.r, Proj.g, Proj.b)));
+					Gdi.DrawTriangle(Proj.Points[0].x, Proj.Points[0].y, Proj.Points[1].x, Proj.Points[1].y, Proj.Points[2].x, Proj.Points[2].y, PenPP(PS_SOLID, 1, RGB(Proj.Col.x, Proj.Col.y, Proj.Col.z)));
 				}
 			}
 		}
@@ -954,6 +970,6 @@ namespace Engine
 		//	}
 		//}
 
-		RenderMesh(Gdi, Cam, R.mesh, R.Scalar, R.RotationRads, R.Pos, LightSrc.LightDir, LightSrc.Ambient);
+		RenderMesh(Gdi, Cam, R.mesh, R.Scalar, R.RotationRads, R.Pos, LightSrc.LightPos, LightSrc.LightDir, LightSrc.Color, LightSrc.AmbientCoeff, LightSrc.DiffuseCoeff, LightSrc.SpecularCoeff);
 	}
 }
