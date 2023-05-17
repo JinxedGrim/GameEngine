@@ -119,21 +119,11 @@ public:
 		return Out;
 	}
 
-	static Matrix CreateScalarMatrix(float ScalarX, float ScalarY, float ScalerZ)
-	{
-		Matrix Out;
+	static Matrix CreateScalarMatrix(const Vec3&);
 
-		Out.fMatrix[0][0] = 1.f * ScalarX;
-		Out.fMatrix[1][1] = 1.f * ScalarY;
-		Out.fMatrix[2][2] = 1.f * ScalerZ;
-		Out.fMatrix[3][3] = 1.f;
+	static Matrix CreateRotationMatrix(const Vec3&);
 
-		return Out;
-	}
-
-	static Matrix CreateRotationMatrix(Vec3);
-
-	static Matrix CreateTranslationMatrix(Vec3);
+	static Matrix CreateTranslationMatrix(const Vec3&);
 
 	Matrix operator*(const Matrix b) const
 	{
@@ -321,7 +311,7 @@ public:
 	}
 
 	// Calculates Dot Product (How similar two vecs are)
-	const float Dot(const Vec3 Rhs) const 
+	const float Dot(const Vec3& Rhs) const 
 	{
 		return { this->x * Rhs.x + this->y * Rhs.y + this->z * Rhs.z };
 	}
@@ -337,7 +327,7 @@ public:
 		return Vec3((this->y * Rhs->z - this->z * Rhs->y), (this->z * Rhs->x - this->x * Rhs->z), (this->x * Rhs->y - this->y * Rhs->x));
 	}
 
-	Vec3 Cross(const Vec3 Rhs) const
+	Vec3 Cross(const Vec3& Rhs) const
 	{
 		return Vec3((this->y * Rhs.z - this->z * Rhs.y), (this->z * Rhs.x - this->x * Rhs.z), (this->x * Rhs.y - this->y * Rhs.x));
 	}
@@ -349,14 +339,7 @@ public:
 		Out->Normalize();
 	}
 
-	Vec3 CrossNormalized(Vec3* Rhs) const
-	{
-		Vec3 Out = this->Cross(Rhs);
-		Out.Normalize();
-		return Out;
-	}
-
-	Vec3 CrossNormalized(Vec3 Rhs) const
+	Vec3 CrossNormalized(const Vec3& Rhs) const
 	{
 		Vec3 Out = this->Cross(Rhs);
 		Out.Normalize();
@@ -511,6 +494,15 @@ public:
 			this->z / b,
 		};
 	}
+	Vec3 operator / (const float b) const
+	{
+		return
+		{
+			this->x / b,
+			this->y / b,
+			this->z / b,
+		};
+	}
 
 	void operator += (const Vec3 b)
 	{
@@ -531,6 +523,13 @@ public:
 		this->x *= b.x;
 		this->y *= b.y;
 		this->z *= b.z;
+	}
+
+	void operator *= (const float b)
+	{
+		this->x *= b;
+		this->y *= b;
+		this->z *= b;
 	}
 	
 	void operator *= (const Matrix b)
@@ -591,7 +590,19 @@ public:
 	float z;
 };
 
-Matrix Matrix::CreateTranslationMatrix(Vec3 Translation)
+Matrix Matrix::CreateScalarMatrix(const Vec3& Scalar)
+{
+	Matrix Out;
+
+	Out.fMatrix[0][0] = 1.f * Scalar.x;
+	Out.fMatrix[1][1] = 1.f * Scalar.y;
+	Out.fMatrix[2][2] = 1.f * Scalar.z;
+	Out.fMatrix[3][3] = 1.f;
+
+	return Out;
+}
+
+Matrix Matrix::CreateTranslationMatrix(const Vec3& Translation)
 {
 	Matrix Out;
 	Out.fMatrix[0][0] = 1.0f;
@@ -604,11 +615,12 @@ Matrix Matrix::CreateTranslationMatrix(Vec3 Translation)
 	return Out;
 }
 
-Matrix Matrix::CreateRotationMatrix(Vec3 RotationDeg) // pitch yaw roll
+Matrix Matrix::CreateRotationMatrix(const Vec3& RotationDeg) // pitch yaw roll
 {
-	if (RotationDeg.z == 0.0f)
+	float RotRadsZ = RotationDeg.z;
+	if (RotRadsZ == 0.0f)
 	{
-		RotationDeg.z = 180;
+		RotRadsZ = 180;
 	}
 
 	Matrix A;
@@ -616,7 +628,7 @@ Matrix Matrix::CreateRotationMatrix(Vec3 RotationDeg) // pitch yaw roll
 	Matrix C;
 	Matrix::CreateRotationX(&A, -ToRad(RotationDeg.x));
 	Matrix::CreateRotationY(&B, ToRad(RotationDeg.y));
-	Matrix::CreateRotationZ(&C, ToRad(RotationDeg.z));
+	Matrix::CreateRotationZ(&C, ToRad(RotRadsZ));
 
 	A = A * B * C;
 

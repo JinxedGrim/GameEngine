@@ -11,14 +11,16 @@ static float RotSpeedX = 0.0f;
 static float RotSpeedY = 30.0f;
 static float RotSpeedZ = 0.0f;
 static bool ShowStrs = false;
-Mesh TeaPot = Mesh(("TeaPot.obj"));
-Mesh Pyramid = Mesh("Pyramid.obj");
-Mesh Axis = Mesh("Axis.obj");
-Mesh Wrld = Mesh("World.obj");
-Mesh LightSrcMesh = Mesh(CubeMesh, Vec3(255, 255, 255), 0.0f);
-std::vector<Mesh> Meshes = { CubeMesh, TeaPot, Axis, Wrld};
-int CurrMesh = 0;
-bool IsFullScreen = true;
+static Mesh TeaPot = Mesh(("TeaPot.obj"));
+static Mesh Pyramid = Mesh("Pyramid.obj");
+static Mesh Axis = Mesh("Axis.obj");
+static Mesh Wrld = Mesh("World.obj");
+static Material LightMat = Material(Vec3(255, 255, 255), Vec3(255, 255, 255), Vec3(255, 255, 255), Vec3(255, 255, 255), 0.0f);
+static Material CubeMat = Material(Vec3(255, 0, 0), Vec3(255, 0, 0), Vec3(255, 0, 0), Vec3(255, 0, 0), 0.0f);
+static Mesh LightSrcMesh = Mesh(CubeMesh, LightMat);
+static std::vector<Mesh> Meshes = { CubeMesh, TeaPot, Axis, Wrld};
+static int CurrMesh = 0;
+static bool IsFullScreen = true;
 static Camera Cam = Camera(Vec3(0, 0, 0), (float)((float)Engine::sy / (float)Engine::sx), FOV_, FNEAR, FFAR);
 
 void Settings()
@@ -186,7 +188,7 @@ DoTick_T Draw(GdiPP& Gdi, WndCreatorW& Wnd, const float ElapsedTime)
 
 	Engine::RenderMesh(Gdi, Cam, Meshes.at(CurrMesh), Vec3(1.0f, 1.0f, 1.0f), Vec3(FTheta * RotSpeedX, FTheta * RotSpeedY, FTheta * RotSpeedZ), Vec3(1, 1, 10), sl.LightPos, sl.LightDir, sl.Color, sl.AmbientCoeff, sl.DiffuseCoeff, sl.SpecularCoeff);	//Engine::RenderRenderable(Gdi, Cam, lightsrcrend, LightSrc, DoCull, DoLighting, ShowTriLines, WireFrame);
 
-	Engine::RenderMesh(Gdi, Cam, sl.LightMesh, Vec3(1.0f, 1.0f, 1.0f), Vec3(0, 0, 0), sl.LightPos, sl.LightPos, sl.LightDir, sl.Color, 1.0f, 0.f, 0.f);	//Engine::RenderRenderable(Gdi, Cam, lightsrcrend, LightSrc, DoCull, DoLighting, ShowTriLines, WireFrame);
+	//Engine::RenderMesh(Gdi, Cam, sl.LightMesh, Vec3(1.0f, 1.0f, 1.0f), Vec3(0, 0, 0), sl.LightPos, sl.LightPos, sl.LightDir, sl.Color, 1.0f, 0.f, 0.f);	//Engine::RenderRenderable(Gdi, Cam, lightsrcrend, LightSrc, DoCull, DoLighting, ShowTriLines, WireFrame);
 
 	if (Engine::FpsEngineCounter && ShowStrs)
 	{
@@ -201,6 +203,7 @@ DoTick_T Draw(GdiPP& Gdi, WndCreatorW& Wnd, const float ElapsedTime)
 		static std::string MeshStr = "(ESC) Mesh: ";
 		static std::string VertStr = " Verts: ";
 		static std::string TriCountStr = ", Triangle Count: ";
+		static std::string MaterialNameStr = " MatName: ";
 		static std::string CamPosXstr = "Camera Pos: ( X: ";
 		static std::string CamPosYstr = ", Y: ";
 		static std::string CamPosZstr = ", Z: ";
@@ -218,7 +221,7 @@ DoTick_T Draw(GdiPP& Gdi, WndCreatorW& Wnd, const float ElapsedTime)
 		Gdi.DrawStringA(20, 140, LightingStr + std::to_string(Engine::DoLighting), RGB(255, 0, 0), TRANSPARENT);
 		Gdi.DrawStringA(20, 160, FilledStr + std::to_string(Engine::WireFrame), RGB(255, 0, 0), TRANSPARENT);
 		Gdi.DrawStringA(20, 180, TriLinesStr + std::to_string(Engine::ShowTriLines), RGB(255, 0, 0), TRANSPARENT);
-		Gdi.DrawStringA(20, 200, MeshStr + Meshes.at(CurrMesh).MeshName + VertStr + std::to_string(Meshes.at(CurrMesh).VertexCount) + TriCountStr + std::to_string(Meshes.at(CurrMesh).TriangleCount), RGB(255, 0, 0), TRANSPARENT);
+		Gdi.DrawStringA(20, 200, MeshStr + Meshes.at(CurrMesh).MeshName + VertStr + std::to_string(Meshes.at(CurrMesh).VertexCount) + TriCountStr + std::to_string(Meshes.at(CurrMesh).TriangleCount) + MaterialNameStr + Meshes.at(CurrMesh).Mat.MaterialName, RGB(255, 0, 0), TRANSPARENT);
 		Gdi.DrawStringA(20, 220, CamPosXstr + std::to_string(Cam.Pos.x) + CamPosYstr + std::to_string(Cam.Pos.y) + CamPosZstr + std::to_string(Cam.Pos.z) + CamPosEndstr, RGB(255, 0, 0), TRANSPARENT);
 		Gdi.DrawStringA(20, 240, CamRotXstr + std::to_string(Cam.ViewAngles.x) + CamRotYstr + std::to_string(Cam.ViewAngles.y) + CamRotZstr + std::to_string(Cam.ViewAngles.z) + CamRotEndstr, RGB(255, 0, 0), TRANSPARENT);
 	}

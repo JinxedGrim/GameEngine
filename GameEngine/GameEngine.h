@@ -13,6 +13,115 @@ constexpr auto VK_A = 0x41;
 constexpr auto VK_S = 0x53;
 constexpr auto VK_D = 0x44;
 
+struct TextureCoords
+{
+	float U = 0;
+	float V = 0;
+};
+
+class Material
+{
+	public:
+	Material()
+	{
+		this->Color = Vec3(255, 0, 0);
+		this->AmbientColor = Vec3(255, 0, 0);
+		this->DiffuseColor = Vec3(255, 0, 0);
+		this->SpecularColor = Vec3(255, 0, 0);
+		this->Shininess = 32.0f;
+	}
+	Material(Vec3 Color, Vec3 AmbientColor, Vec3 DiffuseColor, Vec3 SpecularColor, float Shininess)
+	{
+		this->Color = Color;
+		this->AmbientColor = AmbientColor;
+		this->DiffuseColor = DiffuseColor;
+		this->SpecularColor = SpecularColor;
+		this->Shininess = Shininess;
+	}
+
+	bool LoadMaterial(std::string MtlFn, std::string MtlName)
+	{
+		std::ifstream mtlFile(MtlFn);
+		if (!mtlFile.is_open())
+		{
+			// Error handling for failed MTL file loading
+			// You can return a default material or throw an exception
+			*this = Material();
+			return false;
+		}
+
+		std::string line;
+		while (std::getline(mtlFile, line))
+		{
+			std::stringstream ss(line);
+			std::string keyword;
+			ss >> keyword;
+
+			if (keyword == "newmtl")
+			{
+				std::string name;
+				ss >> name;
+
+				if (name == MtlName)
+				{
+					this->MaterialName = name;
+					// Parse the properties for the material
+					while (std::getline(mtlFile, line))
+					{
+						std::stringstream ssProp(line);
+						std::string propKeyword;
+						ssProp >> propKeyword;
+
+						if (propKeyword == "Ka")
+						{
+							ssProp >> this->AmbientColor.x >> this->AmbientColor.y >> this->AmbientColor.z;
+							this->AmbientColor *= 255.0f;
+						}
+						else if (propKeyword == "Kd")
+						{
+							ssProp >> this->DiffuseColor.x >> this->DiffuseColor.y >> this->DiffuseColor.z;
+							this->DiffuseColor *= 255.0f;
+						}
+						else if (propKeyword == "Ks")
+						{
+							ssProp >> this->SpecularColor.x >> this->SpecularColor.y >> this->SpecularColor.z;
+							this->SpecularColor *= 255.0f;
+						}
+						else if (propKeyword == "Ns")
+						{
+							ssProp >> this->Shininess;
+						}
+						else if (propKeyword == "map_Kd")
+						{
+							std::string textureFilePath;
+							ssProp >> textureFilePath;
+							// Load the texture if needed
+							// mat.texture = LoadTexture(textureFilePath);
+						}
+						// Add more properties as needed
+
+						// Check if the end of material is reached
+						if (line.find("newmtl") != std::string::npos)
+							break;
+					}
+
+					break; // Exit the loop once the material is found
+				}
+			}
+		}
+
+		mtlFile.close();
+		return true;
+	}
+
+	Vec3 Color = Vec3(255, 0, 0);
+	Vec3 AmbientColor = Vec3(255.0f, 0, 0);
+	Vec3 DiffuseColor = Vec3(255.0f * 0.5f, 255.0f * 0.5f, 255.0f * 0.5f);
+	Vec3 SpecularColor = Vec3(255.0f * 0.5f, 255.0f * 0.5f, 255.0f * 0.5f);
+	float Shininess = 32.0f;
+	std::string MaterialName = "Default";
+};
+
 class Triangle
 {
 public:
@@ -185,12 +294,15 @@ public:
 
 	Vec3 Points[3];
 	Vec3 Col = Vec3(255, 255, 255);
+	Vec2 TexCoords = Vec2();
+	Vec3 Normal = Vec3();
+	Material Mat = Material();
 	bool OverRideMaterialColor = false;
 };
 
 class Mesh
 {
-public:
+	public:
 
 	Mesh()
 	{
@@ -202,6 +314,8 @@ public:
 		this->Triangles = Triangles;
 		this->MeshName = MeshName;
 		this->TriangleCount = (int)Triangles.size();
+		this->NormalCount = 0;
+		this->VertexCount = 0;
 	}
 
 	Mesh(std::string Fn)
@@ -209,11 +323,11 @@ public:
 		this->LoadMesh(Fn);
 	}
 
-	Mesh(Mesh m, Vec3 Color, float Shininess)
+	Mesh(Mesh m, Material Mat)
 	{
 		*this = m;
-		this->Color = Color;
-		this->Shininess = Shininess;
+		this->Mat = Mat;
+		this->UseSingleMat = true;
 	}
 
 	void TranslateTriangles(Vec3 Value)
@@ -245,10 +359,10 @@ public:
 		}
 	}
 
-	void ChangeMatInfo(Vec3 Color, float Shininess)
+	void ChangeMatInfo(Vec3 Color, Material Mat)
 	{
-		this->Color = Color;
-		this->Shininess = Shininess;
+		this->Mat = Mat;
+		this->UseSingleMat = true;
 	}
 
 	bool LoadMesh(std::string FnPath)
@@ -259,6 +373,11 @@ public:
 			return false;
 
 		std::vector<Vec3> VertCache;
+		std::vector<Vec3> NormalCache;
+		std::vector<Vec2> TexCache;
+
+		std::string MtlLibFn = "";
+		Material CurrMat = Material();
 
 		while (!ifs.eof())
 		{
@@ -269,38 +388,118 @@ public:
 			ifs.getline(Line, 128);
 
 			SS << Line;
+			std::string Str = SS.str();
 
-			if (Line[0] == 'v' && Line[1] == ' ')
+			if (Str.find("v ") != std::string::npos)
 			{
 				Vec3 Vert;
 				SS >> Unused >> Vert.x >> Vert.y >> Vert.z;
 				VertCache.push_back(Vert);
 			}
-
-			if (Line[0] == 'f' && Line[3] != '/')
+			else if (Str.find("vn ") != std::string::npos)
 			{
-				int idx[3];
-				SS >> Unused >> idx[0] >> idx[1] >> idx[2];
-
-				if (idx[0] <= 0 || idx[0] > VertCache.size() ||
-					idx[1] <= 0 || idx[1] > VertCache.size() ||
-					idx[2] <= 0 || idx[2] > VertCache.size()) 
+				Vec3 Normal;
+				SS >> Unused >> Normal.x >> Normal.y >> Normal.z;
+				NormalCache.push_back(Normal);
+			}
+			else if (Str.find("vt ") != std::string::npos)
+			{
+				Vec2 TexCoord;
+				SS >> Unused >> TexCoord.x >> TexCoord.y;
+				TexCache.push_back(TexCoord);
+			}
+			else if (Str.find("f ") != std::string::npos)
+			{
+				std::vector<std::string> Indices;
+				std::string IndexStr;
+				while (SS >> IndexStr)
 				{
-					return false;
+					if (IndexStr[0] == 'f')
+						continue; // Skip the 'f' character
+
+					Indices.push_back(IndexStr);
 				}
+				if (Indices.size() == 3)
+				{
+					Triangle Tmp;
+					for (int i = 0; i < 3; i++)
+					{
+						std::stringstream IndexSS(Indices[i]);
+						std::string IndexPart;
 
-				Triangle Tmp = Triangle(VertCache[(long long)idx[0] - 1], VertCache[(long long)idx[1] - 1], VertCache[(long long)idx[2] - 1]);
+						int vertexIndex, texCoordIndex, normalIndex;
 
-				this->Triangles.push_back(Tmp);
+						if (std::getline(IndexSS, IndexPart, '/'))
+							vertexIndex = std::stoi(IndexPart) - 1;
+
+						if (std::getline(IndexSS, IndexPart, '/'))
+						{
+							if (!IndexPart.empty())
+								texCoordIndex = std::stoi(IndexPart) - 1;
+							else
+								texCoordIndex = -1;
+						}
+						else
+						{
+							texCoordIndex = -1;
+						}
+
+						if (std::getline(IndexSS, IndexPart, '/'))
+						{
+							if (!IndexPart.empty())
+								normalIndex = std::stoi(IndexPart) - 1;
+							else
+								normalIndex = -1;
+						}
+						else
+						{
+							normalIndex = -1;
+						}
+
+						Vec3 vertex = VertCache[vertexIndex];
+
+						if (texCoordIndex >= 0)
+							Tmp.TexCoords = TexCache[texCoordIndex];
+
+						if (normalIndex >= 0)
+							Tmp.Normal = NormalCache[normalIndex];
+
+						Tmp.Points[i] = vertex;
+					}
+
+					Tmp.Mat = CurrMat; // Assign the current material to the triangle
+
+
+					this->Triangles.push_back(Tmp);
+				}
+			}
+			else if (Str.find("usemtl ") != std::string::npos)
+			{
+				//char Prefix[7];
+				std::string MaterialFn;
+				SS >> Unused >> Unused >> Unused >> Unused >> Unused >> Unused >> MaterialFn;
+				CurrMat.LoadMaterial(MtlLibFn, MaterialFn); // Update the current material
+				this->MatCount++;
+
+				if (this->MatCount > 1)
+				{
+					this->Mat.MaterialName = "Multiple";
+					this->UseSingleMat = false;
+				}
+				else
+				{
+					this->Mat = CurrMat;
+				}
+			}
+			else if (Str.find("mtllib ") != std::string::npos)
+			{
+				SS >> Unused >> Unused >> Unused >> Unused >> Unused >> Unused >> MtlLibFn;
 			}
 		}
-
 		FnPath = FnPath.substr(FnPath.find_last_of("/\\") + 1);
-
 		FnPath = FnPath.substr(0, FnPath.find_last_of(".obj") - 3);
 
 		this->MeshName = FnPath;
-
 		this->VertexCount = (int)VertCache.size();
 		this->TriangleCount = (int)Triangles.size();
 
@@ -313,16 +512,14 @@ public:
 
 	std::string MeshName = "";
 	std::vector<Triangle> Triangles = {};
+	std::vector<Vec2> TexCoords = {};
+	std::vector<Vec3> Normals = {};
+	Material Mat = Material();
 	int VertexCount = 0;
 	int TriangleCount = 0;
-
-
-	// Material Info
-	Vec3 Color = Vec3(255, 0, 0);
-	Vec3 AmbientColor = Vec3(255, 0, 0);
-	Vec3 DiffuseColor = Vec3(255, 0, 0);
-	Vec3 SpecularColor = Vec3(255, 0, 0);
-	float Shininess = 32.0f;
+	int NormalCount = 0;
+	int MatCount = 0;
+	bool UseSingleMat = true;
 };
 
 class SimpleLightSrc
@@ -639,9 +836,10 @@ namespace Engine
 	bool CursorShow = false;
 	bool UpdateMouseIn = true;
 
+
 	POINT PrevMousePos;
 	POINT DeltaMouse;
-	float Sensitivity = 0.45F;
+	float Sensitivity = 0.1f;
 	int Fps = 0;
 
 	void UpdateScreenInfo(GdiPP& Gdi)
@@ -750,9 +948,9 @@ namespace Engine
 		Wnd.Destroy();
 	}
 
-	void RenderMesh(GdiPP& Gdi, Camera& Cam, Mesh& MeshToRender, Vec3 Scalar, Vec3 RotationRads, Vec3 Pos, Vec3 LightPos, Vec3 LightDir, Vec3 LightColor, float Ambient, float Diffuse, float Specular)
+	void RenderMesh(GdiPP& Gdi, Camera& Cam, const Mesh& MeshToRender, const Vec3& Scalar, const Vec3& RotationRads, const Vec3& Pos, Vec3 LightPos, const Vec3& LightDir, const Vec3& LightColor, const float LightAmbient, const float LightDiffuse, const float LightSpecular)
 	{
-		Matrix ObjectMatrix = Matrix::CreateScalarMatrix(Scalar.x, Scalar.y, Scalar.z); // Scalar Matrix
+		Matrix ObjectMatrix = Matrix::CreateScalarMatrix(Scalar); // Scalar Matrix
 		Matrix RotM = Matrix::CreateRotationMatrix(RotationRads); // Rotation Matrix
 		Matrix TransMat = Matrix::CreateTranslationMatrix(Pos); // Translation Matrix
 		ObjectMatrix = ((ObjectMatrix * RotM) * TransMat); // Matrices are applied in SRT order 
@@ -801,15 +999,15 @@ namespace Engine
 					// Calc lighting
 					if (DoLighting && !ToProj.OverRideMaterialColor)
 					{
-						Intensity = std::max<float>(0.0f, TriNormal.Dot(LightDir.Normalized()));
-						Vec3 RDir = LightDir.Normalized() - TriNormal * 2.0f * TriNormal.Dot(LightDir.Normalized());
+						Intensity = std::max<float>(0.0f, TriNormal.Dot((Pos - LightPos).Normalized()));
+						Vec3 RDir = (Pos - LightPos).Normalized().Normalized() - TriNormal * 2.0f * TriNormal.Dot((Pos - LightPos).Normalized());
 
 						// Calculate the specular intensity
-						float SpecularIntensity = pow(std::max<float>(0.0f, RDir.Dot(Cam.LookDir)), MeshToRender.Shininess);
+						float SpecularIntensity = pow(std::max<float>(0.0f, RDir.Dot(Cam.LookDir)), ToProj.Mat.Shininess);
 
-						Vec3 AmbientCol = MeshToRender.Color * Ambient;
-						Vec3 DiffuseCol = (LightColor * Diffuse) * Intensity;
-						Vec3 SpecularClr = (LightColor * SpecularIntensity) * Specular;
+						Vec3 AmbientCol = (ToProj.Mat.AmbientColor) * LightAmbient;
+						Vec3 DiffuseCol = ((LightColor * Intensity) + ToProj.Mat.DiffuseColor) * LightDiffuse;
+						Vec3 SpecularClr = ((LightColor * SpecularIntensity) + ToProj.Mat.SpecularColor) * LightSpecular;
 
 						ToProj.Col.x = std::clamp<float>((AmbientCol.x + DiffuseCol.x + SpecularClr.x), 0.0f, 255.0f);
 						ToProj.Col.y = std::clamp<float>((AmbientCol.y + DiffuseCol.y + SpecularClr.y), 0.0f, 255.0f);
@@ -832,7 +1030,7 @@ namespace Engine
 		for (const auto& Proj : TrisToRender)
 		{
 			Triangle Clipped[2];
-			std::list<Triangle> ListTris;
+			std::vector<Triangle> ListTris;
 
 			ListTris.push_back(Proj);
 			int NewTris = 1;
@@ -843,7 +1041,7 @@ namespace Engine
 				while (NewTris > 0)
 				{
 					Triangle Test = ListTris.front();
-					ListTris.pop_front();
+					ListTris.erase(ListTris.begin());
 					NewTris--;
 
 					switch (p)
