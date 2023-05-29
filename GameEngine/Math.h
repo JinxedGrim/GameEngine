@@ -49,63 +49,29 @@ public:
 
 	static void CreateRotationX(Matrix* Out, float AngleRads)
 	{
-
-		Out->_11 = 1;
-		Out->_12 = 0;
-		Out->_13 = 0;
-		Out->_14 = 0;
-		Out->_21 = 0;
+		Out->MakeIdentity();
 		Out->_22 = cosf(AngleRads);
 		Out->_23 = sinf(AngleRads);
-		Out->_24 = 0;
-		Out->_31 = 0;
 		Out->_32 = -sinf(AngleRads);
 		Out->_33 = cosf(AngleRads);
-		Out->_34 = 0;
-		Out->_41 = 0;
-		Out->_42 = 0;
-		Out->_43 = 0;
-		Out->_44 = 1;
 	}
 
 	static void CreateRotationY(Matrix* Out, float AngleRads)
 	{
+		Out->MakeIdentity();
 		Out->_11 = cosf(AngleRads);
-		Out->_12 = 0;
 		Out->_13 = sinf(AngleRads);
-		Out->_14 = 0;
-		Out->_21 = 0;
-		Out->_22 = 1;
-		Out->_23 = 0;
-		Out->_24 = 0;
 		Out->_31 = -sinf(AngleRads);
-		Out->_32 = 0;
 		Out->_33 = cosf(AngleRads);
-		Out->_34 = 0;
-		Out->_41 = 0;
-		Out->_42 = 0;
-		Out->_43 = 0;
-		Out->_44 = 1;
 	}
 
 	static void CreateRotationZ(Matrix* Out, float AngleRads)
 	{
+		Out->MakeIdentity();
 		Out->_11 = cosf(AngleRads);
 		Out->_12 = sinf(AngleRads);
-		Out->_13 = 0;
-		Out->_14 = 0;
 		Out->_21 = -sinf(AngleRads);
 		Out->_22 = cosf(AngleRads);
-		Out->_23 = 0;
-		Out->_24 = 0;
-		Out->_31 = 0;
-		Out->_32 = 0;
-		Out->_33 = 1;
-		Out->_34 = 0;
-		Out->_41 = 0;
-		Out->_42 = 0;
-		Out->_43 = 0;
-		Out->_44 = 1;
 	}
 
 	static Matrix CreateIdentity()
@@ -119,13 +85,30 @@ public:
 		return Out;
 	}
 
+	void MakeIdentity()
+	{
+		Matrix Out;
+		Out.fMatrix[0][0] = 1.f;
+		Out.fMatrix[1][1] = 1.f;
+		Out.fMatrix[2][2] = 1.f;
+		Out.fMatrix[3][3] = 1.f;
+
+		*this = Out;
+	}
+
 	static Matrix CreateScalarMatrix(const Vec3&);
 
 	static Matrix CreateRotationMatrix(const Vec3&);
 
 	static Matrix CreateTranslationMatrix(const Vec3&);
 
-	Matrix operator*(const Matrix b) const
+	void CalcScalarMatrix(const Vec3&);
+
+	void CalcRotationMatrix(const Vec3&);
+
+	void CalcTranslationMatrix(const Vec3&);
+
+	Matrix operator*(const Matrix& b) const
 	{
 		Matrix result;
 
@@ -146,7 +129,7 @@ public:
 		return result;
 	}
 
-	void operator *= (const float b)
+	void operator *= (const float& b)
 	{
 		for (int row = 0; row < 4; row++)
 		{
@@ -157,15 +140,39 @@ public:
 		}
 	}
 
-	Matrix QuickInversed() // Only for Rotation/Translation Matrices
+	void operator *= (const Matrix& b)
+	{
+		*this = *this * b;
+	}
+
+	Matrix QuickInversed()
 	{
 		Matrix OutMat;
-		OutMat.fMatrix[0][0] = this->fMatrix[0][0]; OutMat.fMatrix[0][1] = this->fMatrix[1][0]; OutMat.fMatrix[0][2] = this->fMatrix[2][0]; OutMat.fMatrix[0][3] = 0.0f;
-		OutMat.fMatrix[1][0] = this->fMatrix[0][1]; OutMat.fMatrix[1][1] = this->fMatrix[1][1]; OutMat.fMatrix[1][2] = this->fMatrix[2][1]; OutMat.fMatrix[1][3] = 0.0f;
-		OutMat.fMatrix[2][0] = this->fMatrix[0][2]; OutMat.fMatrix[2][1] = this->fMatrix[1][2]; OutMat.fMatrix[2][2] = this->fMatrix[2][2]; OutMat.fMatrix[2][3] = 0.0f;
-		OutMat.fMatrix[3][0] = -(this->fMatrix[3][0] * OutMat.fMatrix[0][0] + this->fMatrix[3][1] * OutMat.fMatrix[1][0] + this->fMatrix[3][2] * OutMat.fMatrix[2][0]);
-		OutMat.fMatrix[3][1] = -(this->fMatrix[3][0] * OutMat.fMatrix[0][1] + this->fMatrix[3][1] * OutMat.fMatrix[1][1] + this->fMatrix[3][2] * OutMat.fMatrix[2][1]);
-		OutMat.fMatrix[3][2] = -(this->fMatrix[3][0] * OutMat.fMatrix[0][2] + this->fMatrix[3][1] * OutMat.fMatrix[1][2] + this->fMatrix[3][2] * OutMat.fMatrix[2][2]);
+
+		// Assign values to the output matrix manually
+		OutMat.fMatrix[0][0] = this->fMatrix[0][0];
+		OutMat.fMatrix[0][1] = this->fMatrix[1][0];
+		OutMat.fMatrix[0][2] = this->fMatrix[2][0];
+		OutMat.fMatrix[0][3] = 0.0f;
+
+		OutMat.fMatrix[1][0] = this->fMatrix[0][1];
+		OutMat.fMatrix[1][1] = this->fMatrix[1][1];
+		OutMat.fMatrix[1][2] = this->fMatrix[2][1];
+		OutMat.fMatrix[1][3] = 0.0f;
+
+		OutMat.fMatrix[2][0] = this->fMatrix[0][2];
+		OutMat.fMatrix[2][1] = this->fMatrix[1][2];
+		OutMat.fMatrix[2][2] = this->fMatrix[2][2];
+		OutMat.fMatrix[2][3] = 0.0f;
+
+		// Calculate the last column of the output matrix manually
+		float t0 = -(this->fMatrix[3][0]);
+		float t1 = -(this->fMatrix[3][1]);
+		float t2 = -(this->fMatrix[3][2]);
+
+		OutMat.fMatrix[3][0] = t0 * OutMat.fMatrix[0][0] + t1 * OutMat.fMatrix[1][0] + t2 * OutMat.fMatrix[2][0];
+		OutMat.fMatrix[3][1] = t0 * OutMat.fMatrix[0][1] + t1 * OutMat.fMatrix[1][1] + t2 * OutMat.fMatrix[2][1];
+		OutMat.fMatrix[3][2] = t0 * OutMat.fMatrix[0][2] + t1 * OutMat.fMatrix[1][2] + t2 * OutMat.fMatrix[2][2];
 		OutMat.fMatrix[3][3] = 1.0f;
 
 		return OutMat;
@@ -392,7 +399,7 @@ public:
 
 	// operators
 
-	Vec3 operator + (const Vec3 b) const
+	Vec3 operator + (const Vec3& b) const
 	{
 		return
 		{
@@ -412,7 +419,7 @@ public:
 		};
 	}
 
-	Vec3 operator - (const Vec3 b) const
+	Vec3 operator - (const Vec3& b) const
 	{
 		return
 		{
@@ -422,7 +429,7 @@ public:
 		};
 	}
 
-	Vec3 operator * (const float b) const
+	Vec3 operator * (const float& b) const
 	{
 		return
 		{
@@ -432,7 +439,7 @@ public:
 		};
 	}
 
-	Vec3 operator * (const Vec3 b) const
+	Vec3 operator * (const Vec3& b) const
 	{
 		return
 		{
@@ -452,7 +459,7 @@ public:
 		};
 	}
 
-	Vec3 operator * (const Matrix b) const
+	Vec3 operator * (const Matrix& b) const
 	{
 		Vec3 Out;
 
@@ -475,7 +482,7 @@ public:
 		return Out;
 	}
 
-	Vec3 operator / (const Vec3 b) const
+	Vec3 operator / (const Vec3& b) const
 	{
 		return
 		{
@@ -494,7 +501,7 @@ public:
 			this->z / b,
 		};
 	}
-	Vec3 operator / (const float b) const
+	Vec3 operator / (const float& b) const
 	{
 		return
 		{
@@ -504,35 +511,35 @@ public:
 		};
 	}
 
-	void operator += (const Vec3 b)
+	void operator += (const Vec3& b)
 	{
 		this->x += b.x;
 		this->y += b.y;
 		this->z += b.z;
 	}
 
-	void operator -= (const Vec3 b)
+	void operator -= (const Vec3& b)
 	{
 		this->x -= b.x;
 		this->y -= b.y;
 		this->z -= b.z;
 	}
 
-	void operator *= (const Vec3 b)
+	void operator *= (const Vec3& b)
 	{
 		this->x *= b.x;
 		this->y *= b.y;
 		this->z *= b.z;
 	}
 
-	void operator *= (const float b)
+	void operator *= (const float& b)
 	{
 		this->x *= b;
 		this->y *= b;
 		this->z *= b;
 	}
 	
-	void operator *= (const Matrix b)
+	void operator *= (const Matrix& b)
 	{
 		float Tmpx = this->x;
 		float Tmpy = this->y;
@@ -549,12 +556,6 @@ public:
 			this->y /= w;
 			this->z /= w;
 		}
-		//else
-		//{
-		//	return Out;
-		//}
-
-		//return Out;
 	}
 
 	Vec3 operator-()
@@ -567,7 +568,7 @@ public:
 		};
 	}
 
-	bool operator != (const Vec3 b)
+	bool operator != (const Vec3& b)
 	{
 		if (this->x != b.x)
 		{
@@ -634,6 +635,47 @@ Matrix Matrix::CreateRotationMatrix(const Vec3& RotationDeg) // pitch yaw roll
 
 	return A;
 }
+
+void Matrix::CalcScalarMatrix(const Vec3& Scalar)
+{
+	this->fMatrix[0][0] = 1.f * Scalar.x;
+	this->fMatrix[1][1] = 1.f * Scalar.y;
+	this->fMatrix[2][2] = 1.f * Scalar.z;
+	this->fMatrix[3][3] = 1.f;
+}
+
+void Matrix::CalcTranslationMatrix(const Vec3& Translation)
+{
+	Matrix Out;
+	this->fMatrix[0][0] = 1.0f;
+	this->fMatrix[1][1] = 1.0f;
+	this->fMatrix[2][2] = 1.0f;
+	this->fMatrix[3][3] = 1.0f;
+	this->fMatrix[3][0] = Translation.x;
+	this->fMatrix[3][1] = Translation.y;
+	this->fMatrix[3][2] = Translation.z;
+}
+
+void Matrix::CalcRotationMatrix(const Vec3& RotationDeg) // pitch yaw roll
+{
+	float RotRadsZ = RotationDeg.z;
+	if (RotRadsZ == 0.0f)
+	{
+		RotRadsZ = 180;
+	}
+
+	Matrix A;
+	Matrix B;
+	Matrix C;
+	Matrix::CreateRotationX(&A, -ToRad(RotationDeg.x));
+	Matrix::CreateRotationY(&B, ToRad(RotationDeg.y));
+	Matrix::CreateRotationZ(&C, ToRad(RotRadsZ));
+
+	A = A * B * C;
+
+	//return A;
+}
+
 
 std::ostream& operator << (std::ostream& os, const Vec3& v)
 {

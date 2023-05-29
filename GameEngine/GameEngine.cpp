@@ -12,13 +12,20 @@ static float RotSpeedY = 30.0f;
 static float RotSpeedZ = 0.0f;
 static bool ShowStrs = false;
 static Mesh TeaPot = Mesh(("TeaPot.obj"));
-static Mesh Pyramid = Mesh("Pyramid.obj");
+static Mesh Mountains = Mesh("Mountains.obj");
 static Mesh Axis = Mesh("Axis.obj");
-static Mesh Wrld = Mesh("World.obj");
-static Material LightMat = Material(Vec3(255, 255, 255), Vec3(255, 255, 255), Vec3(255, 255, 255), Vec3(255, 255, 255), 0.0f);
-static Material CubeMat = Material(Vec3(255, 0, 0), Vec3(255, 0, 0), Vec3(255, 0, 0), Vec3(255, 0, 0), 0.0f);
+static Mesh AK47 = Mesh("AK47.obj");
+static Mesh Spyro = Mesh("Spyro.obj");
+static Mesh DragStat = Mesh("DragonStatue\\DragonStatue.obj");
+static Material LightMat = Material(Vec3(255, 255, 255), Vec3(255, 255, 255), Vec3(255, 255, 255), 64.0f);
 static Mesh LightSrcMesh = Mesh(CubeMesh, LightMat);
-static std::vector<Mesh> Meshes = { CubeMesh, TeaPot, Axis, Wrld};
+static float FTheta = 0;
+static Matrix RotX;
+static Matrix RotZ;
+static Matrix RotY;
+static Vec3 LightSrcPos = {-50, -64, -56 };
+static SimpleLightSrc sl = SimpleLightSrc(LightSrcPos, {0, 0, -1}, Vec3(255, 255, 255), 0.1f, 0.35f, 0.5f, LightSrcMesh);
+static std::vector<Mesh> Meshes = { CubeMesh, TeaPot, Axis, AK47, Spyro, Mountains, DragStat };
 static int CurrMesh = 0;
 static bool IsFullScreen = true;
 static Camera Cam = Camera(Vec3(0, 0, 0), (float)((float)Engine::sy / (float)Engine::sx), FOV_, FNEAR, FFAR);
@@ -103,24 +110,18 @@ void Settings()
 	}
 }
 
-static float FTheta = 0;
-static PenPP WhitePen = PenPP(PS_SOLID, 2, RGB(255, 255, 255));
-static PenPP GreenPen = PenPP(PS_SOLID, 2, RGB(0, 255, 0));
-static BrushPP WhiteBrush = BrushPP(RGB(255, 255, 255));
-static BrushPP RedBrush = BrushPP(RGB(255, 0, 0));
-static PenPP BlackPen = PenPP(PS_SOLID, 2, RGB(1, 1, 1));
-static Matrix RotX;
-static Matrix RotZ;
-static Matrix RotY;
-static Vec3 LightSrc = { 0, 0, -1 };
-
-DoTick_T Draw(GdiPP& Gdi, WndCreatorW& Wnd, const float ElapsedTime)
+void WndCtrlEvent(HMENU CtrlID, ULONG Msg)
 {
-	Cam.ViewAngles += Vec3(Engine::DeltaMouse.y, 0, 0);
-	
-	Cam.ViewAngles += Vec3(0, Engine::DeltaMouse.x, 0);
 
-	if (GetAsyncKeyState(VK_INSERT))
+}
+
+DoTick_T Draw(GdiPP& Gdi, WndCreatorW& Wnd, const float& ElapsedTime)
+{
+	Cam.ViewAngles += Vec3((float)Engine::DeltaMouse.y, 0, 0);
+	
+	Cam.ViewAngles += Vec3(0, (float)Engine::DeltaMouse.x, 0);
+
+	if (GetAsyncKeyState(VK_INSERT) & 0x8000)
 	{
 		if (IsFullScreen)
 		{
@@ -138,39 +139,39 @@ DoTick_T Draw(GdiPP& Gdi, WndCreatorW& Wnd, const float ElapsedTime)
 		Cam.AspectRatio = (float)((float)Engine::sy / (float)Engine::sx);
 	}
 
-	if (GetAsyncKeyState(VK_DELETE))
+	if (GetAsyncKeyState(VK_DELETE) & 0x8000)
 	{
 		Engine::LockCursor = !Engine::LockCursor;
 		Engine::CursorShow = !Engine::CursorShow;
 		Engine::UpdateMouseIn = !Engine::UpdateMouseIn;
 	}
 
-	if (GetAsyncKeyState(VK_SPACE))
+	if (GetAsyncKeyState(VK_SPACE) & 0x8000)
 	{
 		Cam.Pos += (Cam.GetNewVelocity(Vec3(0, 1, 0) * Cam.CamRotation)) * ElapsedTime;
 	}
 
-	if (GetAsyncKeyState(VK_LSHIFT))
+	if (GetAsyncKeyState(VK_LSHIFT) & 0x8000)
 	{
 		Cam.Pos += (Cam.GetNewVelocity(Vec3(0, -1, 0) * Cam.CamRotation)) * ElapsedTime;
 	}
 
-	if (GetAsyncKeyState(VK_A))
+	if (GetAsyncKeyState(VK_A) & 0x8000)
 	{
 		Cam.Pos += (Cam.GetNewVelocity(Vec3(1, 0, 0) * Cam.CamRotation)) * ElapsedTime;
 	}
 
-	if (GetAsyncKeyState(VK_D))
+	if (GetAsyncKeyState(VK_D) & 0x8000)
 	{
 		Cam.Pos += (Cam.GetNewVelocity(Vec3(-1, 0, 0) * Cam.CamRotation)) * ElapsedTime;
 	}
 
-	if (GetAsyncKeyState(VK_W))
+	if (GetAsyncKeyState(VK_W) & 0x8000)
 	{
 		Cam.Pos += (Cam.GetNewVelocity(Vec3(0, 0, 1) * Cam.CamRotation)) * ElapsedTime;
 	}
 
-	if (GetAsyncKeyState(VK_S))
+	if (GetAsyncKeyState(VK_S) & 0x8000)
 	{
 		Cam.Pos += (Cam.GetNewVelocity(Vec3(0, 0, -1) * Cam.CamRotation)) * ElapsedTime;
 	}
@@ -184,11 +185,9 @@ DoTick_T Draw(GdiPP& Gdi, WndCreatorW& Wnd, const float ElapsedTime)
 
 	FTheta += 1.0f * ElapsedTime;
 
-	SimpleLightSrc sl = SimpleLightSrc(LightSrc, LightSrc, Vec3(255, 255, 255), 0.35f, 0.5f, 0.5f, LightSrcMesh);
+	Engine::RenderMesh(Gdi, Cam, Meshes.at(CurrMesh), Vec3(1.0f, 1.0f, 1.0f), Vec3(FTheta * RotSpeedX, FTheta * RotSpeedY, FTheta * RotSpeedZ), Vec3(1, 1, 10), sl.LightPos, sl.Color, sl.AmbientCoeff, sl.DiffuseCoeff, sl.SpecularCoeff);	//Engine::RenderRenderable(Gdi, Cam, lightsrcrend, LightSrc, DoCull, DoLighting, ShowTriLines, WireFrame);
 
-	Engine::RenderMesh(Gdi, Cam, Meshes.at(CurrMesh), Vec3(1.0f, 1.0f, 1.0f), Vec3(FTheta * RotSpeedX, FTheta * RotSpeedY, FTheta * RotSpeedZ), Vec3(1, 1, 10), sl.LightPos, sl.LightDir, sl.Color, sl.AmbientCoeff, sl.DiffuseCoeff, sl.SpecularCoeff);	//Engine::RenderRenderable(Gdi, Cam, lightsrcrend, LightSrc, DoCull, DoLighting, ShowTriLines, WireFrame);
-
-	//Engine::RenderMesh(Gdi, Cam, sl.LightMesh, Vec3(1.0f, 1.0f, 1.0f), Vec3(0, 0, 0), sl.LightPos, sl.LightPos, sl.LightDir, sl.Color, 1.0f, 0.f, 0.f);	//Engine::RenderRenderable(Gdi, Cam, lightsrcrend, LightSrc, DoCull, DoLighting, ShowTriLines, WireFrame);
+	Engine::RenderMesh(Gdi, Cam, sl.LightMesh, Vec3(1.0f, 1.0f, 1.0f), Vec3(0, 0, 0), sl.LightPos, sl.LightPos, sl.Color, 1.0f, 0.f, 0.f);
 
 	if (Engine::FpsEngineCounter && ShowStrs)
 	{
@@ -237,11 +236,13 @@ int main()
 
 	BrushPP ClearBrush = (HBRUSH)GetStockObject(BLACK_BRUSH);
 
-	WndCreator Wnd = WndCreator(CS_CLASSDC, L"GameEngine", LoadCursorW(NULL, IDC_ARROW), NULL, ClearBrush, WndExModes::BorderLessEx, WndModes::BorderLess, 0, 0, Engine::sx, Engine::sy);
+	WndCreator Wnd = WndCreator(CS_OWNDC, "GameEngine", "Game Engine", LoadCursorA(NULL, IDC_ARROW), NULL, ClearBrush, WndExModes::BorderLessEx, WndModes::BorderLess | WndModes::ClipChildren, 0, 0, Engine::sx, Engine::sy);
 
 	GdiPP Gdi = GdiPP(Wnd.Wnd, true);
 
 	std::thread Sett(Settings);
+
+	WndCtrlEventProcessor = WndCtrlEvent;
 
 	Engine::Run(Wnd, Gdi, ClearBrush, (DoTick_T)Draw);
 

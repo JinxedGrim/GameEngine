@@ -3,6 +3,7 @@
 #include <string>
 #include <sstream>
 #include <chrono>
+#include <functional>
 #include "Math.h"
 #include "Graphics/GdiPP.hpp"
 #include "Graphics/WndCreator.hpp"
@@ -24,15 +25,13 @@ class Material
 	public:
 	Material()
 	{
-		this->Color = Vec3(255, 0, 0);
-		this->AmbientColor = Vec3(255, 0, 0);
-		this->DiffuseColor = Vec3(255, 0, 0);
-		this->SpecularColor = Vec3(255, 0, 0);
-		this->Shininess = 32.0f;
+		this->AmbientColor = Vec3(255.0f, 0, 0);
+		this->DiffuseColor = Vec3(255.0f * 0.75f, 0.0f, 0.0f);
+		this->SpecularColor = Vec3(255.0f * 0.25f, 0.0f, 0.0f);
+		this->Shininess = 96.0f;
 	}
-	Material(Vec3 Color, Vec3 AmbientColor, Vec3 DiffuseColor, Vec3 SpecularColor, float Shininess)
+	Material(Vec3 AmbientColor, Vec3 DiffuseColor, Vec3 SpecularColor, float Shininess)
 	{
-		this->Color = Color;
 		this->AmbientColor = AmbientColor;
 		this->DiffuseColor = DiffuseColor;
 		this->SpecularColor = SpecularColor;
@@ -95,8 +94,10 @@ class Material
 						{
 							std::string textureFilePath;
 							ssProp >> textureFilePath;
-							// Load the texture if needed
-							// mat.texture = LoadTexture(textureFilePath);
+							if (textureFilePath != "")
+							{
+
+							}
 						}
 						// Add more properties as needed
 
@@ -111,14 +112,19 @@ class Material
 		}
 
 		mtlFile.close();
+
+#ifdef _DEBUG
+		std::cout << "Material Loaded: " << this->MaterialName << "\nAmbientColor: " << this->AmbientColor << "\nDiffuseColor: " << this->DiffuseColor << "\nSpecularColor: " << this->SpecularColor << "\nShininess: " << this->Shininess << std::endl << std::endl;;
+#endif
+
 		return true;
 	}
 
-	Vec3 Color = Vec3(255, 0, 0);
-	Vec3 AmbientColor = Vec3(255.0f, 0, 0);
-	Vec3 DiffuseColor = Vec3(255.0f * 0.5f, 255.0f * 0.5f, 255.0f * 0.5f);
-	Vec3 SpecularColor = Vec3(255.0f * 0.5f, 255.0f * 0.5f, 255.0f * 0.5f);
+	Vec3 AmbientColor = Vec3(255.0f * 0.15f, 0, 0);
+	Vec3 DiffuseColor = Vec3(255.0f * 0.25f, 255.0f * 0.25f, 255.0f * 0.25f);
+	Vec3 SpecularColor = Vec3(255.0f * 0.25f, 255.0f * 0.25f, 255.0f * 0.25f);
 	float Shininess = 32.0f;
+
 	std::string MaterialName = "Default";
 };
 
@@ -128,26 +134,24 @@ public:
 
 	Triangle()
 	{
-		this->Points[0] = Vec3();
-		this->Points[1] = Vec3();
-		this->Points[2] = Vec3();
+		memset(Points, 0, sizeof(Points));
 	}
 
-	Triangle(const Vec3 P1, const Vec3 P2, const Vec3 P3)
+	Triangle(const Vec3& P1, const Vec3& P2, const Vec3& P3)
 	{
 		this->Points[0] = P1;
 		this->Points[1] = P2;
 		this->Points[2] = P3;
 	}
 
-	void Translate(Vec3 Value)
+	void Translate(const Vec3& Value)
 	{
 		this->Points[0] += Value;
 		this->Points[1] += Value;
 		this->Points[2] += Value;
 	}
 
-	const void Translated(Triangle* Out, const Vec3 Value)
+	const void Translated(Triangle* Out, const Vec3& Value)
 	{
 		Out->Points[0] = this->Points[0] + Value;
 		Out->Points[1] = this->Points[1] + Value;
@@ -161,7 +165,7 @@ public:
 		this->Points[2] *= Value;
 	}
 
-	const void Scaled(Triangle* Out, const Vec3 Value)
+	const void Scaled(Triangle* Out, const Vec3& Value)
 	{
 		Out->Points[0] = this->Points[0] * Value;
 		Out->Points[1] = this->Points[1] * Value;
@@ -191,102 +195,78 @@ public:
 
 	int ClipAgainstPlane(const Vec3& PointOnPlane, const Vec3& PlaneNormalized, Triangle& Out1, Triangle& Out2, bool DebugClip = false)
 	{
-		Vec3* InsidePoints[3];
-		Vec3* OutsidePoints[3];
+		Vec3& p0 = this->Points[0];
+		Vec3& p1 = this->Points[1];
+		Vec3& p2 = this->Points[2];
+
+		float PlanePointDot = PlaneNormalized.Dot(PointOnPlane);
+		float dist0 = PlaneNormalized.Dot(p0) - PlanePointDot;
+		float dist1 = PlaneNormalized.Dot(p1) - PlanePointDot;
+		float dist2 = PlaneNormalized.Dot(p2) - PlanePointDot;
+
+		Vec3* InsidePoints[3] = {};
+		Vec3* OutsidePoints[3] = {};
 		int InsideCount = 0;
 		int OutsideCount = 0;
 
-		auto Dist = [&](const Vec3& Point)
-		{
-			return(PlaneNormalized.Dot(Point) - PlaneNormalized.Dot(PointOnPlane));
-		};
-
-		if (Dist(this->Points[0]) >= 0)
-		{
-			InsidePoints[InsideCount++] = &this->Points[0];
-		}
+		if (dist0 >= 0)
+			InsidePoints[InsideCount++] = &p0;
 		else
-		{
-			OutsidePoints[OutsideCount++] = &this->Points[0];
-		}
+			OutsidePoints[OutsideCount++] = &p0;
 
-		if (Dist(this->Points[1]) >= 0)
-		{
-			InsidePoints[InsideCount++] = &this->Points[1];
-		}
+		if (dist1 >= 0)
+			InsidePoints[InsideCount++] = &p1;
 		else
-		{
-			OutsidePoints[OutsideCount++] = &this->Points[1];
-		}
+			OutsidePoints[OutsideCount++] = &p1;
 
-		if (Dist(this->Points[2]) >= 0)
-		{
-			InsidePoints[InsideCount++] = &this->Points[2];
-		}
+		if (dist2 >= 0)
+			InsidePoints[InsideCount++] = &p2;
 		else
-		{
-			OutsidePoints[OutsideCount++] = &this->Points[2];
-		}
+			OutsidePoints[OutsideCount++] = &p2;
 
 		int Count = 0;
 
-		switch (InsideCount)
+		if (InsideCount == 3)
 		{
-			case 3:
+			Out1 = *this;
+			Count = 1;
+		}
+		else if (InsideCount == 1)
+		{
+			Out1 = *this;
+
+			if (DebugClip)
 			{
-				Out1 = *this;
-				Count = 1;
-				break;
+				Out1.Col = Vec3(0, 0, 255);
+				Out1.OverRideMaterialColor = true;
 			}
-			case 0:
+
+			Out1.Points[0] = *InsidePoints[0];
+			Out1.Points[1] = InsidePoints[0]->CalculateIntersectionPoint(*OutsidePoints[0], PointOnPlane, PlaneNormalized);
+			Out1.Points[2] = InsidePoints[0]->CalculateIntersectionPoint(*OutsidePoints[1], PointOnPlane, PlaneNormalized);
+			Count = 1;
+		}
+		else if (InsideCount == 2)
+		{
+			Out1 = *this;
+			Out2 = *this;
+			if (DebugClip)
 			{
-				Count = 0;
-				break;
+				Out1.Col = Vec3(0, 255, 0);
+				Out1.OverRideMaterialColor = true;
+				Out2.Col = Vec3(255, 0, 0);
+				Out2.OverRideMaterialColor = true;
 			}
-			case 1:
-			{
-				if (OutsideCount != 2)
-					break;
 
-				Out1 = *this;
+			Out1.Points[0] = *InsidePoints[0];
+			Out1.Points[1] = *InsidePoints[1];
+			Out1.Points[2] = InsidePoints[0]->CalculateIntersectionPoint(*OutsidePoints[0], PointOnPlane, PlaneNormalized);
 
-				if (DebugClip)
-				{
-					Out1.Col = Vec3(0, 0, 255);
-					Out1.OverRideMaterialColor = true;
-				}
+			Out2.Points[0] = *InsidePoints[1];
+			Out2.Points[1] = Out1.Points[2];
+			Out2.Points[2] = InsidePoints[1]->CalculateIntersectionPoint(*OutsidePoints[0], PointOnPlane, PlaneNormalized);
 
-				Out1.Points[0] = *InsidePoints[0];
-				Out1.Points[1] = InsidePoints[0]->CalculateIntersectionPoint(*OutsidePoints[0], PointOnPlane, PlaneNormalized);
-				Out1.Points[2] = InsidePoints[0]->CalculateIntersectionPoint(*OutsidePoints[1], PointOnPlane, PlaneNormalized);
-				Count = 1;
-				break;
-			}
-			case 2:
-			{
-				if (OutsideCount != 1)
-					break;
-
-				Out1 = *this;
-				Out2 = *this;
-				if (DebugClip)
-				{
-					Out1.Col = Vec3(0, 255, 0);
-					Out1.OverRideMaterialColor = true;
-					Out2.Col = Vec3(255, 0, 0);
-					Out2.OverRideMaterialColor = true;
-				}
-
-				Out1.Points[0] = *InsidePoints[0];
-				Out1.Points[1] = *InsidePoints[1];
-				Out1.Points[2] = InsidePoints[0]->CalculateIntersectionPoint(*OutsidePoints[0], PointOnPlane, PlaneNormalized);
-
-				Out2.Points[0] = *InsidePoints[1];
-				Out2.Points[1] = Out1.Points[2];
-				Out2.Points[2] = InsidePoints[1]->CalculateIntersectionPoint(*OutsidePoints[0], PointOnPlane, PlaneNormalized);
-
-				Count = 2;
-			}
+			Count = 2;
 		}
 
 		return Count;
@@ -298,6 +278,7 @@ public:
 	Vec3 Normal = Vec3();
 	Material Mat = Material();
 	bool OverRideMaterialColor = false;
+	bool UseMeshMat = false;
 };
 
 class Mesh
@@ -326,8 +307,7 @@ class Mesh
 	Mesh(Mesh m, Material Mat)
 	{
 		*this = m;
-		this->Mat = Mat;
-		this->UseSingleMat = true;
+		this->ChangeMatInfo(Mat);
 	}
 
 	void TranslateTriangles(Vec3 Value)
@@ -359,10 +339,13 @@ class Mesh
 		}
 	}
 
-	void ChangeMatInfo(Vec3 Color, Material Mat)
+	void ChangeMatInfo(Material Mat)
 	{
 		this->Mat = Mat;
-		this->UseSingleMat = true;
+		for (auto & Tri : this->Triangles)
+		{
+			Tri.Mat = this->Mat;
+		}
 	}
 
 	bool LoadMesh(std::string FnPath)
@@ -469,7 +452,6 @@ class Mesh
 
 					Tmp.Mat = CurrMat; // Assign the current material to the triangle
 
-
 					this->Triangles.push_back(Tmp);
 				}
 			}
@@ -496,21 +478,27 @@ class Mesh
 				SS >> Unused >> Unused >> Unused >> Unused >> Unused >> Unused >> MtlLibFn;
 			}
 		}
+
 		FnPath = FnPath.substr(FnPath.find_last_of("/\\") + 1);
 		FnPath = FnPath.substr(0, FnPath.find_last_of(".obj") - 3);
 
 		this->MeshName = FnPath;
+		this->Vertices = VertCache;
+		this->Normals = NormalCache;
+		this->NormalCount = (int)NormalCache.size();
+		this->TexCoords = TexCache;
 		this->VertexCount = (int)VertCache.size();
 		this->TriangleCount = (int)Triangles.size();
 
 #ifdef _DEBUG
-		std::cout << "MeshLoaded: " << MeshName << " Verts: " << this->VertexCount << " Tris: " << this->TriangleCount << std::endl;
+		std::cout << "MeshLoaded: " << MeshName << "\nVerts: " << this->VertexCount << "\nFaces: " << this->TriangleCount << "\nNormals: " << this->NormalCount << "\nMatName: " << this->Mat.MaterialName << "\nMatCount: " << this->MatCount << std::endl << std::endl;
 #endif
 
 		return true;
 	}
 
 	std::string MeshName = "";
+	std::vector<Vec3> Vertices = {};
 	std::vector<Triangle> Triangles = {};
 	std::vector<Vec2> TexCoords = {};
 	std::vector<Vec3> Normals = {};
@@ -520,55 +508,6 @@ class Mesh
 	int NormalCount = 0;
 	int MatCount = 0;
 	bool UseSingleMat = true;
-};
-
-class SimpleLightSrc
-{
-	public:
-	SimpleLightSrc(Vec3 Pos, Vec3 LightDir, Vec3 LightColor, float AmbientCoeff, float DiffuseCoeff, float SpecularCoeff)
-	{
-		this->LightPos = Pos;
-		this->LightDir = LightDir;
-		this->Color = LightColor;
-		this->AmbientCoeff = AmbientCoeff;
-		this->DiffuseCoeff = DiffuseCoeff;
-		this->SpecularCoeff = SpecularCoeff;
-
-		this->LightMesh = Mesh();
-		this->Render = false;
-	}
-	SimpleLightSrc(Vec3 Pos, Vec3 LightDir, Vec3 LightColor, float AmbientCoeff, float DiffuseCoeff, float SpecularCoeff, Mesh LightMesh)
-	{
-		this->LightPos = Pos;
-		this->LightDir = LightDir;
-		this->Color = LightColor;
-		this->AmbientCoeff = AmbientCoeff;
-		this->DiffuseCoeff = DiffuseCoeff;
-		this->SpecularCoeff = SpecularCoeff;
-		this->LightMesh = LightMesh;
-		this->Render = false;
-	}
-
-	static float CalcDiffuse(Vec3 ObjNormal, Vec3 Dir)
-	{
-		return ObjNormal.Dot(Dir.Normalized());
-	}
-
-	float CalcDiffuse(Vec3 ObjNormal)
-	{
-		return ObjNormal.Dot(this->LightDir.Normalized());
-	}
-
-	Vec3 LightDir = Vec3(0, 0, -1);
-	Vec3 LightPos = Vec3(0, 0, 0);
-	Vec3 Color = Vec3(253, 251, 211);
-	//Vec3 Color = Vec3(255, 255, 255);
-	Mesh LightMesh = Mesh();
-	bool Render = false;
-
-	float AmbientCoeff = 0.1f;
-	float SpecularCoeff = 0.5f;
-	float DiffuseCoeff = 0.25f;
 };
 
 class Renderable
@@ -633,6 +572,45 @@ public:
 	{
 
 	}
+};
+
+class SimpleLightSrc
+{
+	public:
+	SimpleLightSrc(Vec3 Pos, Vec3 LightDir, Vec3 LightColor, float AmbientCoeff, float DiffuseCoeff, float SpecularCoeff)
+	{
+		this->LightPos = Pos;
+		this->LightDir = LightDir;
+		this->Color = LightColor;
+		this->AmbientCoeff = AmbientCoeff;
+		this->DiffuseCoeff = DiffuseCoeff;
+		this->SpecularCoeff = SpecularCoeff;
+
+		this->LightMesh = Mesh();
+		this->Render = false;
+	}
+	SimpleLightSrc(Vec3 Pos, Vec3 LightDir, Vec3 LightColor, float AmbientCoeff, float DiffuseCoeff, float SpecularCoeff, Mesh LightMesh)
+	{
+		this->LightPos = Pos;
+		this->LightDir = LightDir;
+		this->Color = LightColor;
+		this->AmbientCoeff = AmbientCoeff;
+		this->DiffuseCoeff = DiffuseCoeff;
+		this->SpecularCoeff = SpecularCoeff;
+		this->LightMesh = LightMesh;
+		this->Render = false;
+	}
+
+	Vec3 LightDir = Vec3(0, 0, -1);
+	Vec3 LightPos = Vec3(0, 0, 0);
+	Vec3 Color = Vec3(253, 251, 211);
+	//Vec3 Color = Vec3(255, 255, 255);
+	Mesh LightMesh = Mesh();
+	bool Render = false;
+
+	float AmbientCoeff = 0.1f;  // Lowest level of light possible (only the objects mat ambient color)
+	float SpecularCoeff = 0.5f; // How much the lights color will combine with the objects specular color
+	float DiffuseCoeff = 0.25f; // How much the light will combine with the objects diffuse mat color
 };
 
 class Camera
@@ -768,7 +746,7 @@ public:
 		};
 	}
 
-	Matrix PointAt(Vec3 &Pos, Vec3 &Target, Vec3 &Up)
+	Matrix PointAt(const Vec3 &Pos, const Vec3 &Target, const Vec3 &Up)
 	{
 		Vec3 NewForward = (Target - Pos).Normalized();
 
@@ -785,7 +763,7 @@ public:
 		return DimensioningAndTrans;
 	}
 
-	void CalcCamViewMatrix(Vec3 &Target)
+	void CalcCamViewMatrix(const Vec3 &Target)
 	{
 		this->ViewMatrix = this->PointAt(this->Pos, Target, this->CamUp).QuickInversed();
 	}
@@ -817,11 +795,22 @@ public:
 	float Far = 0.f;
 };
 
-typedef void(__fastcall* DoTick_T)(const GdiPP&, const WndCreatorW&, const float);
+typedef void(__fastcall* DoTick_T)(const GdiPP&, const WndCreator&, const float&);
+
+auto Shader_Phong_LOW_LOD = [&](const Vec3& FragPos, const Vec3& FragNormal, const Material& Mat, const Vec3& LightColor, const float& LightAmbient, const float& LightDiffuse, const float& LightSpecular)
+{
+
+};
+
+auto Shader_Phong = [&](const Vec3& FragPos, const Vec3& FragNormal, const Material& Mat, const Vec3& LightColor, const float& LightAmbient, const float& LightDiffuse, const float& LightSpecular)
+{
+
+};
 
 namespace Engine
 {
 	std::string FpsStr = "Fps: ";
+	std::wstring FpsWStr = L"Fps: ";
 
 	int sx = GetSystemMetrics(SM_CXSCREEN);
 	int sy = GetSystemMetrics(SM_CYSCREEN);
@@ -849,7 +838,7 @@ namespace Engine
 		sy = Gdi.ClientRect.bottom - Gdi.ClientRect.top;
 	}
 
-	void Run(WndCreatorW& Wnd, GdiPP& Gdi, BrushPP& ClearBrush, DoTick_T DrawCallBack)
+	void Run(WndCreator& Wnd, GdiPP& Gdi, BrushPP& ClearBrush, DoTick_T DrawCallBack)
 	{
 		// Init Variables
 		sx = Wnd.GetClientArea().Width;
@@ -861,7 +850,6 @@ namespace Engine
 		double FpsCounter = 0.0f;
 		int FrameCounter = 0;
 		auto Start = std::chrono::system_clock::now();
-		auto End = std::chrono::system_clock::now();
 		SetCursorPos(sx / 2, sy / 2);
 		GetCursorPos(&PrevMousePos);
 
@@ -869,11 +857,18 @@ namespace Engine
 		{
 			Start = std::chrono::system_clock::now();
 
-			PeekMessageW(&msg, Wnd.Wnd, 0, 0, PM_REMOVE);
+			PeekMessageW(&msg, NULL, 0, 0, PM_REMOVE);
 
 			// Translate and Dispatch message to WindowProc
 			TranslateMessage(&msg);
 			DispatchMessageW(&msg);
+
+			// Check Msg
+			if (msg.message == WM_QUIT || msg.message == WM_CLOSE || msg.message == WM_DESTROY)
+			{
+				break;
+			}
+
 
 			// Check window focus and calc mouse deltas
 			if (Wnd.HasFocus())
@@ -888,14 +883,14 @@ namespace Engine
 					DeltaMouse.y *= Sensitivity;
 				}
 
-				if(LockCursor)
+				if (LockCursor)
 					SetCursorPos(sx / 2, sy / 2);
 
 				GetCursorPos(&PrevMousePos);
 
 				if (CursorShow == false)
 				{
-					while (ShowCursor(FALSE) >= 0){}
+					while (ShowCursor(FALSE) >= 0) {}
 				}
 				else
 				{
@@ -903,31 +898,30 @@ namespace Engine
 				}
 			}
 
-			// Check Msg
-			if (msg.message == WM_QUIT || msg.message == WM_CLOSE || msg.message == WM_DESTROY)
-			{
-				break;
-			}
-
 			// clear the screen
-			Gdi.Clear(GDIPP_FILLRECT, ClearBrush);
+			Gdi.Clear();
 
 			// call draw code
 			DrawCallBack(Gdi, Wnd, (float)ElapsedTime);
 
 			if (FpsEngineCounter)
 			{
-				Gdi.DrawStringA(20, 20, FpsStr + std::to_string(Fps), RGB(255, 0, 0), TRANSPARENT);
+#ifdef UNICODE
+				std::wstring Str = FpsWStr + std::to_wstring(Fps);
+				Wnd.SetWndTitle(Str);
+				Gdi.DrawStringW(20, 20, Str, RGB(255, 0, 0), TRANSPARENT);
+#endif
+#ifndef UNICODE
+				std::string Str = FpsStr + std::to_string(Fps);
+				Wnd.SetWndTitle(Str);
+				Gdi.DrawStringA(20, 20, Str, RGB(255, 0, 0), TRANSPARENT);
+#endif
 			}
 
 			// Draw to screen
 			Gdi.DrawDoubleBuffer();
 
-			End = std::chrono::system_clock::now();
-
-			std::chrono::duration<double> Time = End - Start;
-
-			ElapsedTime = Time.count();
+			ElapsedTime = std::chrono::duration<double>(std::chrono::system_clock::now() - Start).count();
 
 			if (FpsEngineCounter)
 			{
@@ -948,14 +942,15 @@ namespace Engine
 		Wnd.Destroy();
 	}
 
-	void RenderMesh(GdiPP& Gdi, Camera& Cam, const Mesh& MeshToRender, const Vec3& Scalar, const Vec3& RotationRads, const Vec3& Pos, Vec3 LightPos, const Vec3& LightDir, const Vec3& LightColor, const float LightAmbient, const float LightDiffuse, const float LightSpecular)
+	void RenderMesh(GdiPP& Gdi, Camera& Cam, const Mesh& MeshToRender, const Vec3& Scalar, const Vec3& RotationRads, const Vec3& Pos, Vec3 LightPos, const Vec3& LightColor, const float& LightAmbient, const float& LightDiffuse, const float& LightSpecular)
 	{
 		Matrix ObjectMatrix = Matrix::CreateScalarMatrix(Scalar); // Scalar Matrix
-		Matrix RotM = Matrix::CreateRotationMatrix(RotationRads); // Rotation Matrix
-		Matrix TransMat = Matrix::CreateTranslationMatrix(Pos); // Translation Matrix
+		const Matrix RotM = Matrix::CreateRotationMatrix(RotationRads); // Rotation Matrix
+		const Matrix TransMat = Matrix::CreateTranslationMatrix(Pos); // Translation Matrix
 		ObjectMatrix = ((ObjectMatrix * RotM) * TransMat); // Matrices are applied in SRT order 
 
 		std::vector<Triangle> TrisToRender = {};
+		TrisToRender.reserve(MeshToRender.Triangles.size());
 
 		// Project and translate object 
 		for (const auto& Tri : MeshToRender.Triangles)
@@ -970,7 +965,7 @@ namespace Engine
 			// calc surface normal
 			Vec3 TriNormal = (Proj.Points[1] - Proj.Points[0]).CrossNormalized((Proj.Points[2] - Proj.Points[0])); // this line and the if statement is used for culling
 
-			if ((TriNormal.Dot(Proj.Points[0] - Cam.Pos) < 0.0f) || !DoCull) // culling
+			if ((TriNormal.Dot(Proj.Points[0] - Cam.Pos) <= 0.0f) || !DoCull) // backface culling
 			{
 				float Intensity = 1.0f;
 
@@ -979,7 +974,7 @@ namespace Engine
 
 				Triangle Clipped[2];
 				Vec3 PlaneNormal = { 0.0f, 0.0f, 1.0f };
-				int Count = Proj.ClipAgainstPlane(Cam.NearPlane, PlaneNormal.Normalized(), Clipped[0], Clipped[1], DebugClip);
+				int Count = Proj.ClipAgainstPlane(Cam.NearPlane, PlaneNormal, Clipped[0], Clipped[1], DebugClip);
 
 				if (Count == 0)
 					continue;
@@ -999,15 +994,24 @@ namespace Engine
 					// Calc lighting
 					if (DoLighting && !ToProj.OverRideMaterialColor)
 					{
-						Intensity = std::max<float>(0.0f, TriNormal.Dot((Pos - LightPos).Normalized()));
-						Vec3 RDir = (Pos - LightPos).Normalized().Normalized() - TriNormal * 2.0f * TriNormal.Dot((Pos - LightPos).Normalized());
+						const Material* MatToUse;
+						if (!MeshToRender.UseSingleMat)
+							MatToUse = &ToProj.Mat;
+						else
+							MatToUse = &MeshToRender.Mat;
+
+						Vec3 LDir = (LightPos - ((ToProj.Points[0] + ToProj.Points[1] + ToProj.Points[2]) / 3.0f)).Normalized();
+						float Li = TriNormal.Dot(LDir);
+
+						Intensity = std::max<float>(0.0f, Li);
+						Vec3 RDir = LDir - TriNormal * 2.0f * Li;
 
 						// Calculate the specular intensity
-						float SpecularIntensity = pow(std::max<float>(0.0f, RDir.Dot(Cam.LookDir)), ToProj.Mat.Shininess);
+						float SpecularIntensity = pow(std::max<float>(0.0f, RDir.Dot(Cam.LookDir)), MatToUse->Shininess);
 
-						Vec3 AmbientCol = (ToProj.Mat.AmbientColor) * LightAmbient;
-						Vec3 DiffuseCol = ((LightColor * Intensity) + ToProj.Mat.DiffuseColor) * LightDiffuse;
-						Vec3 SpecularClr = ((LightColor * SpecularIntensity) + ToProj.Mat.SpecularColor) * LightSpecular;
+						Vec3 AmbientCol = (MatToUse->AmbientColor) * LightAmbient;
+						Vec3 DiffuseCol = ((LightColor * Intensity) + (MatToUse->DiffuseColor * Intensity)) * LightDiffuse;
+						Vec3 SpecularClr = ((LightColor * LightSpecular) + (MatToUse->SpecularColor * LightSpecular)) * SpecularIntensity;
 
 						ToProj.Col.x = std::clamp<float>((AmbientCol.x + DiffuseCol.x + SpecularClr.x), 0.0f, 255.0f);
 						ToProj.Col.y = std::clamp<float>((AmbientCol.y + DiffuseCol.y + SpecularClr.y), 0.0f, 255.0f);
@@ -1020,7 +1024,7 @@ namespace Engine
 		}
 
 		// sort faces 
-		std::sort(TrisToRender.begin(), TrisToRender.end(), [](Triangle& t1, Triangle& t2)
+		std::sort(TrisToRender.begin(), TrisToRender.end(), [](const Triangle& t1, const Triangle& t2)
 		{
 			float z1 = (t1.Points[0].z + t1.Points[1].z + t1.Points[2].z) / 3.0f;
 			float z2 = (t2.Points[0].z + t2.Points[1].z + t2.Points[2].z) / 3.0f;
@@ -1073,7 +1077,7 @@ namespace Engine
 						ListTris.push_back(Clipped[w]);
 					}
 				}
-				NewTris = ListTris.size();
+				NewTris = (int)ListTris.size();
 			}
 
 			// draw
@@ -1096,78 +1100,6 @@ namespace Engine
 
 	void RenderRenderable(GdiPP &Gdi, Camera &Cam, Renderable &R, SimpleLightSrc LightSrc)
 	{
-		//v	Matrix RotM = Matrix::CreateRotationMatrix(FTheta * RotSpeedX, FTheta * RotSpeedY, FTheta * RotSpeedZ);
-		//Matrix TransMat = Matrix::CreateTranslationMatrix(Vec3(1, 1, 10.0f));
-		//Matrix WorldMatrix = Matrix::CreateIdentity();
-		//WorldMatrix = (WorldMatrix * RotM) * TransMat;
-
-		//std::vector<Triangle> TrisToRender = {};
-
-		//// Project and translate object 
-		//for (const auto& Tri : Meshes.at(CurrMesh).Triangles)
-		//{
-		//	// 3D Space
-		//	Triangle Proj;
-
-		//	Proj = Tri;
-
-		//	Proj.ApplyMatrix(WorldMatrix);
-
-		//	// calc surface normal
-		//	Vec3 TriNormal = (Proj.Points[1] - Proj.Points[0]).CrossNormalized((Proj.Points[2] - Proj.Points[0])); // this line and the if statement is used for culling
-
-		//	if ((TriNormal.Dot(Proj.Points[0] - Cam.Pos) < 0.0f) || !DoCull) // culling
-		//	{
-		//		Intensity = 1.0f;
-
-		//		// Calc lighting intensity
-		//		if (DoLighting)
-		//			Intensity = TriNormal.Dot(LightSrc.Normalized());
-
-		//		// 3d Space -> Viewed Space
-		//		Proj.ApplyMatrix(Cam.ViewMatrix);
-
-		//		// 3d Space -> Screen Space
-		//		Proj = Cam.ProjectTriangle(&Proj); // Project from 3D Space To Screen Space
-
-		//		// Offset to normalized space
-		//		Proj.Translate(Vec3(1.0f, 1.0f, 0.0f));
-		//		Proj.Scale(Vec3((float)(Engine::sx * 0.5f), (float)(Engine::sy * 0.5f), 1));
-		//		Proj.Translate(Vec3(-1, -1, 0));
-
-		//		Proj.r *= Intensity;
-		//		Proj.g *= Intensity;
-		//		Proj.b *= Intensity;
-
-		//		TrisToRender.push_back(Proj);
-		//	}
-		//}
-
-		//// sort faces 
-		//std::sort(TrisToRender.begin(), TrisToRender.end(), [](Triangle& t1, Triangle& t2)
-		//	{
-		//		float z1 = (t1.Points[0].z + t1.Points[1].z + t1.Points[2].z) / 3.0f;
-		//		float z2 = (t2.Points[0].z + t2.Points[1].z + t2.Points[2].z) / 3.0f;
-
-		//		return z1 > z2;
-		//	});
-
-		//// draw
-		//for (const auto& Proj : TrisToRender)
-		//{
-		//	if (!WireFrame)
-		//	{
-		//		if (!ShowTriLines)
-		//			Gdi.DrawFilledTriangle((Proj.Points[0].x), (Proj.Points[0].y), (Proj.Points[1].x), (Proj.Points[1].y), (Proj.Points[2].x), (Proj.Points[2].y), BrushPP(RGB(Proj.r, Proj.g, Proj.b)), PenPP(PS_SOLID, 1, RGB(Proj.r, Proj.g, Proj.b)));
-		//		else
-		//			Gdi.DrawFilledTriangle(Proj.Points[0].x, Proj.Points[0].y, Proj.Points[1].x, Proj.Points[1].y, Proj.Points[2].x, Proj.Points[2].y, BrushPP(RGB(Proj.r, Proj.g, Proj.b)), PenPP(PS_SOLID, 1, RGB(1, 1, 1)));
-		//	}
-		//	else
-		//	{
-		//		Gdi.DrawTriangle(Proj.Points[0].x, Proj.Points[0].y, Proj.Points[1].x, Proj.Points[1].y, Proj.Points[2].x, Proj.Points[2].y, PenPP(PS_SOLID, 1, RGB(Proj.r, Proj.g, Proj.b)));
-		//	}
-		//}
-
-		RenderMesh(Gdi, Cam, R.mesh, R.Scalar, R.RotationRads, R.Pos, LightSrc.LightPos, LightSrc.LightDir, LightSrc.Color, LightSrc.AmbientCoeff, LightSrc.DiffuseCoeff, LightSrc.SpecularCoeff);
+		RenderMesh(Gdi, Cam, R.mesh, R.Scalar, R.RotationRads, R.Pos, LightSrc.LightPos, LightSrc.Color, LightSrc.AmbientCoeff, LightSrc.DiffuseCoeff, LightSrc.SpecularCoeff);
 	}
 }

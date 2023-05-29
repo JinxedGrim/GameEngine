@@ -41,4 +41,18 @@
       <Filter>ObjectFIles</Filter>
     </None>
   </ItemGroup>
+  <ItemGroup>
+    <Object Include="Mountains.obj">
+      <Filter>ObjectFIles</Filter>
+    </Object>
+    <Object Include="Spyro.obj">
+      <Filter>ObjectFIles</Filter>
+    </Object>
+    <Object Include="axis.obj">
+      <Filter>ObjectFIles</Filter>
+    </Object>
+    <Object Include="AK47.obj">
+      <Filter>ObjectFIles</Filter>
+    </Object>
+  </ItemGroup>
 </Project>
