@@ -1015,7 +1015,7 @@ public:
 		float FovRads = 1.0f / tanf(ToRad(Fov * 0.5f));
 
 		Result.fMatrix[0][0] = AspectRatio * FovRads;
-		Result.fMatrix[1][1] = FovRads;
+		Result.fMatrix[1][1] = -FovRads;
 		Result.fMatrix[2][2] = Far / (Far - Near);
 		Result.fMatrix[3][2] = (-Far * Near) / (Far - Near);
 		Result.fMatrix[2][3] = 1.0f;
@@ -1029,7 +1029,7 @@ public:
 		float FovRads = abs(1.0f / tanf((ToRad(Fov / 2))));
 
 		this->ProjectionMatrix.fMatrix[0][0] = this->AspectRatio * FovRads;
-		this->ProjectionMatrix.fMatrix[1][1] = FovRads;
+		this->ProjectionMatrix.fMatrix[1][1] = -FovRads;
 		this->ProjectionMatrix.fMatrix[2][2] = this->Far / (this->Far - this->Near);
 		this->ProjectionMatrix.fMatrix[3][2] = (-this->Far * this->Near) / (this->Far - this->Near);
 		this->ProjectionMatrix.fMatrix[2][3] = 1.0f;

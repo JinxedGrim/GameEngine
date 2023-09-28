@@ -754,11 +754,6 @@ Matrix Matrix::CreateTranslationMatrix(const Vec3& Translation)
 Matrix Matrix::CreateRotationMatrix(const Vec3& RotationDeg) // pitch yaw roll
 {
 	float RotRadsZ = RotationDeg.z;
-	if (RotRadsZ == 0.0f)
-	{
-		RotRadsZ = 180;
-	}
-
 	Matrix A;
 	Matrix B;
 	Matrix C;
@@ -794,10 +789,6 @@ void Matrix::CalcTranslationMatrix(const Vec3& Translation)
 void Matrix::CalcRotationMatrix(const Vec3& RotationDeg) // pitch yaw roll
 {
 	float RotRadsZ = RotationDeg.z;
-	if (RotRadsZ == 0.0f)
-	{
-		RotRadsZ = 180;
-	}
 
 	Matrix A;
 	Matrix B;
