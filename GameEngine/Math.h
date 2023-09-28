@@ -145,6 +145,41 @@ public:
 		*this = *this * b;
 	}
 
+	// Transpose the matrix (swap rows and columns)
+	void Transpose()
+	{
+		Matrix result;
+
+		for (int row = 0; row < 4; ++row)
+		{
+			for (int col = 0; col < 4; ++col)
+			{
+				result.fMatrix[col][row] = fMatrix[row][col];
+			}
+		}
+
+		*this = result;
+	}
+
+	// Transpose the upper-left 3x3 portion of the matrix
+	void Transpose3x3()
+	{
+		Matrix result;
+
+		for (int row = 0; row < 3; ++row)
+		{
+			for (int col = 0; col < 3; ++col)
+			{
+				result.fMatrix[col][row] = fMatrix[row][col];
+			}
+		}
+
+		// Copy the unchanged elements
+		result.fMatrix[3][3] = fMatrix[3][3];
+
+		*this = result;
+	}
+
 	Matrix QuickInversed()
 	{
 		Matrix OutMat;
@@ -176,6 +211,36 @@ public:
 		OutMat.fMatrix[3][3] = 1.0f;
 
 		return OutMat;
+	}
+
+	void QuickInverse()
+	{
+		float tmp = this->fMatrix[0][1];
+		float tmp1 = this->fMatrix[1][2];
+		float tmp2 = this->fMatrix[0][2];
+
+		this->fMatrix[0][1] = this->fMatrix[1][0];
+		this->fMatrix[0][2] = this->fMatrix[2][0];
+		this->fMatrix[0][3] = 0.0f;
+
+		this->fMatrix[1][0] = tmp;
+		this->fMatrix[1][2] = this->fMatrix[2][1];
+		this->fMatrix[1][3] = 0.0f;
+
+		this->fMatrix[2][0] = tmp2;
+		this->fMatrix[2][1] = tmp1;
+		this->fMatrix[2][3] = 0.0f;
+
+
+		// Calculate the last column of the output matrix manually
+		float t0 = -(this->fMatrix[3][0]);
+		float t1 = -(this->fMatrix[3][1]);
+		float t2 = -(this->fMatrix[3][2]);
+
+		this->fMatrix[3][0] = t0 * this->fMatrix[0][0] + t1 * this->fMatrix[1][0] + t2 * this->fMatrix[2][0];
+		this->fMatrix[3][1] = t0 * this->fMatrix[0][1] + t1 * this->fMatrix[1][1] + t2 * this->fMatrix[2][1];
+		this->fMatrix[3][2] = t0 * this->fMatrix[0][2] + t1 * this->fMatrix[1][2] + t2 * this->fMatrix[2][2];
+		this->fMatrix[3][3] = 1.0f;
 	}
 
 public:
@@ -227,7 +292,7 @@ public:
 	{
 		return (float)sqrt(pow(b.x - this->x, 2) + pow(b.y - this->y, 2));
 	}
-	Vec2 operator - (const Vec2 b)
+	Vec2 operator - (const Vec2& b) const
 	{
 		return
 		{
@@ -353,7 +418,7 @@ public:
 		return Out;
 	}
 
-	Vec3 CalculateIntersectionPoint(const Vec3& LineEnd, const Vec3 &PointOnPlane, const Vec3 &PlaneNormalized) const
+	Vec3 CalculateIntersectionPoint(const Vec3& LineEnd, const Vec3 &PointOnPlane, const Vec3 &PlaneNormalized, float* OutT = nullptr) const
 	{
 		Vec3 LineStart = *this;
 		float Dist = -PlaneNormalized.Dot(PointOnPlane);
@@ -362,6 +427,10 @@ public:
 		float t = (-Dist - ad) / (bd - ad);
 		Vec3 LineStartToEnd = LineEnd - LineStart;
 		Vec3 LineToIntersect = LineStartToEnd * t;
+
+		if (OutT != nullptr)
+			*OutT = t;
+
 		return LineStart + LineToIntersect;
 	}
 
@@ -369,6 +438,16 @@ public:
 	float Angle(const Vec3 To) const
 	{
 		return (float)ToDegree(acos(Clamp(-1.f, 1.f, this->Dot(To))));
+	}
+
+	const Vec3 GetReflectection(const Vec3& SurfaceNormal) const
+	{
+		return *this - (SurfaceNormal * (2.0f * this->Dot(SurfaceNormal)));
+	}
+
+	const void Reflected(const Vec3& SurfaceNormal)
+	{
+		*this = *this - (SurfaceNormal * (2.0f * this->Dot(SurfaceNormal)));
 	}
 
 	// returns euler angles needed to look at a point specified by B
@@ -395,6 +474,11 @@ public:
 		Angles.Clamped(); // clamping angles 
 
 		return Angles;
+	}
+
+	Vec3 GetDirectionToVector(const Vec3 b) const
+	{
+		return (*this - b).Normalized();
 	}
 
 	// operators
@@ -474,11 +558,6 @@ public:
 			Out.y /= w;
 			Out.z /= w;
 		}
-		else
-		{
-			return Out;
-		}
-
 		return Out;
 	}
 
@@ -591,6 +670,62 @@ public:
 	float z;
 };
 
+#define COLOR_NORMAL 0
+#define COLOR_255 1
+
+class Color
+{
+	public:
+	Color()
+	{
+
+	}
+
+	Color(const float R, const float G, const float B, const float A = 255.0f, const int Mode = COLOR_255)
+	{
+		this->R = R;
+		this->G = G;
+		this->B = B;
+		this->A = A;
+
+		if (Mode != COLOR_255 && A > 1.0f)
+		{
+			this->A = this->A / 255.0f;
+		}
+	}
+
+	Color(const Vec3 RGB, const float A = 255.0f, const int Mode = COLOR_255)
+	{
+		this->R = RGB.x;
+		this->G = RGB.y;
+		this->B = RGB.z;
+		this->A = A;
+
+		if (Mode != COLOR_255 && A > 1.0f)
+		{
+			this->A = this->A / 255.0f;
+		}
+	}
+
+	void Normalize()
+	{
+		this->R = this->R / 255.0f;
+		this->G = this->G / 255.0f;
+		this->B = this->B / 255.0f;
+		this->A = this->A / 255.0f;
+	}
+
+	Vec3 GetRGB() const
+	{
+		return Vec3(R * (A / 255.0f), G * (A / 255.0f), B * (A / 255.0f));
+	}
+
+	float R = 255.0f;
+	float G = 255.0f;
+	float B = 255.0f;
+	float A = 255.0f;
+};
+
 Matrix Matrix::CreateScalarMatrix(const Vec3& Scalar)
 {
 	Matrix Out;
@@ -676,6 +811,29 @@ void Matrix::CalcRotationMatrix(const Vec3& RotationDeg) // pitch yaw roll
 	//return A;
 }
 
+Vec3 CalculateBarycentricCoordinates(const Vec3& A, const Vec3& B, const Vec3& C, const Vec3& P)
+{
+	// Calculate vectors from vertex A to points B and C
+	Vec3 AB = B - A;
+	Vec3 AC = C - A;
+
+	// Calculate vectors from vertex A to point P
+	Vec3 AP = P - A;
+
+	// Calculate dot products and cross products
+	float dotABAB = AB.Dot(AB);
+	float dotABAC = AB.Dot(AC);
+	float dotAPAB = AP.Dot(AB);
+	float dotAPAC = AP.Dot(AC);
+
+	// Calculate barycentric coordinates
+	float invDenom = 1.0f / (dotABAB * dotABAC - dotABAC * dotABAC);
+	float u = (dotABAB * dotAPAC - dotABAC * dotAPAB) * invDenom;
+	float v = (dotABAC * dotAPAC - dotABAC * dotAPAB) * invDenom;
+	float w = 1.0f - u - v;
+
+	return Vec3(u, v, w);
+}
 
 std::ostream& operator << (std::ostream& os, const Vec3& v)
 {
@@ -697,4 +855,49 @@ std::ostream& operator << (std::ostream& os, const Vec4& v)
 {
 	os << "x: " << v.x << " y: " << v.y << " z: " << v.z << " w: " << v.w;
 	return os;
+}
+
+Vec3 CalculateBarycentricCoordinatesScreenSpace(const Vec2& PixelCoord, const Vec2& Vert0PixelCoord, const Vec2& Vert1PixelCoord, const Vec2& Vert2PixelCoord) {
+	// Calculate the vectors from vertex0 to the fragment and the other two vertices.
+	Vec2 v0f = PixelCoord - Vert0PixelCoord;
+	Vec2 v1f = PixelCoord - Vert1PixelCoord;
+	Vec2 v2f = PixelCoord - Vert2PixelCoord;
+
+	// Calculate the areas of the full triangle and the sub-triangles formed by the fragment.
+	float triangleArea = 0.5f * ((Vert1PixelCoord.x - Vert0PixelCoord.x) * (Vert2PixelCoord.y - Vert0PixelCoord.y) -
+		(Vert2PixelCoord.x - Vert0PixelCoord.x) * (Vert1PixelCoord.y - Vert0PixelCoord.y));
+
+	float alpha = 0.5f * ((v1f.x * v2f.y - v2f.x * v1f.y) / triangleArea);
+	float beta = 0.5f * ((v2f.x * v0f.y - v0f.x * v2f.y) / triangleArea);
+	float gamma = 0.5f * ((v0f.x * v1f.y - v1f.x * v0f.y) / triangleArea);
+
+	return Vec3(alpha, beta, gamma);
+}
+
+size_t ContIdx(const int x, const int y, const int Width)
+{
+	return x + (Width * y);
+}
+
+Vec3 CalculateFaceNormal(const Vec3& p1, const Vec3& p2, const Vec3& p3) {
+	// Calculate two vectors in the plane of the face
+	Vec3 v1(p2.x - p1.x, p2.y - p1.y, p2.z - p1.z);
+	Vec3 v2(p3.x - p1.x, p3.y - p1.y, p3.z - p1.z);
+
+	// Calculate the cross product of the two vectors to get the normal
+	Vec3 normal(
+		v1.y * v2.z - v1.z * v2.y,
+		v1.z * v2.x - v1.x * v2.z,
+		v1.x * v2.y - v1.y * v2.x
+	);
+
+	// Normalize the normal
+	float length = std::sqrt(normal.x * normal.x + normal.y * normal.y + normal.z * normal.z);
+	if (length != 0.0f) {
+		normal.x /= length;
+		normal.y /= length;
+		normal.z /= length;
+	}
+
+	return normal;
 }
