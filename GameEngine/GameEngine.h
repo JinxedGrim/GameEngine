@@ -2076,7 +2076,7 @@ namespace Engine
 								Ray NormalRay = Ray(ToDraw.NormalPositions[0], ToDraw.NormDirections[0]);
 								NormalRay.GenerateMesh();
 
-								RenderMesh(Gdi, Cam, NormalRay.mesh, Scalar, RotationRads, Pos, Vec3(0, 0, 0), Vec3(1, 1, 1), 0.f, 0.f, 0.f, Shader_Material);
+								RenderMesh(Gdi, Cam, NormalRay.mesh, Scalar, RotationRads, Pos, Vec3(0, 0, 0), Vec3(1, 1, 1), 0.f, 0.f, 0.f, EngineShaders::Shader_Material);
 
 								NormalRay.mesh.UseSingleMat = true;
 
@@ -2084,19 +2084,19 @@ namespace Engine
 								NormalRay.GenerateMesh();
 								NormalRay.mesh.Mat.AmbientColor = Vec3(0, 0, 255);
 
-								RenderMesh(Gdi, Cam, NormalRay.mesh, Scalar, RotationRads, Pos, Vec3(0, 0, 0), Vec3(1, 1, 1), 0.f, 0.f, 0.f, Shader_Material);
+								RenderMesh(Gdi, Cam, NormalRay.mesh, Scalar, RotationRads, Pos, Vec3(0, 0, 0), Vec3(1, 1, 1), 0.f, 0.f, 0.f, EngineShaders::Shader_Material);
 
 								NormalRay = Ray(ToDraw.NormalPositions[2], ToDraw.NormDirections[0]);
 								NormalRay.GenerateMesh();
 								NormalRay.mesh.Mat.AmbientColor = Vec3(0, 0, 255);
 
-								RenderMesh(Gdi, Cam, NormalRay.mesh, Scalar, RotationRads, Pos, Vec3(0, 0, 0), Vec3(1, 1, 1), 0.f, 0.f, 0.f, Shader_Material);
+								RenderMesh(Gdi, Cam, NormalRay.mesh, Scalar, RotationRads, Pos, Vec3(0, 0, 0), Vec3(1, 1, 1), 0.f, 0.f, 0.f, EngineShaders::Shader_Material);
 
 								NormalRay = Ray(ToDraw.NormalPositions[3], ToDraw.NormDirections[0]);
 								NormalRay.GenerateMesh();
 								NormalRay.mesh.Mat.AmbientColor = Vec3(0, 0, 255);
 
-								RenderMesh(Gdi, Cam, NormalRay.mesh, Scalar, RotationRads, Pos, Vec3(0, 0, 0), Vec3(1, 1, 1), 0.f, 0.f, 0.f, Shader_Material);
+								RenderMesh(Gdi, Cam, NormalRay.mesh, Scalar, RotationRads, Pos, Vec3(0, 0, 0), Vec3(1, 1, 1), 0.f, 0.f, 0.f, EngineShaders::Shader_Material);
 							}
 						}
 						else
