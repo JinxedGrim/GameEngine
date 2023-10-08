@@ -17,9 +17,8 @@ FILE* new_stdout;
 auto __ = freopen_s(&new_stdout, "CONOUT$", "w", stdout);
 #endif
 
-static float FOV_ = 90.0f;
-static float FNEAR = 0.1f;
-static float FFAR = 1000.f;
+#define PARALLEL_OMP
+
 static float RotSpeedX = 0.0f;
 static float RotSpeedY = 30.0f;
 static float RotSpeedZ = 0.0f;
@@ -28,20 +27,25 @@ static float FTheta = 0;
 static int CurrMesh = 0;
 static bool IsFullScreen = true;
 
-static Texture Txt = Texture("C:\\Textures\\Test.bmp");
+CHAR cwd [MAX_PATH + 1] = "";
+DWORD len = GetCurrentDirectoryA(MAX_PATH, cwd);
 
+std::string CWD = cwd;
+
+static Texture Txt = Texture("Test.bmp");
 static Mesh RYNO = Mesh("RYNO.obj");
+static Mesh RCAMMO = Mesh("RC_AMMO.obj");
 
 static Mesh Mountains = Mesh("Mountains.obj");
 static Mesh TeaPot = Mesh(("TeaPot.obj"));
 static Mesh Axis = Mesh("Axis.obj");
 static Mesh AK47 = Mesh("AK47.obj");
 static Mesh Spyro = Mesh("Spyro.obj");
-static Mesh DragStat = Mesh("DragonStatue\\DragonStatue.obj");
+static Mesh DragStat = Mesh("DragonStatue.obj");
 static std::vector<Mesh> Meshes = {Cube(1, 1, 1, Material(), &Txt), RYNO, Sphere(1, 20, 20, TeaPot.Mat), TeaPot, Axis, AK47, Spyro, Mountains, DragStat };
-static Vec3 LightSrcPos = { -50, -64, -56 };
+static Vec3 LightSrcPos = { -4, 5, 0 };
 static SimpleLightSrc sl = SimpleLightSrc(LightSrcPos, { 0, 0, -1 }, Vec3(253, 251, 211), 0.35f, 0.15f, 0.5f);
-static Camera Cam = Camera(Vec3(0, 0, 0), (float)((float)Engine::sy / (float)Engine::sx), FOV_, FNEAR, FFAR);
+static Camera Cam = Camera(Vec3(0, 0, 0), (float)((float)Engine::sy / (float)Engine::sx), Engine::FOV, Engine::FNEAR, Engine::FFAR);
 
 void Settings()
 {
@@ -54,7 +58,7 @@ void Settings()
 		if (GetAsyncKeyState(VK_F2))
 		{
 			Cam.Fov += 30;
-			if (FOV_ >= 120)
+			if (Engine::FOV >= 120)
 			{
 				Cam.Fov = 60;
 			}
@@ -191,7 +195,7 @@ DoTick_T Draw(GdiPP& Gdi, WndCreatorW& Wnd, const float& ElapsedTime)
 		Cam.Pos += (Cam.GetNewVelocity(Vec3(0, 0, -1) * Cam.CamRotation)) * ElapsedTime;
 	}
 
-	Cam.CamRotation = Matrix::CreateRotationMatrix({ Cam.ViewAngles.x, Cam.ViewAngles.y, Cam.ViewAngles.z }); // Pitch Yaw Roll
+	Cam.CamRotation = Matrix::CreateRotationMatrix(Cam.ViewAngles); // Pitch Yaw Roll
 	Cam.LookDir = Cam.InitialLook * Cam.CamRotation;
 	Vec3 T = Cam.Pos + Cam.LookDir;
 	Cam.CalcCamViewMatrix(T);
@@ -200,9 +204,10 @@ DoTick_T Draw(GdiPP& Gdi, WndCreatorW& Wnd, const float& ElapsedTime)
 
 	Engine::RenderMesh(Gdi, Cam, Meshes.at(CurrMesh), Vec3(1.0f, 1.0f, 1.0f), Vec3(FTheta * RotSpeedX, FTheta * RotSpeedY, FTheta * RotSpeedZ), Vec3(1, 0, 10), sl.LightPos, sl.Color, sl.AmbientCoeff, sl.DiffuseCoeff, sl.SpecularCoeff, Shader_Texture_Only);
 
-	Engine::RenderMesh(Gdi, Cam, Meshes.at(CurrMesh), Vec3(1.0f, 1.0f, 1.0f), Vec3(FTheta * RotSpeedX, FTheta * RotSpeedY, FTheta * RotSpeedZ), Vec3(10, 0, 10), sl.LightPos, sl.Color, sl.AmbientCoeff, sl.DiffuseCoeff, sl.SpecularCoeff, Shader_Gradient_Centroid, SHADER_FRAGMENT);
+	if (CurrMesh <= 2)
+		Engine::RenderMesh(Gdi, Cam, Meshes.at(CurrMesh), Vec3(1.0f, 1.0f, 1.0f), Vec3(FTheta * RotSpeedX, FTheta * RotSpeedY, FTheta * RotSpeedZ), Vec3(10, 0, 10), sl.LightPos, sl.Color, sl.AmbientCoeff, sl.DiffuseCoeff, sl.SpecularCoeff, Shader_Gradient_Centroid, SHADER_FRAGMENT);
 
-	Engine::RenderMesh(Gdi, Cam, sl.LightMesh, Vec3(1.0f, 1.0f, 1.0f), Vec3(0, 0, 0), sl.LightPos, sl.LightPos, sl.Color, 1.0f, 0.f, 0.f, Shader_Material, SHADER_FRAGMENT);
+	Engine::RenderMesh(Gdi, Cam, sl.LightMesh, Vec3(1.0f, 1.0f, 1.0f), Vec3(0, 0, 0), sl.LightPos, sl.LightPos, sl.Color, 1.0f, 0.f, 0.f, Shader_Material, SHADER_TRIANGLE);
 
 
 	if (Engine::FpsEngineCounter && ShowStrs)
@@ -234,7 +239,7 @@ DoTick_T Draw(GdiPP& Gdi, WndCreatorW& Wnd, const float& ElapsedTime)
 		ss << " : 0x" << std::hex << &Meshes.at(CurrMesh).Mat << std::dec;
 		std::string MatPtrStr = ss.str();
 
-		Gdi.DrawStringA(20, 40, FovStr + std::to_string(FOV_), RGB(255, 0, 0), TRANSPARENT);
+		Gdi.DrawStringA(20, 40, FovStr + std::to_string(Engine::FOV), RGB(255, 0, 0), TRANSPARENT);
 		Gdi.DrawStringA(20, 60, YawRotStr + std::to_string(RotSpeedX), RGB(255, 0, 0), TRANSPARENT);
 		Gdi.DrawStringA(20, 80, PitchRotStr + std::to_string(RotSpeedY), RGB(255, 0, 0), TRANSPARENT);
 		Gdi.DrawStringA(20, 100, RollRotStr + std::to_string(RotSpeedZ), RGB(255, 0, 0), TRANSPARENT);

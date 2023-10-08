@@ -9,10 +9,11 @@
 #include <chrono>
 #include <functional>
 #include <list>
+#include <algorithm>
 
 //     TO DO 
 // 1. Revamp Material and texture system ie put all materials in the mesh and pointers to them in the triangle
-// 2. 
+// 2. setdibitstodevice?
 // 3. Caclulate Vertex norms for all 3 vertices and store them
 // 4. figure out a better way of per pixel shading
 
@@ -503,7 +504,6 @@ public:
 
 	Vec3 Col = Vec3(255, 255, 255);
 	Material Mat = Material();
-	Texture Tex = Texture();
 
 	bool OverRideMaterialColor = false;
 	bool UseMeshMat = false;
@@ -630,13 +630,13 @@ class Mesh
 				TextureCoords TexCoord;
 				SS >> Unused >> Unused >> TexCoord.u >> TexCoord.v;
 
-				if (TexCoord.u > 1.0f)
+				if (std::fabs(TexCoord.u) > 1.0f)
 				{
-					TexCoord.u = fmod(TexCoord.u, 1.0f);
+					TexCoord.u = std::fabs(fmod(TexCoord.u, 1.0f));
 				}
-				if (TexCoord.v > 1.0f)
+				if (std::fabs(TexCoord.v) > 1.0f)
 				{
-					TexCoord.v = fmod(TexCoord.v, 1.0f);
+					TexCoord.v = std::fabs(fmod(TexCoord.v, 1.0f));
 				}
 
 				TexCache.push_back(TexCoord);
@@ -660,7 +660,7 @@ class Mesh
 						std::stringstream IndexSS(Indices[i]);
 						std::string IndexPart;
 
-						int vertexIndex, texCoordIndex, normalIndex;
+						int vertexIndex = 0, texCoordIndex = 0, normalIndex = 0;
 
 						if (std::getline(IndexSS, IndexPart, '/'))
 							vertexIndex = std::stoi(IndexPart) - 1;
@@ -747,7 +747,7 @@ class Mesh
 		this->Normals = NormalCache;
 		this->NormalCount = (int)NormalCache.size();
 		this->TexCoords = TexCache;
-		this->TexCoordsCount = TexCache.size();
+		this->TexCoordsCount = (int)TexCache.size();
 		this->VertexCount = (int)VertCache.size();
 		this->TriangleCount = (int)Triangles.size();
 
@@ -785,6 +785,9 @@ class Mesh
 	std::vector<Triangle> Triangles = {};
 	std::vector<TextureCoords> TexCoords = {};
 	std::vector<Vec3> Normals = {};
+
+	std::vector<Material> ModelMats = {};
+
 	Material Mat = Material();
 
 	int VertexCount = 0;
@@ -1310,137 +1313,139 @@ struct ShaderArgs
 	}
 };
 
-const auto WHACK_SHADER = [&](ShaderArgs& Args)
+namespace EngineShaders
 {
-	// Compute the normalized direction from the vertex to the light source
-	Vec3 LDir = (Args.LightPos - ((Args.Tri->Points[0] + Args.Tri->Points[1] + Args.Tri->Points[2]) / 3.0f)).Normalized();
-
-	// Calculate the Lambertian reflection (diffuse) component
-	float Li = std::max<float>(0.0f, Args.Tri->FaceNormal.Dot(LDir));
-
-	// Calculate the ambient, diffuse, and specular components
-	Vec3 AmbientCol = Args.Mat->AmbientColor * Args.LightAmbient;
-	Vec3 DiffuseCol = Args.Mat->DiffuseColor * Li;
-
-	// Final color calculation (No specular component for Lambertian model)
-	Args.Tri->Col = (AmbientCol + DiffuseCol) * Args.LightColor;
-};
-
-const auto Shader_Phong_LOW_LOD = [&](ShaderArgs& Args)
-{
-	Vec3 LDir = (Args.LightPos - ((Args.Tri->Points[0] + Args.Tri->Points[1] + Args.Tri->Points[2]) / 3.0f)).Normalized();
-
-	float Li = std::max<float>(0.0f, Args.Tri->FaceNormal.Dot(LDir));
-
-	// Calculate the ambient, diffuse, and specular components
-	Vec3 AmbientCol = (Args.Mat->AmbientColor * Args.LightAmbient);
-	Vec3 DiffuseCol = ((Args.LightColor * Li) + (Args.Mat->DiffuseColor * Li)) * Args.LightDiffuse;
-
-	Args.Tri->Col.x = std::clamp<float>((AmbientCol.x + DiffuseCol.x), 0.0f, 255.0f);
-	Args.Tri->Col.y = std::clamp<float>((AmbientCol.y + DiffuseCol.y), 0.0f, 255.0f);
-	Args.Tri->Col.z = std::clamp<float>((AmbientCol.z + DiffuseCol.z), 0.0f, 255.0f);
-};
-
-const auto Shader_Phong = [&](ShaderArgs& Args)
-{
-	float Intensity = 1.0f;
-	Vec3 LDir = (Args.LightPos - ((Args.Tri->Points[0] + Args.Tri->Points[1] + Args.Tri->Points[2]) / 3.0f)).Normalized();
-	float Li = Args.Tri->FaceNormal.Dot(LDir);
-
-	Intensity = std::max<float>(0.0f, Li);
-	Vec3 RDir = LDir - Args.Tri->FaceNormal * 2.0f * Li;
-
-	// Calculate the specular intensity
-	float SpecularIntensity = pow(std::max<float>(0.0f, RDir.Dot(Args.CamLookDir)), Args.Mat->Shininess);
-
-	Vec3 AmbientCol = (Args.Mat->AmbientColor) * Args.LightAmbient;
-	Vec3 DiffuseCol = ((Args.LightColor * Intensity) + (Args.Mat->DiffuseColor * Intensity)) * Args.LightDiffuse;
-	Vec3 SpecularClr = ((Args.LightColor * Args.LightSpecular) + (Args.Mat->SpecularColor * Args.LightSpecular)) * SpecularIntensity;
-
-	Args.Tri->Col.x = std::clamp<float>((AmbientCol.x + DiffuseCol.x + SpecularClr.x), 0.0f, 255.0f);
-	Args.Tri->Col.y = std::clamp<float>((AmbientCol.y + DiffuseCol.y + SpecularClr.y), 0.0f, 255.0f);
-	Args.Tri->Col.z = std::clamp<float>((AmbientCol.z + DiffuseCol.z + SpecularClr.z), 0.0f, 255.0f);
-};
-
-const auto Shader_Material = [&](ShaderArgs& Args)
-{
-	Args.Tri->Col = Args.Mat->AmbientColor;
-};
-
-const auto Shader_Frag_Phong = [&](ShaderArgs& Args)
-{
-	float Intensity = 1.0f;
-	Vec3 LDir = Args.LightPos.GetDirectionToVector(Args.FragPos).Normalized();
-	float Li = Args.FragNormal.Dot(LDir);
-	
-	// Calculate the reflection direction using the formula: R = I - 2 * (I dot N) * N
-	Intensity = std::max<float>(0.0f, Li);
-	//Vec3 RDir = (LDir - Args.FragNormal * 2.0f * Li).Normalized();
-	Vec3 RDir = (-LDir).GetReflectection(Args.FragNormal);
-
-	// Calculate the specular intensity
-	float SpecularIntensity = pow(std::max<float>(0.0f, (-RDir).Dot(Args.CamLookDir)), Args.Mat->Shininess);
-
-	Vec3 AmbientCol = (Args.Mat->AmbientColor) * Args.LightAmbient;
-	Vec3 DiffuseCol = ((Args.LightColor * Intensity) + (Args.Mat->DiffuseColor * Intensity)) * Args.LightDiffuse;
-	Vec3 SpecularClr = ((Args.LightColor * Args.LightSpecular) + (Args.Mat->SpecularColor * Args.LightSpecular)) * SpecularIntensity;
-
-	Args.FragColor.R = std::clamp<float>((AmbientCol.x + DiffuseCol.x + SpecularClr.x), 0.0f, 255.0f);
-	Args.FragColor.G = std::clamp<float>((AmbientCol.y + DiffuseCol.y + SpecularClr.y), 0.0f, 255.0f);
-	Args.FragColor.B = std::clamp<float>((AmbientCol.z + DiffuseCol.z + SpecularClr.z), 0.0f, 255.0f);
-	Args.FragColor.A = 255.0f;
-};
-
-const auto Shader_Gradient = [&](ShaderArgs& Args)
-{
-	float Intensity = 1.0f;
-	Vec3 LDir = (Args.LightPos - Args.FragPos).Normalized();
-	float Li = Args.FragNormal.Dot(LDir);
-
-	Intensity = std::max<float>(0.0f, Li);
-
-	Args.FragColor.R = std::clamp<float>(((255.0f * Args.BaryCoords.x) * Intensity), 0.0f, 255.0f);
-	Args.FragColor.G = std::clamp<float>(((255.0f * Args.BaryCoords.y) * Intensity), 0.0f, 255.0f);
-	Args.FragColor.B = std::clamp<float>(((255.0f * Args.BaryCoords.z) * Intensity), 0.0f, 255.0f);
-	Args.FragColor.A = 255.0f;
-};
-
-const auto Shader_Gradient_Centroid = [&](ShaderArgs& Args)
-{
-	Vec3 Centroid = ((Args.Tri->Points[0] + Args.Tri->Points[1] + Args.Tri->Points[2]) / 3.0f);
-	Vec3 BaryCoords = CalculateBarycentricCoordinatesScreenSpace(Args.PixelCoords, Vec2(Centroid.x, Centroid.y), Vec2(Args.Tri->Points[1].x, Args.Tri->Points[1].y), Vec2(Args.Tri->Points[2].x, Args.Tri->Points[2].y));
-	Vec3 BaryCoords2 = CalculateBarycentricCoordinatesScreenSpace(Args.PixelCoords, Vec2(Args.Tri->Points[0].x, Args.Tri->Points[0].y), Vec2(Args.Tri->Points[1].x, Args.Tri->Points[1].y), Vec2(Centroid.x, Centroid.y));
-
-	float Intensity = 1.0f;
-	Vec3 LDir = (Args.LightPos - Args.FragPos).Normalized();
-	float Li = Args.FragNormal.Dot(LDir);
-
-	Intensity = std::max<float>(0.0f, Li);
-
-	Args.FragColor.R = std::clamp<float>(((255.0f * BaryCoords2.x) * Intensity), 0.0f, 255.0f);
-	Args.FragColor.G = std::clamp<float>(((255.0f * BaryCoords.y) * Intensity), 0.0f, 255.0f);
-	Args.FragColor.B = std::clamp<float>(((255.0f * BaryCoords.z) * Intensity), 0.0f, 255.0f);
-	Args.FragColor.A = 255.0f;
-};
-
-const auto Shader_Texture_Only = [&](ShaderArgs& Args)
-{
-
-	Vec3 TexturCol = Vec3();
-
-	if (Args.Tri->Mat.TexA.Used)
+	const auto WHACK_SHADER = [&](ShaderArgs& Args)
 	{
-		TexturCol = Args.Tri->Mat.TexA.GetPixelColor(Args.UVW.u, Args.UVW.v).GetRGB();
-		Args.FragColor.R = std::clamp<float>(TexturCol.x, 0.0f, 255.0f);
-		Args.FragColor.G = std::clamp<float>(TexturCol.y, 0.0f, 255.0f);
-		Args.FragColor.B = std::clamp<float>(TexturCol.z, 0.0f, 255.0f);
+		// Compute the normalized direction from the vertex to the light source
+		Vec3 LDir = (Args.LightPos - ((Args.Tri->Points[0] + Args.Tri->Points[1] + Args.Tri->Points[2]) / 3.0f)).Normalized();
+
+		// Calculate the Lambertian reflection (diffuse) component
+		float Li = std::max<float>(0.0f, Args.Tri->FaceNormal.Dot(LDir));
+
+		// Calculate the ambient, diffuse, and specular components
+		Vec3 AmbientCol = Args.Mat->AmbientColor * Args.LightAmbient;
+		Vec3 DiffuseCol = Args.Mat->DiffuseColor * Li;
+
+		// Final color calculation (No specular component for Lambertian model)
+		Args.Tri->Col = (AmbientCol + DiffuseCol) * Args.LightColor;
+	};
+
+	const auto Shader_Phong_LOW_LOD = [&](ShaderArgs& Args)
+	{
+		Vec3 LDir = (Args.LightPos - ((Args.Tri->Points[0] + Args.Tri->Points[1] + Args.Tri->Points[2]) / 3.0f)).Normalized();
+
+		float Li = std::max<float>(0.0f, Args.Tri->FaceNormal.Dot(LDir));
+
+		// Calculate the ambient, diffuse, and specular components
+		Vec3 AmbientCol = (Args.Mat->AmbientColor * Args.LightAmbient);
+		Vec3 DiffuseCol = ((Args.LightColor * Li) + (Args.Mat->DiffuseColor * Li)) * Args.LightDiffuse;
+
+		Args.Tri->Col.x = std::clamp<float>((AmbientCol.x + DiffuseCol.x), 0.0f, 255.0f);
+		Args.Tri->Col.y = std::clamp<float>((AmbientCol.y + DiffuseCol.y), 0.0f, 255.0f);
+		Args.Tri->Col.z = std::clamp<float>((AmbientCol.z + DiffuseCol.z), 0.0f, 255.0f);
+	};
+
+	const auto Shader_Phong = [&](ShaderArgs& Args)
+	{
+		float Intensity = 1.0f;
+		Vec3 LDir = (Args.LightPos - ((Args.Tri->Points[0] + Args.Tri->Points[1] + Args.Tri->Points[2]) / 3.0f)).Normalized();
+		float Li = Args.Tri->FaceNormal.Dot(LDir);
+
+		Intensity = std::max<float>(0.0f, Li);
+		Vec3 RDir = LDir - Args.Tri->FaceNormal * 2.0f * Li;
+
+		// Calculate the specular intensity
+		float SpecularIntensity = pow(std::max<float>(0.0f, RDir.Dot(Args.CamLookDir)), Args.Mat->Shininess);
+
+		Vec3 AmbientCol = (Args.Mat->AmbientColor) * Args.LightAmbient;
+		Vec3 DiffuseCol = ((Args.LightColor * Intensity) + (Args.Mat->DiffuseColor * Intensity)) * Args.LightDiffuse;
+		Vec3 SpecularClr = ((Args.LightColor * Args.LightSpecular) + (Args.Mat->SpecularColor * Args.LightSpecular)) * SpecularIntensity;
+
+		Args.Tri->Col.x = std::clamp<float>((AmbientCol.x + DiffuseCol.x + SpecularClr.x), 0.0f, 255.0f);
+		Args.Tri->Col.y = std::clamp<float>((AmbientCol.y + DiffuseCol.y + SpecularClr.y), 0.0f, 255.0f);
+		Args.Tri->Col.z = std::clamp<float>((AmbientCol.z + DiffuseCol.z + SpecularClr.z), 0.0f, 255.0f);
+	};
+
+	const auto Shader_Material = [&](ShaderArgs& Args)
+	{
+		Args.Tri->Col = Args.Mat->AmbientColor;
+	};
+
+	const auto Shader_Frag_Phong = [&](ShaderArgs& Args)
+	{
+		Vec3 LDir = Args.LightPos.GetDirectionToVector(Args.FragPos).Normalized();
+		float Li = Args.FragNormal.Dot(LDir);
+
+		// Calculate the reflection direction using the formula: R = I - 2 * (I dot N) * N
+		float Intensity = std::max<float>(0.0f, Li);
+		//Vec3 RDir = (LDir - Args.FragNormal * 2.0f * Li).Normalized();
+		Vec3 RDir = (-LDir).GetReflectection(Args.FragNormal);
+
+		// Calculate the specular intensity
+		float SpecularIntensity = pow(std::max<float>(0.0f, (-RDir).Dot(Args.CamLookDir)), Args.Mat->Shininess);
+
+		Vec3 AmbientCol = (Args.Mat->AmbientColor) * Args.LightAmbient;
+		Vec3 DiffuseCol = ((Args.LightColor * Intensity) + (Args.Mat->DiffuseColor * Intensity)) * Args.LightDiffuse;
+		Vec3 SpecularClr = ((Args.LightColor * Args.LightSpecular) + (Args.Mat->SpecularColor * Args.LightSpecular)) * SpecularIntensity;
+
+		Args.FragColor.R = std::clamp<float>((AmbientCol.x + DiffuseCol.x + SpecularClr.x), 0.0f, 255.0f);
+		Args.FragColor.G = std::clamp<float>((AmbientCol.y + DiffuseCol.y + SpecularClr.y), 0.0f, 255.0f);
+		Args.FragColor.B = std::clamp<float>((AmbientCol.z + DiffuseCol.z + SpecularClr.z), 0.0f, 255.0f);
 		Args.FragColor.A = 255.0f;
-	}
-	else
+	};
+
+	const auto Shader_Gradient = [&](ShaderArgs& Args)
 	{
-		Shader_Frag_Phong(Args);
-	}
-};
+		float Intensity = 1.0f;
+		Vec3 LDir = (Args.LightPos - Args.FragPos).Normalized();
+		float Li = Args.FragNormal.Dot(LDir);
+
+		Intensity = std::max<float>(0.0f, Li);
+
+		Args.FragColor.R = std::clamp<float>(((255.0f * Args.BaryCoords.x) * Intensity), 0.0f, 255.0f);
+		Args.FragColor.G = std::clamp<float>(((255.0f * Args.BaryCoords.y) * Intensity), 0.0f, 255.0f);
+		Args.FragColor.B = std::clamp<float>(((255.0f * Args.BaryCoords.z) * Intensity), 0.0f, 255.0f);
+		Args.FragColor.A = 255.0f;
+	};
+
+	const auto Shader_Gradient_Centroid = [&](ShaderArgs& Args)
+	{
+		Vec3 Centroid = ((Args.Tri->Points[0] + Args.Tri->Points[1] + Args.Tri->Points[2]) / 3.0f);
+		Vec3 BaryCoords = CalculateBarycentricCoordinatesScreenSpace(Args.PixelCoords, Vec2(Centroid.x, Centroid.y), Vec2(Args.Tri->Points[1].x, Args.Tri->Points[1].y), Vec2(Args.Tri->Points[2].x, Args.Tri->Points[2].y));
+		Vec3 BaryCoords2 = CalculateBarycentricCoordinatesScreenSpace(Args.PixelCoords, Vec2(Args.Tri->Points[0].x, Args.Tri->Points[0].y), Vec2(Args.Tri->Points[1].x, Args.Tri->Points[1].y), Vec2(Centroid.x, Centroid.y));
+
+		float Intensity = 1.0f;
+		Vec3 LDir = (Args.LightPos - Args.FragPos).Normalized();
+		float Li = Args.FragNormal.Dot(LDir);
+
+		Intensity = std::max<float>(0.0f, Li);
+
+		Args.FragColor.R = std::clamp<float>(((255.0f * BaryCoords2.x) * Intensity), 0.0f, 255.0f);
+		Args.FragColor.G = std::clamp<float>(((255.0f * BaryCoords.y) * Intensity), 0.0f, 255.0f);
+		Args.FragColor.B = std::clamp<float>(((255.0f * BaryCoords.z) * Intensity), 0.0f, 255.0f);
+		Args.FragColor.A = 255.0f;
+	};
+
+	const auto Shader_Texture_Only = [&](ShaderArgs& Args)
+	{
+
+		Vec3 TexturCol = Vec3();
+
+		if (Args.Tri->Mat.TexA.Used)
+		{
+			TexturCol = Args.Tri->Mat.TexA.GetPixelColor(Args.UVW.u, Args.UVW.v).GetRGB();
+			Args.FragColor.R = std::clamp<float>(TexturCol.x, 0.0f, 255.0f);
+			Args.FragColor.G = std::clamp<float>(TexturCol.y, 0.0f, 255.0f);
+			Args.FragColor.B = std::clamp<float>(TexturCol.z, 0.0f, 255.0f);
+			Args.FragColor.A = 255.0f;
+		}
+		else
+		{
+			Shader_Frag_Phong(Args);
+		}
+	};
+}
 
 namespace Engine
 {
@@ -1449,6 +1454,10 @@ namespace Engine
 
 	int sx = GetSystemMetrics(SM_CXSCREEN);
 	int sy = GetSystemMetrics(SM_CYSCREEN);
+
+	static float FOV = 90.0f;
+	static float FNEAR = 0.1f;
+	static float FFAR = 1000.f;
 
 	bool FpsEngineCounter = true;
 	bool DoCull = true;
@@ -1467,21 +1476,21 @@ namespace Engine
 	float Sensitivity = 0.1f;
 	int Fps = 0;
 
-	float* ScreenDimensions = new float[sx * sy];
+	float* DepthBuffer = new float[sx * sy];
 
 	void UpdateScreenInfo(GdiPP& Gdi)
 	{
 		Gdi.UpdateClientRgn();
 		sx = Gdi.ClientRect.right - Gdi.ClientRect.left;
 		sy = Gdi.ClientRect.bottom - Gdi.ClientRect.top;
-		delete[] ScreenDimensions;
+		delete[] DepthBuffer;
 
-		ScreenDimensions = new float[sx * sy];
+		DepthBuffer = new float[sx * sy];
 	}
 
 	void EngineCleanup()
 	{
-		delete[] ScreenDimensions;
+		delete[] DepthBuffer;
 	}
 
 	void Run(WndCreator& Wnd, BrushPP& ClearBrush, DoTick_T DrawCallBack)
@@ -1491,9 +1500,9 @@ namespace Engine
 		sx = Wnd.GetClientArea().Width;
 		sy = Wnd.GetClientArea().Height;
 
-		delete[] ScreenDimensions;
+		delete[] DepthBuffer;
 
-		ScreenDimensions = new float[sx * sy];
+		DepthBuffer = new float[sx * sy];
 
 		EngineGdi.UpdateClientRgn();
 
@@ -1556,10 +1565,7 @@ namespace Engine
 			// clear the screen
 			EngineGdi.Clear(GDIPP_FILLRECT, ClearBrush);
 
-			for (int i = 0; i < sx * sy; i++)
-			{
-				ScreenDimensions[i] = 0.0f;
-			}
+			std::fill(DepthBuffer, DepthBuffer + sx * sy, Engine::FFAR);
 
 			// call draw code
 			DrawCallBack(EngineGdi, Wnd, (float)ElapsedTime);
@@ -1693,8 +1699,8 @@ namespace Engine
 		{
 			for (int i = y1; i <= y2; i++)
 			{
-				int ax = x1 + (float)(i - y1) * dax_step;
-				int bx = x1 + (float)(i - y1) * dbx_step;
+				int ax = x1 + (int)((float)(i - y1) * dax_step);
+				int bx = x1 + (int)((float)(i - y1) * dbx_step);
 
 				float tex_su = u1 + (float)(i - y1) * du1_step;
 				float tex_sv = v1 + (float)(i - y1) * dv1_step;
@@ -1721,13 +1727,24 @@ namespace Engine
 
 				for (int j = ax; j < bx; j++)
 				{
+					float z = Args.Tri->Points[0].z;
+
+					float Depth = (z - Engine::FNEAR) / (Engine::FFAR - Engine::FNEAR);
+
+					int idx = ContIdx(j, i, Engine::sx);
+
+					if (Depth < DepthBuffer[idx])
+						DepthBuffer[idx] = Depth;
+					else
+						continue;
+
 					tex_u = (1.0f - t) * tex_su + t * tex_eu;
 					tex_v = (1.0f - t) * tex_sv + t * tex_ev;
 					tex_w = (1.0f - t) * tex_sw + t * tex_ew;
 					t += tstep;
 
 					// My changes start here
-					Vec3 BaryCoords = CalculateBarycentricCoordinatesScreenSpace(Vec2(j, i), Vec2(Tri.Points[0].x, Tri.Points[0].y), Vec2(Tri.Points[1].x, Tri.Points[1].y), Vec2(Tri.Points[2].x, Tri.Points[2].y));
+					Vec3 BaryCoords = CalculateBarycentricCoordinatesScreenSpace(Vec2((float)j, (float)i), Vec2((float)Tri.Points[0].x, (float)Tri.Points[0].y), Vec2((float)Tri.Points[1].x, (float)Tri.Points[1].y), Vec2((float)Tri.Points[2].x, (float)Tri.Points[2].y));
 
 					Vec3 InterpolatedPos = (Tri.VertexPositions[0] * BaryCoords.x) + (Tri.VertexPositions[1] * BaryCoords.y) + (Tri.VertexPositions[2] * BaryCoords.z);
 
@@ -1738,11 +1755,11 @@ namespace Engine
 
 					if (Args.ShaderType != SHADER_FRAGMENT || Tri.OverRideMaterialColor)
 					{
-						if (Tri.Tex.Used)
+						if (Tri.Mat.TexA.Used)
 						{
-							Args.FragColor.R = Tri.Tex.GetPixelColor(j, i).R;
-							Args.FragColor.G = Tri.Tex.GetPixelColor(j, i).G;
-							Args.FragColor.B = Tri.Tex.GetPixelColor(j, i).B;
+							Args.FragColor.R = Tri.Mat.TexA.GetPixelColor((float)j, (float)i).R;
+							Args.FragColor.G = Tri.Mat.TexA.GetPixelColor((float)j, (float)i).G;
+							Args.FragColor.B = Tri.Mat.TexA.GetPixelColor((float)j, (float)i).B;
 						}
 						else
 						{
@@ -1757,7 +1774,7 @@ namespace Engine
 						Args.FragNormal = InterpolatedNormal;
 						Args.UVW = { tex_u, tex_v, tex_w };
 						Args.BaryCoords = BaryCoords;
-						Args.PixelCoords = Vec2(j, i);
+						Args.PixelCoords = Vec2((float)j, (float)i);
 						Shader(Args);
 					}
 
@@ -1785,8 +1802,8 @@ namespace Engine
 		{
 			for (int i = y2; i <= y3; i++)
 			{
-				int ax = x2 + (float)(i - y2) * dax_step;
-				int bx = x1 + (float)(i - y1) * dbx_step;
+				int ax = x2 + (int)((float)(i - y2) * dax_step);
+				int bx = x1 + (int)((float)(i - y1) * dbx_step);
 
 				float tex_su = u2 + (float)(i - y2) * du1_step;
 				float tex_sv = v2 + (float)(i - y2) * dv1_step;
@@ -1813,28 +1830,38 @@ namespace Engine
 
 				for (int j = ax; j < bx; j++)
 				{
+					float z = Args.Tri->Points[0].z;
+
+					float Depth = (z - Engine::FNEAR) / (Engine::FFAR - Engine::FNEAR);
+
+					int idx = ContIdx(j, i, Engine::sx);
+
+					if (Depth < DepthBuffer[idx])
+						DepthBuffer[idx] = Depth;
+					else
+						continue;
+
 					tex_u = (1.0f - t) * tex_su + t * tex_eu;
 					tex_v = (1.0f - t) * tex_sv + t * tex_ev;
 					tex_w = (1.0f - t) * tex_sw + t * tex_ew;
 					t += tstep;
 
 					// My changes start here
-					Vec3 BaryCoords = CalculateBarycentricCoordinatesScreenSpace(Vec2(j, i), Vec2(Tri.Points[0].x, Tri.Points[0].y), Vec2(Tri.Points[1].x, Tri.Points[1].y), Vec2(Tri.Points[2].x, Tri.Points[2].y));
+					Vec3 BaryCoords = CalculateBarycentricCoordinatesScreenSpace(Vec2((float)j, (float)i), Vec2(Tri.Points[0].x, Tri.Points[0].y), Vec2(Tri.Points[1].x, Tri.Points[1].y), Vec2(Tri.Points[2].x, Tri.Points[2].y));
 
 					Vec3 InterpolatedPos = (Tri.VertexPositions[0] * BaryCoords.x) + (Tri.VertexPositions[1] * BaryCoords.y) + (Tri.VertexPositions[2] * BaryCoords.z);
 
 					Vec3 InterpolatedScreenSpace = (Tri.Points[0] * BaryCoords.x) + (Tri.Points[1] * BaryCoords.y) + (Tri.Points[2] * BaryCoords.z);
 
-					Vec3 InterpolatedNormal = (Tri.FaceNormal * BaryCoords.x) + (Tri.FaceNormal * BaryCoords.y) + (Tri.FaceNormal * BaryCoords.z);
-					InterpolatedNormal.Normalize();
+					Vec3 InterpolatedNormal = ((Tri.FaceNormal * BaryCoords.x) + (Tri.FaceNormal * BaryCoords.y) + (Tri.FaceNormal * BaryCoords.z)).Normalized();
 
 					if (Args.ShaderType != SHADER_FRAGMENT || Tri.OverRideMaterialColor)
 					{
-						if (Tri.Tex.Used)
+						if (Tri.Mat.TexA.Used)
 						{
-							Args.FragColor.R = Tri.Tex.GetPixelColor(j, i).R;
-							Args.FragColor.G = Tri.Tex.GetPixelColor(j, i).G;
-							Args.FragColor.B = Tri.Tex.GetPixelColor(j, i).B;
+							Args.FragColor.R = Tri.Mat.TexA.GetPixelColor((float)j, (float)i).R;
+							Args.FragColor.G = Tri.Mat.TexA.GetPixelColor((float)j, (float)i).G;
+							Args.FragColor.B = Tri.Mat.TexA.GetPixelColor((float)j, (float)i).B;
 						}
 						else
 						{
@@ -1849,7 +1876,7 @@ namespace Engine
 						Args.FragNormal = InterpolatedNormal;
 						Args.UVW = { tex_u, tex_v, tex_w };
 						Args.BaryCoords = BaryCoords;
-						Args.PixelCoords = Vec2(j, i);
+						Args.PixelCoords = Vec2((float)j, (float)i);
 						Shader(Args);
 					}
 
@@ -1923,8 +1950,6 @@ namespace Engine
 
 			if ((TriNormal.Dot(Proj.Points[0] - Cam.Pos) <= 0.0f) || !DoCull || !MeshToRender.BackfaceCulling) // backface culling
 			{
-				float Intensity = 1.0f;
-
 				// 3d Space -> Viewed Space
 				Proj.ApplyMatrix(Cam.ViewMatrix);
 
@@ -1952,12 +1977,12 @@ namespace Engine
 		}
 
 		// sort faces 
-		std::sort(TrisToRender.begin(), TrisToRender.end(), [](const Triangle& t1, const Triangle& t2)
-		{
-			float z1 = (t1.Points[0].z + t1.Points[1].z + t1.Points[2].z) / 3.0f;
-			float z2 = (t2.Points[0].z + t2.Points[1].z + t2.Points[2].z) / 3.0f;
-			return z1 > z2;
-		});
+//		std::sort(TrisToRender.begin(), TrisToRender.end(), [](const Triangle& t1, const Triangle& t2)
+//		{
+//			float z1 = (t1.Points[0].z + t1.Points[1].z + t1.Points[2].z) / 3.0f;
+//			float z2 = (t2.Points[0].z + t2.Points[1].z + t2.Points[2].z) / 3.0f;
+//			return z1 > z2;
+//		});
 
 		for (const auto& Proj : TrisToRender)
 		{
@@ -2019,7 +2044,7 @@ namespace Engine
 					MatToUse = &MeshToRender.Mat;
 
 				if (ToDraw.UseTextureColor)
-					TexToUse = &ToDraw.Tex;
+					TexToUse = &ToDraw.Mat.TexA;
 //				else
 					//TexToUse = &MeshToRender.TexToUse;
 
@@ -2037,7 +2062,7 @@ namespace Engine
 				{
 					if (!ShowTriLines)
 					{
-						RenderTriangle(PixelRound(ToDraw.Points[0].x), PixelRound(ToDraw.Points[0].y), PixelRound(ToDraw.Points[1].x), PixelRound(ToDraw.Points[1].y), PixelRound(ToDraw.Points[2].x), PixelRound(ToDraw.Points[2].y), ScreenDimensions, Gdi, Shader, Args);
+						RenderTriangle(PixelRound(ToDraw.Points[0].x), PixelRound(ToDraw.Points[0].y), PixelRound(ToDraw.Points[1].x), PixelRound(ToDraw.Points[1].y), PixelRound(ToDraw.Points[2].x), PixelRound(ToDraw.Points[2].y), DepthBuffer, Gdi, Shader, Args);
 					    //Gdi.DrawFilledTriangle(PixelRound(ToDraw.Points[0].x), PixelRound(ToDraw.Points[0].y), PixelRound(ToDraw.Points[1].x), PixelRound(ToDraw.Points[1].y), PixelRound(ToDraw.Points[2].x), PixelRound(ToDraw.Points[2].y), BrushPP(RGB(ToDraw.Col.x, ToDraw.Col.y, ToDraw.Col.z)), PenPP(PS_SOLID, 1, RGB(ToDraw.Col.x, ToDraw.Col.y, ToDraw.Col.z)));
 					}
 					else

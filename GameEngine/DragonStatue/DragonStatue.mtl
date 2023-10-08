@@ -5,7 +5,7 @@ Ks 0.000000 0.000000 0.000000
 d 1.000000
 illum 2
 Ns 9.84916
-map_Kd DragonStatue\Statue_D.bmp
-map_Ks DragonStatue\Statue_S.bmp
-map_Kn DragonStatue\Statue_N.bmp
+map_Ka Statue_D.bmp
+map_Ks Statue_S.bmp
+map_Kn Statue_N.bmp
 

@@ -24,6 +24,7 @@ float Clamp(float Min, float Max, float Val)
 }
 
 class Vec3;
+class Vec4;
 
 class Matrix
 {
@@ -321,6 +322,8 @@ public:
 		this->z = _z;
 	}
 
+	Vec4 MakeVec4();
+
 	// Clamps an angle
 	Vec3 AngleNormalized()
 	{
@@ -353,7 +356,7 @@ public:
 	}
 
 	// Magnitude / Length of the vector3
-	float Magnitude() const
+	float __inline Magnitude() const
 	{
 		return sqrt(this->x * this->x + this->y * this->y + this->z * this->z);
 	}
@@ -370,7 +373,7 @@ public:
 		return Vec3();
 	}
 
-	void Normalize()
+	void __inline __fastcall Normalize()
 	{
 		float Mag = this->Magnitude();
 
@@ -834,13 +837,78 @@ std::ostream& operator << (std::ostream& os, const Vec3& v)
 
 class Vec4
 {
-public:
-	float x = 0;
-	float y = 0;
-	float z = 0;
-	float w = 1;
+	public:
+
+	Vec4()
+	{
+		this->x = 0.0f;
+		this->y = 0.0f;
+		this->z = 0.0f;
+		this->w = 1.0f;
+	}
+
+	Vec4(float _x, float _y, float _z)
+	{
+		this->x = _x;
+		this->y = _y;
+		this->z = _z;
+		this->w = 1.0f;
+	}
+
+	Vec4(float _x, float _y, float _z, float _w)
+	{
+		this->x = _x;
+		this->y = _y;
+		this->z = _z;
+		this->w = _w;
+	}
+
+	__inline Vec3 xyz()
+	{
+		return Vec3(this->x, this->y, this->z);
+	}
+
+	__inline Vec3 GetVec3()
+	{
+		return Vec3(this->x, this->y, this->z);
+	}
+
+	Vec4 operator * (const Matrix& b) const
+	{
+		Vec4 Out;
+
+		Out.x = this->x * b.fMatrix[0][0] + this->y * b.fMatrix[1][0] + this->z * b.fMatrix[2][0] + this->w * b.fMatrix[3][0];
+		Out.y = this->x * b.fMatrix[0][1] + this->y * b.fMatrix[1][1] + this->z * b.fMatrix[2][1] + this->w * b.fMatrix[3][1];
+		Out.z = this->x * b.fMatrix[0][2] + this->y * b.fMatrix[1][2] + this->z * b.fMatrix[2][2] + this->w * b.fMatrix[3][2];
+		Out.w = this->x * b.fMatrix[0][3] + this->y * b.fMatrix[1][3] + this->z * b.fMatrix[2][3] + this->w * b.fMatrix[3][3];
+
+		return Out;
+	}
+
+	void operator *= (const Matrix& b)
+	{
+		float Tmpx = this->x;
+		float Tmpy = this->y;
+		float Tmpz = this->z;
+
+		this->x = Tmpx * b.fMatrix[0][0] + Tmpy * b.fMatrix[1][0] + Tmpz * b.fMatrix[2][0] + this->w * b.fMatrix[3][0];
+		this->y = Tmpx * b.fMatrix[0][1] + Tmpy * b.fMatrix[1][1] + Tmpz * b.fMatrix[2][1] + this->w * b.fMatrix[3][1];
+		this->z = Tmpx * b.fMatrix[0][2] + Tmpy * b.fMatrix[1][2] + Tmpz * b.fMatrix[2][2] + this->w * b.fMatrix[3][2];
+		this->w = Tmpx * b.fMatrix[0][3] + Tmpy * b.fMatrix[1][3] + Tmpz * b.fMatrix[2][3] + this->w * b.fMatrix[3][3];
+	}
+
+	float x = 0.0f;
+	float y = 0.0f;
+	float z = 0.0f;
+	float w = 1.0f;
+
 	friend std::ostream& operator<<(std::ostream& os, const Vec4& v);
 };
+
+Vec4 Vec3::MakeVec4()
+{
+	return Vec4(this->x, this->y, this->z, 1.0f);
+}
 
 std::ostream& operator << (std::ostream& os, const Vec4& v)
 {
@@ -848,7 +916,8 @@ std::ostream& operator << (std::ostream& os, const Vec4& v)
 	return os;
 }
 
-Vec3 CalculateBarycentricCoordinatesScreenSpace(const Vec2& PixelCoord, const Vec2& Vert0PixelCoord, const Vec2& Vert1PixelCoord, const Vec2& Vert2PixelCoord) {
+Vec3 CalculateBarycentricCoordinatesScreenSpace(const Vec2& PixelCoord, const Vec2& Vert0PixelCoord, const Vec2& Vert1PixelCoord, const Vec2& Vert2PixelCoord) 
+{
 	// Calculate the vectors from vertex0 to the fragment and the other two vertices.
 	Vec2 v0f = PixelCoord - Vert0PixelCoord;
 	Vec2 v1f = PixelCoord - Vert1PixelCoord;
@@ -865,10 +934,7 @@ Vec3 CalculateBarycentricCoordinatesScreenSpace(const Vec2& PixelCoord, const Ve
 	return Vec3(alpha, beta, gamma);
 }
 
-size_t ContIdx(const int x, const int y, const int Width)
-{
-	return x + (Width * y);
-}
+#define ContIdx(x, y, Width) (SIZE_T)(x + (Width * y))
 
 Vec3 CalculateFaceNormal(const Vec3& p1, const Vec3& p2, const Vec3& p3) {
 	// Calculate two vectors in the plane of the face
