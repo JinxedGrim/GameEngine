@@ -1,9 +1,0 @@
-newmtl Mat_Mountains
-Ka 0 0.25 0
-Kd 0 0.75 0
-Ks 0 0.25 0
-Ns 64
-Ni 1.000000
-d 1.000000
-illum 0
-# map_Kd 

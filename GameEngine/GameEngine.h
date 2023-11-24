@@ -12,10 +12,13 @@
 #include <algorithm>
 
 //     TO DO 
-// 1. Revamp Material and texture system ie put all materials in the mesh and pointers to them in the triangle
-// 2. setdibitstodevice?
-// 3. Caclulate Vertex norms for all 3 vertices and store them
-// 4. figure out a better way of per pixel shading
+// 1. Persepctive Divide
+// 2. Proper depth buffer
+// 3. Shadows
+// 4. Revamp Material and texture system ie put all materials in the mesh and pointers to them in the triangle
+// 5. Caclulate Vertex norms for all 3 vertices and store them
+// 6. figure out a better way of per pixel shading
+// 7. redisign engine into a more API-like manner
 
 #define SHADER_TRIANGLE 0
 #define SHADER_FRAGMENT 1
@@ -995,7 +998,6 @@ public:
 		this->NearPlane = { 0.0f, 0.0f, Near };
 
 		this->CalcProjectionMat();
-
 	}
 
 	Camera(Vec3 Position, Vec3 TargetLook, Vec3 CamUp, float AspectRatio, float Fov, float Near, float Far)
@@ -1009,16 +1011,18 @@ public:
 		this->CamUp = CamUp;
 		this->NearPlane = { 0.0f, 0.0f, Near };
 		this->CalcProjectionMat();
+		this->PointAt(TargetLook);
 	}
 
+	// Calculate the projection matrix with some screen args
 	static Matrix CalcProjectionMat(float AspectRatio, float Fov, float Near, float Far)
 	{
 		Matrix Result = {};
 
 		float FovRads = 1.0f / tanf(ToRad(Fov * 0.5f));
 
-		Result.fMatrix[0][0] = AspectRatio * FovRads;
-		Result.fMatrix[1][1] = -FovRads;
+		Result.fMatrix[0][0] = AspectRatio / FovRads;
+		Result.fMatrix[1][1] = -FovRads;  // THIS NEGATIVE IS FOR TERRAGL
 		Result.fMatrix[2][2] = Far / (Far - Near);
 		Result.fMatrix[3][2] = (-Far * Near) / (Far - Near);
 		Result.fMatrix[2][3] = 1.0f;
@@ -1027,34 +1031,17 @@ public:
 		return Result;
 	}
 
+	//Calculate projection matrix of this camera
 	void CalcProjectionMat()
 	{
-		float FovRads = abs(1.0f / tanf((ToRad(Fov / 2))));
+		float FovRads = abs(1.0f / tanf((ToRad(Fov * 0.5f))));
 
-		this->ProjectionMatrix.fMatrix[0][0] = this->AspectRatio * FovRads;
-		this->ProjectionMatrix.fMatrix[1][1] = -FovRads;
+		this->ProjectionMatrix.fMatrix[0][0] = this->AspectRatio / FovRads;
+		this->ProjectionMatrix.fMatrix[1][1] = -FovRads; // THIS NEGATIVE IS FOR TERRAGL
 		this->ProjectionMatrix.fMatrix[2][2] = this->Far / (this->Far - this->Near);
 		this->ProjectionMatrix.fMatrix[3][2] = (-this->Far * this->Near) / (this->Far - this->Near);
 		this->ProjectionMatrix.fMatrix[2][3] = 1.0f;
 		this->ProjectionMatrix.fMatrix[3][3] = 0.0f;
-	}
-
-	Mesh ProjectMesh(Mesh InMesh, Matrix Mat)
-	{
-		Mesh OutMesh = Mesh();
-
-		for (int i = 0; i < InMesh.Triangles.size(); i++)
-		{
-			Triangle NewTri;
-			
-			NewTri.Points[0] = InMesh.Triangles.at(i).Points[0] * Mat;
-			NewTri.Points[1] = InMesh.Triangles.at(i).Points[1] * Mat;
-			NewTri.Points[2] = InMesh.Triangles.at(i).Points[2] * Mat;
-
-			OutMesh.Triangles.push_back(NewTri);
-		}
-
-		return OutMesh;
 	}
 
 	Triangle ProjectTriangle(const Triangle* InTriangle, Matrix& Mat)
@@ -1271,11 +1258,11 @@ struct ShaderArgs
 	// Triangle Info (ALL SHADERS)
 	Triangle* Tri = nullptr;
 	const Material* Mat = nullptr;
-	const Texture* Tex = nullptr;
 
 	//Camera Info (ALL SHADERS)
 	Vec3 CamPos = Vec3(0, 0, 0);
 	Vec3 CamLookDir = Vec3(0, 0, 0);
+	float ViewedDepthCentroid = 0.0f;
 
 	// Light Info (ALL SHADERS)
 	Vec3 LightPos = Vec3(0, 0, 0);
@@ -1292,16 +1279,20 @@ struct ShaderArgs
 	Vec2 PixelCoords = Vec2(0, 0);
 	TextureCoords UVW = { 0.0f, 0.0f, 0.0f };
 
+	// ShadowInfo
+	Matrix LightMVP;
+	Vec3 LightSpacePos;
+	bool IsInShadow = false;
+
 	ShaderArgs() 
 	{
 
 	}
 
-	ShaderArgs(Triangle* Tri, const Texture* Tex, const Material* Mat, const Vec3& CamPos, const Vec3& CamLookDir, const Vec3& LightPos, const Vec3& LightColor, const float& LightAmbient, const float& LightDiffuse, const float& LightSpecular, const int SHADER_TYPE)
+	ShaderArgs(Triangle* Tri, const Material* Mat, const Vec3& CamPos, const Vec3& CamLookDir, const float& Depth, const Matrix& LightMVP, const Vec3& LightPos, const Vec3& LightColor, const float& LightAmbient, const float& LightDiffuse, const float& LightSpecular, const int SHADER_TYPE)
 	{
 		this->Tri = Tri;
 		this->Mat = Mat;
-		this->Tex = Tex;
 		this->CamPos = CamPos;
 		this->CamLookDir = CamLookDir;
 		this->LightPos = LightPos;
@@ -1310,12 +1301,13 @@ struct ShaderArgs
 		this->LightDiffuse = LightDiffuse;
 		this->LightSpecular = LightSpecular;
 		this->ShaderType = SHADER_TYPE;
+		this->ViewedDepthCentroid = Depth;
 	}
 };
 
 namespace EngineShaders
 {
-	const auto WHACK_SHADER = [&](ShaderArgs& Args)
+	const auto WHACK_SHADER = [](ShaderArgs& Args)
 	{
 		// Compute the normalized direction from the vertex to the light source
 		Vec3 LDir = (Args.LightPos - ((Args.Tri->Points[0] + Args.Tri->Points[1] + Args.Tri->Points[2]) / 3.0f)).Normalized();
@@ -1331,7 +1323,7 @@ namespace EngineShaders
 		Args.Tri->Col = (AmbientCol + DiffuseCol) * Args.LightColor;
 	};
 
-	const auto Shader_Phong_LOW_LOD = [&](ShaderArgs& Args)
+	const auto Shader_Phong_LOW_LOD = [](ShaderArgs& Args)
 	{
 		Vec3 LDir = (Args.LightPos - ((Args.Tri->Points[0] + Args.Tri->Points[1] + Args.Tri->Points[2]) / 3.0f)).Normalized();
 
@@ -1346,7 +1338,7 @@ namespace EngineShaders
 		Args.Tri->Col.z = std::clamp<float>((AmbientCol.z + DiffuseCol.z), 0.0f, 255.0f);
 	};
 
-	const auto Shader_Phong = [&](ShaderArgs& Args)
+	const auto Shader_Phong = [](ShaderArgs& Args)
 	{
 		float Intensity = 1.0f;
 		Vec3 LDir = (Args.LightPos - ((Args.Tri->Points[0] + Args.Tri->Points[1] + Args.Tri->Points[2]) / 3.0f)).Normalized();
@@ -1367,14 +1359,14 @@ namespace EngineShaders
 		Args.Tri->Col.z = std::clamp<float>((AmbientCol.z + DiffuseCol.z + SpecularClr.z), 0.0f, 255.0f);
 	};
 
-	const auto Shader_Material = [&](ShaderArgs& Args)
+	const auto Shader_Material = [](ShaderArgs& Args)
 	{
 		Args.Tri->Col = Args.Mat->AmbientColor;
 	};
 
-	const auto Shader_Frag_Phong = [&](ShaderArgs& Args)
+	const auto Shader_Frag_Phong = [](ShaderArgs& Args)
 	{
-		Vec3 LDir = Args.LightPos.GetDirectionToVector(Args.FragPos).Normalized();
+		Vec3 LDir = Args.LightPos.GetDirectionToVector(Args.FragPos);
 		float Li = Args.FragNormal.Dot(LDir);
 
 		// Calculate the reflection direction using the formula: R = I - 2 * (I dot N) * N
@@ -1395,7 +1387,37 @@ namespace EngineShaders
 		Args.FragColor.A = 255.0f;
 	};
 
-	const auto Shader_Gradient = [&](ShaderArgs& Args)
+	const auto Shader_Frag_Phong_Shadows = [](ShaderArgs& Args)
+	{
+		Vec3 LDir = Args.LightPos.GetDirectionToVector(Args.FragPos);
+		float Li = Args.FragNormal.Dot(LDir);
+
+		// Calculate the reflection direction using the formula: R = I - 2 * (I dot N) * N
+		float Intensity = std::max<float>(0.0f, Li);
+		//Vec3 RDir = (LDir - Args.FragNormal * 2.0f * Li).Normalized();
+		Vec3 RDir = (-LDir).GetReflectection(Args.FragNormal);
+
+		// Calculate the specular intensity
+		float SpecularIntensity = pow(std::max<float>(0.0f, (-RDir).Dot(Args.CamLookDir)), Args.Mat->Shininess);
+
+		Vec3 AmbientCol = (Args.Mat->AmbientColor) * Args.LightAmbient;
+		Vec3 DiffuseCol = ((Args.LightColor * Intensity) + (Args.Mat->DiffuseColor * Intensity)) * Args.LightDiffuse;
+		Vec3 SpecularClr = ((Args.LightColor * Args.LightSpecular) + (Args.Mat->SpecularColor * Args.LightSpecular)) * SpecularIntensity;
+
+		float ShadowMult = 1.0f;
+
+		if (Args.IsInShadow)
+		{
+			ShadowMult = 0.5f;
+		}
+
+		Args.FragColor.R = std::clamp<float>((AmbientCol.x + DiffuseCol.x + SpecularClr.x) * ShadowMult, 0.0f, 255.0f);
+		Args.FragColor.G = std::clamp<float>((AmbientCol.y + DiffuseCol.y + SpecularClr.y) * ShadowMult, 0.0f, 255.0f);
+		Args.FragColor.B = std::clamp<float>((AmbientCol.z + DiffuseCol.z + SpecularClr.z) * ShadowMult, 0.0f, 255.0f);
+		Args.FragColor.A = 255.0f;
+	};
+
+	const auto Shader_Gradient = [](ShaderArgs& Args)
 	{
 		float Intensity = 1.0f;
 		Vec3 LDir = (Args.LightPos - Args.FragPos).Normalized();
@@ -1409,7 +1431,7 @@ namespace EngineShaders
 		Args.FragColor.A = 255.0f;
 	};
 
-	const auto Shader_Gradient_Centroid = [&](ShaderArgs& Args)
+	const auto Shader_Gradient_Centroid = [](ShaderArgs& Args)
 	{
 		Vec3 Centroid = ((Args.Tri->Points[0] + Args.Tri->Points[1] + Args.Tri->Points[2]) / 3.0f);
 		Vec3 BaryCoords = CalculateBarycentricCoordinatesScreenSpace(Args.PixelCoords, Vec2(Centroid.x, Centroid.y), Vec2(Args.Tri->Points[1].x, Args.Tri->Points[1].y), Vec2(Args.Tri->Points[2].x, Args.Tri->Points[2].y));
@@ -1427,14 +1449,51 @@ namespace EngineShaders
 		Args.FragColor.A = 255.0f;
 	};
 
-	const auto Shader_Texture_Only = [&](ShaderArgs& Args)
+	const auto Shader_Tex_Phong = [](ShaderArgs& Args)
+	{
+		Vec3 TexturCol = Vec3();
+
+		if (Args.Tri->Mat.TexA.Used)
+		{
+			TexturCol = Args.Tri->Mat.TexA.GetPixelColor(Args.UVW.u, 1.0f - Args.UVW.v).GetRGB();
+			Args.FragColor.R = std::clamp<float>(TexturCol.x, 0.0f, 255.0f);
+			Args.FragColor.G = std::clamp<float>(TexturCol.y, 0.0f, 255.0f);
+			Args.FragColor.B = std::clamp<float>(TexturCol.z, 0.0f, 255.0f);
+			Args.FragColor.A = 255.0f;
+		}
+		else
+		{
+			Shader_Frag_Phong(Args);
+		}
+		Vec3 LDir = Args.LightPos.GetDirectionToVector(Args.FragPos);
+		float Li = Args.FragNormal.Dot(LDir);
+
+		// Calculate the reflection direction using the formula: R = I - 2 * (I dot N) * N
+		float Intensity = std::max<float>(0.0f, Li);
+		//Vec3 RDir = (LDir - Args.FragNormal * 2.0f * Li).Normalized();
+		Vec3 RDir = (-LDir).GetReflectection(Args.FragNormal);
+
+		// Calculate the specular intensity
+		float SpecularIntensity = pow(std::max<float>(0.0f, (-RDir).Dot(Args.CamLookDir)), Args.Mat->Shininess);
+
+		Vec3 AmbientCol = (TexturCol)*Args.LightAmbient;
+		Vec3 DiffuseCol = ((Args.LightColor * Intensity) + (TexturCol * Intensity)) * Args.LightDiffuse;
+		Vec3 SpecularClr = ((Args.LightColor * Args.LightSpecular) + (TexturCol * Args.LightSpecular)) * SpecularIntensity;
+
+		Args.FragColor.R = std::clamp<float>((AmbientCol.x + DiffuseCol.x + SpecularClr.x), 0.0f, 255.0f);
+		Args.FragColor.G = std::clamp<float>((AmbientCol.y + DiffuseCol.y + SpecularClr.y), 0.0f, 255.0f);
+		Args.FragColor.B = std::clamp<float>((AmbientCol.z + DiffuseCol.z + SpecularClr.z), 0.0f, 255.0f);
+		Args.FragColor.A = 255.0f;
+	};
+
+	const auto Shader_Texture_Only = [](ShaderArgs& Args)
 	{
 
 		Vec3 TexturCol = Vec3();
 
 		if (Args.Tri->Mat.TexA.Used)
 		{
-			TexturCol = Args.Tri->Mat.TexA.GetPixelColor(Args.UVW.u, Args.UVW.v).GetRGB();
+			TexturCol = Args.Tri->Mat.TexA.GetPixelColor(Args.UVW.u, 1.0f - Args.UVW.v).GetRGB();
 			Args.FragColor.R = std::clamp<float>(TexturCol.x, 0.0f, 255.0f);
 			Args.FragColor.G = std::clamp<float>(TexturCol.y, 0.0f, 255.0f);
 			Args.FragColor.B = std::clamp<float>(TexturCol.z, 0.0f, 255.0f);
@@ -1447,7 +1506,7 @@ namespace EngineShaders
 	};
 }
 
-namespace Engine
+namespace TerraPGE
 {
 	std::string FpsStr = "Fps: ";
 	std::wstring FpsWStr = L"Fps: ";
@@ -1455,13 +1514,16 @@ namespace Engine
 	int sx = GetSystemMetrics(SM_CXSCREEN);
 	int sy = GetSystemMetrics(SM_CYSCREEN);
 
-	static float FOV = 90.0f;
-	static float FNEAR = 0.1f;
-	static float FFAR = 1000.f;
+	float FOV = 90.0f;
+	float FNEAR = 0.1f;
+	float FFAR = 150.0f;
+	int ShadowMapHeight = 512;
+	int ShadowMapWidth = 512;
 
 	bool FpsEngineCounter = true;
 	bool DoCull = true;
 	bool DoLighting = true;
+	bool DoShadows = true;
 	bool WireFrame = false;
     bool ShowTriLines = false;
 	bool DebugClip = false;
@@ -1469,6 +1531,8 @@ namespace Engine
 	bool CursorShow = false;
 	bool UpdateMouseIn = true;
 	bool ShowNormals = false;
+	bool DebugDepthBuffer = false;
+	bool DebugShadowMap = false;
 
 	Vec2 PrevMousePos;
 	Vec2 DeltaMouse;
@@ -1477,7 +1541,9 @@ namespace Engine
 	int Fps = 0;
 
 	float* DepthBuffer = new float[sx * sy];
+	float* ShadowMap = new float[ShadowMapWidth * ShadowMapHeight];
 
+	// Update screen info
 	void UpdateScreenInfo(GdiPP& Gdi)
 	{
 		Gdi.UpdateClientRgn();
@@ -1488,126 +1554,39 @@ namespace Engine
 		DepthBuffer = new float[sx * sy];
 	}
 
+	// Delete buffers
 	void EngineCleanup()
 	{
 		delete[] DepthBuffer;
+		delete[] ShadowMap;
 	}
 
-	void Run(WndCreator& Wnd, BrushPP& ClearBrush, DoTick_T DrawCallBack)
+	float SampleShadowMap(float* ShadowMap, float u, float v, int ShadowMapWidth, int ShadowMapHeight) 
 	{
-		// Init Variables
-		GdiPP EngineGdi = GdiPP(Wnd.Wnd, true);
-		sx = Wnd.GetClientArea().Width;
-		sy = Wnd.GetClientArea().Height;
+		// Clamp texture coordinates to avoid going out of bounds
+		u = std::clamp<float>(u, 0.0f, 1.0f);
+		v = std::clamp<float>(v, 0.0f, 1.0f);
 
-		delete[] DepthBuffer;
+		// Convert texture coordinates to array indices
+		int x = static_cast<int>(u * ShadowMapWidth);
+		int y = static_cast<int>(v * ShadowMapHeight);
 
-		DepthBuffer = new float[sx * sy];
+		// Sample the depth value from the shadow map
+		return ShadowMap[y * ShadowMapWidth + x];
+	}
 
-		EngineGdi.UpdateClientRgn();
+	void SetShadowMapValue(float* ShadowMap, float Depth, float u, float v, int ShadowMapWidth, int ShadowMapHeight)
+	{
+		// Clamp texture coordinates to avoid going out of bounds
+		u = std::clamp<float>(u, 0.0f, 1.0f);
+		v = std::clamp<float>(v, 0.0f, 1.0f);
 
-		MSG msg = { 0 };
-		double ElapsedTime = 0.0f;
-		double FpsCounter = 0.0f;
-		int FrameCounter = 0;
-		auto Start = std::chrono::system_clock::now();
+		// Convert texture coordinates to array indices
+		int x = static_cast<int>(u * ShadowMapWidth);
+		int y = static_cast<int>(v * ShadowMapHeight);
 
-		SetCursorPos(sx / 2, sy / 2);
-		GetCursorPos(&Tmp);
-		PrevMousePos = { (float)Tmp.x, (float)Tmp.y };
-
-		while (!GetAsyncKeyState(VK_RETURN))
-		{
-			Start = std::chrono::system_clock::now();
-
-			PeekMessageW(&msg, NULL, 0, 0, PM_REMOVE);
-
-			// Translate and Dispatch message to WindowProc
-			TranslateMessage(&msg);
-			DispatchMessageW(&msg);
-
-			// Check Msg
-			if (msg.message == WM_QUIT || msg.message == WM_CLOSE || msg.message == WM_DESTROY)
-			{
-				break;
-			}
-
-
-			// Check window focus and calc mouse deltas
-			if (Wnd.HasFocus())
-			{
-				if (UpdateMouseIn)
-				{
-					GetCursorPos(&Tmp);
-
-					DeltaMouse.x = Tmp.x - PrevMousePos.x;
-					DeltaMouse.y = -(Tmp.y - PrevMousePos.y);
-					DeltaMouse.x *= Sensitivity;
-					DeltaMouse.y *= Sensitivity;
-				}
-
-				if (LockCursor)
-					SetCursorPos(sx / 2, sy / 2);
-
-				GetCursorPos(&Tmp);
-				PrevMousePos = { (float)Tmp.x, (float)Tmp.y };
-
-				if (CursorShow == false)
-				{
-					while (ShowCursor(FALSE) >= 0) {}
-				}
-				else
-				{
-					while (ShowCursor(TRUE) <= 0) {}
-				}
-			}
-
-			// clear the screen
-			EngineGdi.Clear(GDIPP_FILLRECT, ClearBrush);
-
-			std::fill(DepthBuffer, DepthBuffer + sx * sy, Engine::FFAR);
-
-			// call draw code
-			DrawCallBack(EngineGdi, Wnd, (float)ElapsedTime);
-
-			if (FpsEngineCounter)
-			{
-#ifdef UNICODE
-				std::wstring Str = FpsWStr + std::to_wstring(Fps);
-				Wnd.SetWndTitle(Str);
-				EngineGdi.DrawStringW(20, 20, Str, RGB(255, 0, 0), TRANSPARENT);
-#endif
-#ifndef UNICODE
-				std::string Str = FpsStr + std::to_string(Fps);
-				Wnd.SetWndTitle(Str);
-				EngineGdi.DrawStringA(20, 20, Str, RGB(255, 0, 0), TRANSPARENT);
-#endif
-			}
-
-			// Draw to screen
-			EngineGdi.DrawDoubleBuffer();
-
-			ElapsedTime = std::chrono::duration<double>(std::chrono::system_clock::now() - Start).count();
-
-			if (FpsEngineCounter)
-			{
-				if (FpsCounter >= 1)
-				{
-					Fps = FrameCounter;
-					FrameCounter = 0;
-					FpsCounter = 0;
-				}
-				else
-				{
-					FrameCounter++;
-					FpsCounter += ElapsedTime;
-				}
-			}
-		}
-
-		Wnd.Destroy();
-
-		EngineCleanup();
+		// Sample the depth value from the shadow map
+		ShadowMap[y * ShadowMapWidth + x] = Depth;
 	}
 
 	// Adapted from: https://www.avrfreaks.net/sites/default/files/triangles.c
@@ -1615,6 +1594,9 @@ namespace Engine
 	void __fastcall RenderTriangle(int x1, int y1, int x2, int y2, int x3, int y3, float* DepthBuffer, GdiPP& Gdi, T&& Shader, ShaderArgs& Args)
 	{
 		Triangle& Tri = *Args.Tri;
+		float z = Args.ViewedDepthCentroid;
+		float FarNear = (TerraPGE::FFAR - TerraPGE::FNEAR);
+
 		float u1 = 0.0f;
 		float u2 = 0.0f;
 		float u3 = 0.0f;
@@ -1627,7 +1609,7 @@ namespace Engine
 
 		if (Tri.Mat.TexA.Used)
 		{
-		    u1 = Tri.TexCoords[0].u;
+			u1 = Tri.TexCoords[0].u;
 			u2 = Tri.TexCoords[1].u;
 			u3 = Tri.TexCoords[2].u;
 			v1 = Tri.TexCoords[0].v;
@@ -1727,11 +1709,11 @@ namespace Engine
 
 				for (int j = ax; j < bx; j++)
 				{
-					float z = Args.Tri->Points[0].z;
+					int idx = ContIdx(j, i, TerraPGE::sx);
 
-					float Depth = (z - Engine::FNEAR) / (Engine::FFAR - Engine::FNEAR);
-
-					int idx = ContIdx(j, i, Engine::sx);
+					Vec3 BaryCoords = CalculateBarycentricCoordinatesScreenSpace(Vec2((float)j, (float)i), Vec2((float)Tri.Points[0].x, (float)Tri.Points[0].y), Vec2((float)Tri.Points[1].x, (float)Tri.Points[1].y), Vec2((float)Tri.Points[2].x, (float)Tri.Points[2].y));
+					Vec3 InterpolatedPos = (Tri.VertexPositions[0] * BaryCoords.x) + (Tri.VertexPositions[1] * BaryCoords.y) + (Tri.VertexPositions[2] * BaryCoords.z);
+					float Depth = (z - TerraPGE::FNEAR) / FarNear;
 
 					if (Depth < DepthBuffer[idx])
 						DepthBuffer[idx] = Depth;
@@ -1739,37 +1721,56 @@ namespace Engine
 						continue;
 
 					tex_u = (1.0f - t) * tex_su + t * tex_eu;
-					tex_v = (1.0f - t) * tex_sv + t * tex_ev;
+					tex_v = (1.0f - t) * tex_sv + t* tex_ev;
 					tex_w = (1.0f - t) * tex_sw + t * tex_ew;
 					t += tstep;
 
 					// My changes start here
-					Vec3 BaryCoords = CalculateBarycentricCoordinatesScreenSpace(Vec2((float)j, (float)i), Vec2((float)Tri.Points[0].x, (float)Tri.Points[0].y), Vec2((float)Tri.Points[1].x, (float)Tri.Points[1].y), Vec2((float)Tri.Points[2].x, (float)Tri.Points[2].y));
-
-					Vec3 InterpolatedPos = (Tri.VertexPositions[0] * BaryCoords.x) + (Tri.VertexPositions[1] * BaryCoords.y) + (Tri.VertexPositions[2] * BaryCoords.z);
-
-					Vec3 InterpolatedScreenSpace = (Tri.Points[0] * BaryCoords.x) + (Tri.Points[1] * BaryCoords.y) + (Tri.Points[2] * BaryCoords.z);
-
-					Vec3 InterpolatedNormal = (Tri.FaceNormal * BaryCoords.x) + (Tri.FaceNormal * BaryCoords.y) + (Tri.FaceNormal * BaryCoords.z);
-					InterpolatedNormal.Normalize();
-
-					if (Args.ShaderType != SHADER_FRAGMENT || Tri.OverRideMaterialColor)
+					if (TerraPGE::DebugDepthBuffer || TerraPGE::DebugShadowMap)
 					{
-						if (Tri.Mat.TexA.Used)
+						float Val = Depth;
+
+						if (TerraPGE::DebugShadowMap)
 						{
-							Args.FragColor.R = Tri.Mat.TexA.GetPixelColor((float)j, (float)i).R;
-							Args.FragColor.G = Tri.Mat.TexA.GetPixelColor((float)j, (float)i).G;
-							Args.FragColor.B = Tri.Mat.TexA.GetPixelColor((float)j, (float)i).B;
+							int _idx = ContIdx(PixelRound(((j / TerraPGE::sx) * TerraPGE::ShadowMapWidth)), PixelRound(((i / TerraPGE::sy) * TerraPGE::ShadowMapHeight)), TerraPGE::ShadowMapWidth);
+							Val = ShadowMap[_idx];
 						}
-						else
+
+						Args.FragColor.R = 255.0f * Val;
+						Args.FragColor.G = 255.0f * Val;
+						Args.FragColor.B = 255.0f * Val;
+					}
+					else if (Args.ShaderType != SHADER_FRAGMENT || Tri.OverRideMaterialColor || !TerraPGE::DoLighting)
+					{
+						if (Tri.OverRideMaterialColor)
 						{
 							Args.FragColor.R = Tri.Col.x;
 							Args.FragColor.G = Tri.Col.y;
 							Args.FragColor.B = Tri.Col.z;
 						}
+						else if (Tri.Mat.TexA.Used)
+						{
+							Vec3 TexturCol = Args.Tri->Mat.TexA.GetPixelColor(tex_u, 1.0f - tex_v).GetRGB();
+							Args.FragColor.R = TexturCol.x;
+							Args.FragColor.G = TexturCol.y;
+							Args.FragColor.B = TexturCol.z;
+						}
+						else
+						{
+							Args.FragColor.R = Tri.Mat.AmbientColor.x;
+							Args.FragColor.G = Tri.Mat.AmbientColor.y;
+							Args.FragColor.B = Tri.Mat.AmbientColor.z;
+						}
 					}
 					else
 					{
+						Vec3 InterpolatedNormal = ((Tri.FaceNormal * BaryCoords.x) + (Tri.FaceNormal * BaryCoords.y) + (Tri.FaceNormal * BaryCoords.z)).Normalized();
+
+						Vec3 ProjectedPos = InterpolatedPos * Args.LightMVP;
+						ProjectedPos.x = (ProjectedPos.x + 1.0f) * 0.5f * TerraPGE::sx; // TerraPGE::sx is screen width
+						ProjectedPos.y = (1.0f - ProjectedPos.y) * 0.5f * TerraPGE::sy; // TerraPGE::sy is screen height
+						ProjectedPos.z = ProjectedPos.z; // Z remains the same (or can be scaled for depth range)
+
 						Args.FragPos = InterpolatedPos;
 						Args.FragNormal = InterpolatedNormal;
 						Args.UVW = { tex_u, tex_v, tex_w };
@@ -1778,7 +1779,7 @@ namespace Engine
 						Shader(Args);
 					}
 
-					Gdi.SetPixel(j, i, RGB(PixelRound(Args.FragColor.R), PixelRound(Args.FragColor.G), PixelRound(Args.FragColor.B)));
+					Gdi.QuickSetPixel(j, i, RGB(PixelRound(Args.FragColor.R), PixelRound(Args.FragColor.G), PixelRound(Args.FragColor.B)));
 				}
 
 			}
@@ -1830,11 +1831,11 @@ namespace Engine
 
 				for (int j = ax; j < bx; j++)
 				{
-					float z = Args.Tri->Points[0].z;
+					Vec3 BaryCoords = CalculateBarycentricCoordinatesScreenSpace(Vec2((float)j, (float)i), Vec2((float)Tri.Points[0].x, (float)Tri.Points[0].y), Vec2((float)Tri.Points[1].x, (float)Tri.Points[1].y), Vec2((float)Tri.Points[2].x, (float)Tri.Points[2].y));
+					Vec3 InterpolatedPos = (Tri.VertexPositions[0] * BaryCoords.x) + (Tri.VertexPositions[1] * BaryCoords.y) + (Tri.VertexPositions[2] * BaryCoords.z);
+					float Depth = (z - TerraPGE::FNEAR) / FarNear;
 
-					float Depth = (z - Engine::FNEAR) / (Engine::FFAR - Engine::FNEAR);
-
-					int idx = ContIdx(j, i, Engine::sx);
+					int idx = ContIdx(j, i, TerraPGE::sx);
 
 					if (Depth < DepthBuffer[idx])
 						DepthBuffer[idx] = Depth;
@@ -1847,31 +1848,51 @@ namespace Engine
 					t += tstep;
 
 					// My changes start here
-					Vec3 BaryCoords = CalculateBarycentricCoordinatesScreenSpace(Vec2((float)j, (float)i), Vec2(Tri.Points[0].x, Tri.Points[0].y), Vec2(Tri.Points[1].x, Tri.Points[1].y), Vec2(Tri.Points[2].x, Tri.Points[2].y));
-
-					Vec3 InterpolatedPos = (Tri.VertexPositions[0] * BaryCoords.x) + (Tri.VertexPositions[1] * BaryCoords.y) + (Tri.VertexPositions[2] * BaryCoords.z);
-
-					Vec3 InterpolatedScreenSpace = (Tri.Points[0] * BaryCoords.x) + (Tri.Points[1] * BaryCoords.y) + (Tri.Points[2] * BaryCoords.z);
-
-					Vec3 InterpolatedNormal = ((Tri.FaceNormal * BaryCoords.x) + (Tri.FaceNormal * BaryCoords.y) + (Tri.FaceNormal * BaryCoords.z)).Normalized();
-
-					if (Args.ShaderType != SHADER_FRAGMENT || Tri.OverRideMaterialColor)
+					if (TerraPGE::DebugDepthBuffer || TerraPGE::DebugShadowMap)
 					{
-						if (Tri.Mat.TexA.Used)
+						float Val = Depth;
+
+						if (TerraPGE::DebugShadowMap)
 						{
-							Args.FragColor.R = Tri.Mat.TexA.GetPixelColor((float)j, (float)i).R;
-							Args.FragColor.G = Tri.Mat.TexA.GetPixelColor((float)j, (float)i).G;
-							Args.FragColor.B = Tri.Mat.TexA.GetPixelColor((float)j, (float)i).B;
+							int _idx = ContIdx(PixelRound(((j / TerraPGE::sx) * TerraPGE::ShadowMapWidth)), PixelRound(((i / TerraPGE::sy) * TerraPGE::ShadowMapHeight)), TerraPGE::ShadowMapWidth);
+							Val = ShadowMap[_idx];
 						}
-						else
+
+						Args.FragColor.R = 255.0f * Val;
+						Args.FragColor.G = 255.0f * Val;
+						Args.FragColor.B = 255.0f * Val;
+					}
+					else if (Args.ShaderType != SHADER_FRAGMENT || Tri.OverRideMaterialColor || !TerraPGE::DoLighting)
+					{
+						if (Tri.OverRideMaterialColor)
 						{
 							Args.FragColor.R = Tri.Col.x;
 							Args.FragColor.G = Tri.Col.y;
 							Args.FragColor.B = Tri.Col.z;
 						}
+						else if (Tri.Mat.TexA.Used)
+						{
+							Vec3 TexturCol = Args.Tri->Mat.TexA.GetPixelColor(tex_u, 1.0f - tex_v).GetRGB();
+							Args.FragColor.R = TexturCol.x;
+							Args.FragColor.G = TexturCol.y;
+							Args.FragColor.B = TexturCol.z;
+						}
+						else
+						{
+							Args.FragColor.R = Tri.Mat.AmbientColor.x;
+							Args.FragColor.G = Tri.Mat.AmbientColor.y;
+							Args.FragColor.B = Tri.Mat.AmbientColor.z;
+						}
 					}
 					else
 					{
+						Vec3 InterpolatedNormal = ((Tri.FaceNormal * BaryCoords.x) + (Tri.FaceNormal * BaryCoords.y) + (Tri.FaceNormal * BaryCoords.z)).Normalized();
+
+						Vec3 ProjectedPos = InterpolatedPos * Args.LightMVP;
+						ProjectedPos.x = (ProjectedPos.x + 1.0f) * 0.5f * TerraPGE::sx; // TerraPGE::sx is screen width
+						ProjectedPos.y = (1.0f - ProjectedPos.y) * 0.5f * TerraPGE::sy; // TerraPGE::sy is screen height
+						ProjectedPos.z = ProjectedPos.z; // Z remains the same (or can be scaled for depth range)
+
 						Args.FragPos = InterpolatedPos;
 						Args.FragNormal = InterpolatedNormal;
 						Args.UVW = { tex_u, tex_v, tex_w };
@@ -1880,12 +1901,234 @@ namespace Engine
 						Shader(Args);
 					}
 
-					Gdi.SetPixel(j, i, RGB(PixelRound(Args.FragColor.R), PixelRound(Args.FragColor.G), PixelRound(Args.FragColor.B)));
+					Gdi.QuickSetPixel(j, i, RGB(PixelRound(Args.FragColor.R), PixelRound(Args.FragColor.G), PixelRound(Args.FragColor.B)));
 				}
 			}
 		}
 	}
 
+	// Render process but writes to buffer only
+	void __fastcall RenderTriangleDepthOnly(int x1, int y1, int x2, int y2, int x3, int y3, float* Buffer, float DepthCentroid, Triangle* Tri)
+	{
+		float FarNear = (TerraPGE::FFAR - TerraPGE::FNEAR);
+		float Depth = (DepthCentroid - TerraPGE::FNEAR) / FarNear; // This should be calculated using an interpolated position but i havent figured it out yet
+
+		if (y2 < y1)
+		{
+			std::swap(y1, y2);
+			std::swap(x1, x2);
+		}
+
+		if (y3 < y1)
+		{
+			std::swap(y1, y3);
+			std::swap(x1, x3);
+		}
+
+		if (y3 < y2)
+		{
+			std::swap(y2, y3);
+			std::swap(x2, x3);
+		}
+
+		int dy1 = y2 - y1;
+		int dx1 = x2 - x1;
+
+		int dy2 = y3 - y1;
+		int dx2 = x3 - x1;
+
+		float dax_step = 0, dbx_step = 0;
+
+		if (dy1) dax_step = dx1 / (float)abs(dy1);
+		if (dy2) dbx_step = dx2 / (float)abs(dy2);
+
+		if (dy1)
+		{
+			for (int i = y1; i <= y2; i++)
+			{
+				int ax = x1 + (int)((float)(i - y1) * dax_step);
+				int bx = x1 + (int)((float)(i - y1) * dbx_step);
+
+				if (ax > bx)
+				{
+					std::swap(ax, bx);
+				}
+
+				float tstep = 1.0f / ((float)(bx - ax));
+				float t = 0.0f;
+
+				for (int j = ax; j < bx; j++)
+				{ 
+					if (Depth < SampleShadowMap(Buffer, (j / TerraPGE::sx), (i / TerraPGE::sy), TerraPGE::ShadowMapWidth, TerraPGE::ShadowMapHeight))
+						SetShadowMapValue(Buffer, (j / TerraPGE::sx), (i / TerraPGE::sy), Depth, TerraPGE::ShadowMapWidth, TerraPGE::ShadowMapHeight);
+					else
+						continue;
+
+					t += tstep;
+				}
+
+			}
+		}
+
+		dy1 = y3 - y2;
+		dx1 = x3 - x2;
+
+		if (dy1) dax_step = dx1 / (float)abs(dy1);
+		if (dy2) dbx_step = dx2 / (float)abs(dy2);
+
+		if (dy1)
+		{
+			for (int i = y2; i <= y3; i++)
+			{
+				int ax = x2 + (int)((float)(i - y2) * dax_step);
+				int bx = x1 + (int)((float)(i - y1) * dbx_step);
+
+				if (ax > bx)
+				{
+					std::swap(ax, bx);
+				}
+
+				float tstep = 1.0f / ((float)(bx - ax));
+				float t = 0.0f;
+
+				for (int j = ax; j < bx; j++)
+				{
+					if (Depth < SampleShadowMap(Buffer, j, i, TerraPGE::ShadowMapWidth, TerraPGE::ShadowMapHeight))
+						SetShadowMapValue(Buffer, j, i, Depth, TerraPGE::ShadowMapWidth, TerraPGE::ShadowMapHeight);
+					else
+						continue;
+
+					t += tstep;
+				}
+			}
+		}
+	}
+
+
+	//TerraGL (Proposed name for GdiPP)
+	//TerraGE (Proposed name for this engine)
+	//Engine Pipeline (In a Loop): Check Window State -> Check Inputs -> Clear Screen -> Make Draw Calls (Rendering Pipeline) -> Draw Double Buffer
+	void Run(WndCreator& Wnd, BrushPP& ClearBrush, DoTick_T DrawCallBack)
+	{
+		// Init Variables
+		GdiPP EngineGdi = GdiPP(Wnd.Wnd, true);
+		sx = Wnd.GetClientArea().Width;
+		sy = Wnd.GetClientArea().Height;
+
+		delete[] DepthBuffer;
+
+		DepthBuffer = new float[(SIZE_T)(sx * sy)];
+
+		EngineGdi.UpdateClientRgn();
+
+		MSG msg = { 0 };
+		double ElapsedTime = 0.0f;
+		double FpsCounter = 0.0f;
+		int FrameCounter = 0;
+		auto Start = std::chrono::system_clock::now();
+
+		SetCursorPos(sx / 2, sy / 2);
+		GetCursorPos(&Tmp);
+		PrevMousePos = { (float)Tmp.x, (float)Tmp.y };
+
+		while (!GetAsyncKeyState(VK_RETURN))
+		{
+			Start = std::chrono::system_clock::now();
+
+			PeekMessageW(&msg, NULL, 0, 0, PM_REMOVE);
+
+			// Translate and Dispatch message to WindowProc
+			TranslateMessage(&msg);
+			DispatchMessageW(&msg);
+
+			// Check Msg
+			if (msg.message == WM_QUIT || msg.message == WM_CLOSE || msg.message == WM_DESTROY)
+			{
+				break;
+			}
+
+
+			// Check window focus and calc mouse deltas
+			if (Wnd.HasFocus())
+			{
+				if (UpdateMouseIn)
+				{
+					GetCursorPos(&Tmp);
+
+					DeltaMouse.x = Tmp.x - PrevMousePos.x;
+					DeltaMouse.y = -(Tmp.y - PrevMousePos.y);
+					DeltaMouse.x *= Sensitivity;
+					DeltaMouse.y *= Sensitivity;
+				}
+
+				if (LockCursor)
+					SetCursorPos(sx / 2, sy / 2);
+
+				GetCursorPos(&Tmp);
+				PrevMousePos = { (float)Tmp.x, (float)Tmp.y };
+
+				if (CursorShow == false)
+				{
+					while (ShowCursor(FALSE) >= 0) {}
+				}
+				else
+				{
+					while (ShowCursor(TRUE) <= 0) {}
+				}
+			}
+
+			// clear the screen
+			EngineGdi.Clear(GDIPP_PIXELCLEAR, ClearBrush);
+
+			std::fill(DepthBuffer, DepthBuffer + sx * sy, TerraPGE::FFAR);
+			std::fill(ShadowMap, ShadowMap + ShadowMapWidth * ShadowMapHeight, TerraPGE::FFAR);
+
+			// call draw code
+			DrawCallBack(EngineGdi, Wnd, (float)ElapsedTime);
+
+			if (FpsEngineCounter)
+			{
+#ifdef UNICODE
+				std::wstring Str = FpsWStr + std::to_wstring(Fps);
+				Wnd.SetWndTitle(Str);
+				EngineGdi.DrawStringW(20, 20, Str, RGB(255, 0, 0), TRANSPARENT);
+#endif
+#ifndef UNICODE
+				std::string Str = FpsStr + std::to_string(Fps);
+				Wnd.SetWndTitle(Str);
+				EngineGdi.DrawStringA(20, 20, Str, RGB(255, 0, 0), TRANSPARENT);
+#endif
+			}
+
+			// Draw to screen
+			EngineGdi.DrawDoubleBuffer();
+
+			ElapsedTime = std::chrono::duration<double>(std::chrono::system_clock::now() - Start).count();
+
+			if (FpsEngineCounter)
+			{
+				if (FpsCounter >= 1)
+				{
+					Fps = FrameCounter;
+					FrameCounter = 0;
+					FpsCounter = 0;
+				}
+				else
+				{
+					FrameCounter++;
+					FpsCounter += ElapsedTime;
+				}
+			}
+		}
+
+		Wnd.Destroy();
+
+		EngineCleanup();
+	}
+
+	// Render function for rendering entire meshes
+	//Rendering Pipeline: Recieve call with mesh info including positions & lights sources -> Calc and apply matrices + normals -> backface culling
+	// -> Clipping + Frustum culling -> Call Draw Triangle from graphics API with shader supplied -> Shader called from triangle routine with pixel info + normals -> SetPixel
 	template<typename T>
 	void RenderMesh(GdiPP& Gdi, Camera& Cam, const Mesh& MeshToRender, const Vec3& Scalar, const Vec3& RotationRads, const Vec3& Pos, Vec3 LightPos, const Vec3& LightColor, const float& LightAmbient, const float& LightDiffuse, const float& LightSpecular, T&& Shader, const int SHADER_TYPE = SHADER_FRAGMENT)
 	{
@@ -1893,8 +2136,15 @@ namespace Engine
 		const Matrix RotM = Matrix::CreateRotationMatrix(RotationRads); // Rotation Matrix
 		const Matrix TransMat = Matrix::CreateTranslationMatrix(Pos); // Translation Matrix
 		ObjectMatrix = ((ObjectMatrix * RotM) * TransMat); // Matrices are applied in SRT order 
+		// Normal Matrix (it's weird)
 		Matrix NormalMat = ObjectMatrix.QuickInversed();
 		NormalMat.Transpose3x3();
+
+		// Light matrices (For shadow mapping)
+		Matrix LightProjectionMat;
+		LightProjectionMat.MakeOrthoMatrix(-20.0f, 20.0f, -20.0f, 20.0f, TerraPGE::FNEAR, TerraPGE::FFAR);
+		Matrix LightViewMatrix = Matrix::CalcViewMatrix(LightPos, Cam.Pos, Vec3(0, 1, 0));
+
 
 		std::vector<Triangle> TrisToRender = {};
 		TrisToRender.reserve(MeshToRender.Triangles.size());
@@ -1904,12 +2154,13 @@ namespace Engine
 		Vec3 NormPos = Vec3(0, 0, 0);
 		Vec3 NormDir = Vec3(0, 0, 0);
 
+		float ViewedZCentroid = 0.0f;
+
 		// Project and translate object 
 		for (const auto& Tri : MeshToRender.Triangles)
 		{
 			// 3D Space
 			Triangle Proj = Tri;
-
 			Proj.ApplyMatrix(ObjectMatrix);
 
 			Vec3 TriNormal = Tri.FaceNormal;
@@ -1948,10 +2199,27 @@ namespace Engine
 
 			Proj.FaceNormal = TriNormal;
 
-			if ((TriNormal.Dot(Proj.Points[0] - Cam.Pos) <= 0.0f) || !DoCull || !MeshToRender.BackfaceCulling) // backface culling
+			// Shadow Mapping
+			if (TerraPGE::DoShadows)
+			{
+				Triangle ShadowTestProj = Proj;
+
+				ShadowTestProj.ApplyMatrix(LightViewMatrix); // light view matrix
+
+				float ViewedZCentroidLight = (ShadowTestProj.Points[0].z + ShadowTestProj.Points[1].z + ShadowTestProj.Points[2].z) / 3.0f;
+
+				ShadowTestProj.ApplyMatrix(LightProjectionMat); // light proj matrix
+
+				RenderTriangleDepthOnly(PixelRound(ShadowTestProj.Points[0].x), PixelRound(ShadowTestProj.Points[0].y),PixelRound(ShadowTestProj.Points[1].x), PixelRound(ShadowTestProj.Points[1].y), PixelRound(ShadowTestProj.Points[2].x), PixelRound(ShadowTestProj.Points[2].y), TerraPGE::ShadowMap, ViewedZCentroidLight, &ShadowTestProj);
+			}
+
+			if ((TriNormal.Dot(Proj.Points[0] - Cam.Pos) < 0.0f) || !DoCull || !MeshToRender.BackfaceCulling) // backface culling
 			{
 				// 3d Space -> Viewed Space
 				Proj.ApplyMatrix(Cam.ViewMatrix);
+
+				// Calc depth centroid for the object (easier than calculating per pixel)
+				ViewedZCentroid = (Proj.Points[0].z + Proj.Points[1].z + Proj.Points[2].z) / 3.0f;
 
 				Vec3 PlaneNormal = { 0.0f, 0.0f, 1.0f };
 				int Count = Proj.ClipAgainstPlane(Cam.NearPlane, PlaneNormal, Clipped[0], Clipped[1], DebugClip);
@@ -1963,12 +2231,14 @@ namespace Engine
 				{
 					Triangle ToProj = Clipped[i];
 
-					// 3d Space -> Screen Space
+					// Viewed Space -> Projected space
 					ToProj = Cam.ProjectTriangle(&ToProj); // Project from 3D Space To Screen Space
 
-					// Offset to normalized space
+					// Should be a perspective divide here but im lazy
+
+					// Offset to normalized space (Ndc -> Screen Space)
 					ToProj.Translate(Vec3(1.0f, 1.0f, 0.0f));
-					ToProj.Scale(Vec3((float)(Engine::sx * 0.5f), (float)(Engine::sy * 0.5f), 1));
+					ToProj.Scale(Vec3((float)(TerraPGE::sx * 0.5f), (float)(TerraPGE::sy * 0.5f), 1));
 					ToProj.Translate(Vec3(-1, -1, 0));
 
 					TrisToRender.push_back(ToProj);
@@ -1986,7 +2256,6 @@ namespace Engine
 
 		for (const auto& Proj : TrisToRender)
 		{
-			Triangle Clipped[2];
 			std::vector<Triangle> ListTris;
 
 			ListTris.push_back(Proj);
@@ -2005,22 +2274,22 @@ namespace Engine
 					{
 						case 0:
 						{
-							NewTrisToAdd = Test.ClipAgainstPlane({ 0.0f, 0.0f, 0.0f }, { 0.0f, 1.0f, 0.0f }, Clipped[0], Clipped[1], Engine::DebugClip);
+							NewTrisToAdd = Test.ClipAgainstPlane({ 0.0f, 0.0f, 0.0f }, { 0.0f, 1.0f, 0.0f }, Clipped[0], Clipped[1], TerraPGE::DebugClip);
 							break;
 						}
 						case 1:
 						{
-							NewTrisToAdd = Test.ClipAgainstPlane({ 0.0f, (float)sy - 1, 0.0f }, { 0.0f, -1.0f, 0.0f }, Clipped[0], Clipped[1], Engine::DebugClip);
+							NewTrisToAdd = Test.ClipAgainstPlane({ 0.0f, (float)sy - 1, 0.0f }, { 0.0f, -1.0f, 0.0f }, Clipped[0], Clipped[1], TerraPGE::DebugClip);
 							break;
 						}
 						case 2:
 						{
-							NewTrisToAdd = Test.ClipAgainstPlane({ 0.0f, 0.0f, 0.0f }, { 1.0f, 0.0f, 0.0f }, Clipped[0], Clipped[1], Engine::DebugClip);
+							NewTrisToAdd = Test.ClipAgainstPlane({ 0.0f, 0.0f, 0.0f }, { 1.0f, 0.0f, 0.0f }, Clipped[0], Clipped[1], TerraPGE::DebugClip);
 							break;
 						}
 						case 3:
 						{
-							NewTrisToAdd = Test.ClipAgainstPlane({ (float)sx - 1, 0.0f, 0.0f }, { -1.0f, 0.0f, 0.0f }, Clipped[0], Clipped[1], Engine::DebugClip);
+							NewTrisToAdd = Test.ClipAgainstPlane({ (float)sx - 1, 0.0f, 0.0f }, { -1.0f, 0.0f, 0.0f }, Clipped[0], Clipped[1], TerraPGE::DebugClip);
 							break;
 						}
 					}
@@ -2038,17 +2307,13 @@ namespace Engine
 			{
 				const Material* MatToUse = nullptr;
 				const Texture* TexToUse = nullptr;
+
 				if (!MeshToRender.UseSingleMat)
 					MatToUse = &ToDraw.Mat;
 				else
 					MatToUse = &MeshToRender.Mat;
 
-				if (ToDraw.UseTextureColor)
-					TexToUse = &ToDraw.Mat.TexA;
-//				else
-					//TexToUse = &MeshToRender.TexToUse;
-
-				ShaderArgs Args(&ToDraw, TexToUse, MatToUse, Cam.Pos, Cam.LookDir, LightPos, LightColor, LightAmbient, LightDiffuse, LightSpecular, SHADER_TYPE);
+				ShaderArgs Args(&ToDraw, MatToUse, Cam.Pos, Cam.LookDir, ViewedZCentroid, LightProjectionMat * LightViewMatrix, LightPos, LightColor, LightAmbient, LightDiffuse, LightSpecular, SHADER_TYPE);
 
 				// Calc lighting
 				if ((DoLighting) && SHADER_TYPE == SHADER_TRIANGLE)

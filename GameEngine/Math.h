@@ -109,6 +109,12 @@ public:
 
 	void CalcTranslationMatrix(const Vec3&);
 
+	void  MakeOrthoMatrix(const float& Left, const float& Right, const float& Top, const float& Bottom, const float& Near, const float& Far);
+
+	static Matrix CalcViewMatrix(const Vec3& Pos, const Vec3& Target, const Vec3& Up);
+
+	void MakeViewMatrix(const Vec3& Pos, const Vec3& Target, const Vec3& Up);
+
 	Matrix operator*(const Matrix& b) const
 	{
 		Matrix result;
@@ -244,7 +250,7 @@ public:
 		this->fMatrix[3][3] = 1.0f;
 	}
 
-public:
+	public:
 	union
 	{
 		struct
@@ -320,7 +326,7 @@ public:
 		this->x = _x;
 		this->y = _y;
 		this->z = _z;
-	}
+ 	}
 
 	Vec4 MakeVec4();
 
@@ -479,7 +485,24 @@ public:
 		return Angles;
 	}
 
-	Vec3 GetDirectionToVector(const Vec3 b) const
+	Vec3 LerpedTo(const Vec3& B, float t)
+	{
+		return Vec3(this->x + (B.x - this->x) * t, this->y + (B.y - this->y) * t, this->z + (B.z - this->z) * t);
+	}
+
+	static Vec3 Lerp(const Vec3& A, const Vec3& B, float t) 
+	{
+		return Vec3(A.x + (B.x - A.x) * t, A.y + (B.y - A.y) * t, A.z + (B.z - A.z) * t);
+	}
+
+	void Lerped(const Vec3& B, float t)
+	{
+		this->x + (B.x - this->x) * t;
+		this->y + (B.y - this->y) * t;
+		this->z + (B.z - this->z) * t;
+	}
+
+	Vec3 __inline __fastcall GetDirectionToVector(const Vec3 b) const
 	{
 		return (*this - b).Normalized();
 	}
@@ -805,6 +828,74 @@ void Matrix::CalcRotationMatrix(const Vec3& RotationDeg) // pitch yaw roll
 	//return A;
 }
 
+void __fastcall Matrix::MakeOrthoMatrix(const float& Left, const float& Right, const float& Top, const float& Bottom, const float& Near, const float& Far)
+{
+	this->fMatrix[0][0] = 2.0f / (Right - Left);
+	this->fMatrix[1][1] = 2.0f / (Top - Bottom);
+	this->fMatrix[2][2] = -2.0f / (Far - Near);
+	this->fMatrix[3][3] = 1.0f;
+
+	this->fMatrix[3][0] = -(Right + Left) / (Right - Left);
+	this->fMatrix[3][1] = -(Top + Bottom) / (Top - Bottom);
+	this->fMatrix[3][2] = -(Far + Near) / (Far - Near);
+
+	// Zero out the rest of the matrix
+	this->fMatrix[0][1] = this->fMatrix[0][2] = this->fMatrix[0][3] = 0.0f;
+	this->fMatrix[1][0] = this->fMatrix[1][2] = this->fMatrix[1][3] = 0.0f;
+	this->fMatrix[2][0] = this->fMatrix[2][1] = this->fMatrix[2][3] = 0.0f;
+}
+
+void __fastcall Matrix::MakeViewMatrix(const Vec3& Pos, const Vec3& Target, const Vec3& Up)
+{
+	Vec3 NewForward = (Target - Pos).Normalized();
+
+	Vec3 NewUp = (Up - (NewForward * Up.Dot(NewForward))).Normalized();
+
+	Vec3 NewRight = NewUp.Cross(NewForward);
+
+	this->fMatrix[0][0] = NewRight.x;	    this->fMatrix[0][1] = NewRight.y;	    this->fMatrix[0][2] = NewRight.z;      this->fMatrix[0][3] = 0.0f;
+	this->fMatrix[1][0] = NewUp.x;		    this->fMatrix[1][1] = NewUp.y;		    this->fMatrix[1][2] = NewUp.z;         this->fMatrix[1][3] = 0.0f;
+	this->fMatrix[2][0] = NewForward.x;		this->fMatrix[2][1] = NewForward.y;		this->fMatrix[2][2] = NewForward.z;    this->fMatrix[2][3] = 0.0f;
+	this->fMatrix[3][0] = Pos.x;		    this->fMatrix[3][1] = Pos.y;	        this->fMatrix[3][2] = Pos.z;           this->fMatrix[3][3] = 1.0f;
+}
+
+Matrix Matrix::CalcViewMatrix(const Vec3& Pos, const Vec3& Target, const Vec3& Up)
+{
+	Matrix ViewMat;
+
+	Vec3 NewForward = (Target - Pos).Normalized();
+
+	Vec3 NewUp = (Up - (NewForward * Up.Dot(NewForward))).Normalized();
+
+	Vec3 NewRight = NewUp.Cross(NewForward);
+
+	ViewMat.fMatrix[0][0] = NewRight.x;	    ViewMat.fMatrix[0][1] = NewRight.y;	    ViewMat.fMatrix[0][2] = NewRight.z;      ViewMat.fMatrix[0][3] = 0.0f;
+	ViewMat.fMatrix[1][0] = NewUp.x;	    ViewMat.fMatrix[1][1] = NewUp.y;		ViewMat.fMatrix[1][2] = NewUp.z;         ViewMat.fMatrix[1][3] = 0.0f;
+	ViewMat.fMatrix[2][0] = NewForward.x;   ViewMat.fMatrix[2][1] = NewForward.y;	ViewMat.fMatrix[2][2] = NewForward.z;    ViewMat.fMatrix[2][3] = 0.0f;
+	ViewMat.fMatrix[3][0] = Pos.x;		    ViewMat.fMatrix[3][1] = Pos.y;	        ViewMat.fMatrix[3][2] = Pos.z;           ViewMat.fMatrix[3][3] = 1.0f;
+
+	return ViewMat;
+}
+
+static Matrix CalcOrthoMatrix(const float& Left, const float& Right, const float& Top, const float& Bottom, const float& Near, const float& Far)
+{
+	Matrix OrthoMat;
+
+	OrthoMat.fMatrix[0][0] = 2.0f / (Right - Left);
+	OrthoMat.fMatrix[1][1] = 2.0f / (Top - Bottom);
+	OrthoMat.fMatrix[2][2] = -2.0f / (Far - Near);
+	OrthoMat.fMatrix[3][3] = 1.0f;
+
+	OrthoMat.fMatrix[3][0] = -(Right + Left) / (Right - Left);
+	OrthoMat.fMatrix[3][1] = -(Top + Bottom) / (Top - Bottom);
+	OrthoMat.fMatrix[3][2] = -(Far + Near) / (Far - Near);
+
+	// Zero out the rest of the matrix
+	OrthoMat.fMatrix[0][1] = OrthoMat.fMatrix[0][2] = OrthoMat.fMatrix[0][3] = 0.0f;
+	OrthoMat.fMatrix[1][0] = OrthoMat.fMatrix[1][2] = OrthoMat.fMatrix[1][3] = 0.0f;
+	OrthoMat.fMatrix[2][0] = OrthoMat.fMatrix[2][1] = OrthoMat.fMatrix[2][3] = 0.0f;
+}
+
 Vec3 CalculateBarycentricCoordinates(const Vec3& A, const Vec3& B, const Vec3& C, const Vec3& P)
 {
 	// Calculate vectors from vertex A to points B and C
@@ -847,19 +938,19 @@ class Vec4
 		this->w = 1.0f;
 	}
 
-	Vec4(float _x, float _y, float _z)
-	{
-		this->x = _x;
-		this->y = _y;
-		this->z = _z;
-		this->w = 1.0f;
-	}
-
 	Vec4(float _x, float _y, float _z, float _w)
 	{
 		this->x = _x;
 		this->y = _y;
 		this->z = _z;
+		this->w = _w;
+	}
+
+	Vec4(const Vec3& _Vec, float _w)
+	{
+		this->x = _Vec.x;
+		this->y = _Vec.y;
+		this->z = _Vec.z;
 		this->w = _w;
 	}
 
@@ -871,6 +962,16 @@ class Vec4
 	__inline Vec3 GetVec3()
 	{
 		return Vec3(this->x, this->y, this->z);
+	}
+
+	void __inline CorrectPerspective()
+	{
+		if (this->w != 0)
+		{
+			this->x /= w;
+			this->x /= y;
+			this->x /= z;
+		}
 	}
 
 	Vec4 operator * (const Matrix& b) const
@@ -895,6 +996,113 @@ class Vec4
 		this->y = Tmpx * b.fMatrix[0][1] + Tmpy * b.fMatrix[1][1] + Tmpz * b.fMatrix[2][1] + this->w * b.fMatrix[3][1];
 		this->z = Tmpx * b.fMatrix[0][2] + Tmpy * b.fMatrix[1][2] + Tmpz * b.fMatrix[2][2] + this->w * b.fMatrix[3][2];
 		this->w = Tmpx * b.fMatrix[0][3] + Tmpy * b.fMatrix[1][3] + Tmpz * b.fMatrix[2][3] + this->w * b.fMatrix[3][3];
+
+		this->CorrectPerspective();
+	}
+
+	Vec4& operator=(const Vec3& b) 
+	{
+		x = b.x;
+		y = b.y;
+		z = b.z;
+		w = 1.0f;
+		return *this;
+	}
+
+	Vec4 operator-(const Vec3& b) const
+	{
+		return
+		{
+			this->x - b.x,
+			this->y - b.y,
+			this->z - b.z,
+			this->w
+		};
+	}
+
+	Vec4 operator+(const Vec3& b) const
+	{
+		return
+		{
+			this->x + b.x,
+			this->y + b.y,
+			this->z + b.z,
+			this->w
+		};
+	}
+
+	void operator+=(const Vec3& b)
+	{
+		this->x += b.x;
+		this->y += b.y;
+		this->z += b.z;
+	}
+
+	Vec4 operator*(const Vec3& b) const
+	{
+		return
+		{
+			this->x * b.x,
+			this->y * b.y,
+			this->z * b.z,
+			this->w
+		};
+	}
+
+	Vec4 operator*(const float& b) const 
+	{
+		return
+		{
+			this->x * b,
+			this->y * b,
+			this->z * b,
+			this->w
+		};
+	}
+
+	Vec4 operator/(const float& b) const
+	{
+		return
+		{
+			this->x / b,
+			this->y / b,
+			this->z / b,
+			this->w
+		};
+	}
+
+	Vec4 operator-(const Vec4& b) const
+	{
+		return
+		{
+			this->x - b.x,
+			this->y - b.y,
+			this->z - b.z,
+			this->w
+		};
+	}
+
+	Vec4 operator+(const Vec4& b) const
+	{
+		return
+		{
+			this->x + b.x,
+			this->y + b.y,
+			this->z + b.z,
+			this->w
+		};
+	}
+
+	void operator*=(const Vec3& b)
+	{
+		this->x *= b.x;
+		this->y *= b.y;
+		this->z *= b.z;
+	}
+
+	operator Vec3() const 
+	{
+		return Vec3(x, y, z);
 	}
 
 	float x = 0.0f;
