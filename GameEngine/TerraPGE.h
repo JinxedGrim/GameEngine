@@ -2290,12 +2290,6 @@ namespace TerraPGE
 		Vec3 NormPos = Vec3(0, 0, 0);
 		Vec3 NormDir = Vec3(0, 0, 0);
 
-		// TODO
-		// Should not need either of these
-		// Depth calc should happen per pixel
-		float ViewedZCentroid = 0.0f;
-		float ZCentroidLight = 0.0f;
-
 		// Project and translate object 
 		for (const auto& Tri : MeshToRender.Triangles)
 		{

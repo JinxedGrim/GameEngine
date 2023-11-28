@@ -6,7 +6,7 @@
 #define _CRT_SECURE_NO_WARNINGS
 
 #ifndef UseOGL
-#include "GameEngine.h"
+#include "TerraPGE.h"
 #else
 // gonna add a opengl version
 #endif
