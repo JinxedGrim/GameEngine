@@ -1,8 +1,5 @@
 #pragma once
 #define NOMINMAX
-#include "Math.h"
-#include "Graphics/GdiPP.hpp"
-#include "Graphics/WndCreator.hpp"
 #include <fstream>
 #include <string>
 #include <sstream>
@@ -11,14 +8,20 @@
 #include <list>
 #include <algorithm>
 
+#include "Math.h"
+#include "Graphics/GdiPP.hpp"
+#include "Graphics/WndCreator.hpp"
+
+// Windows only include
+#include <Psapi.h>
+
 //     TO DO 
 // 1. Persepctive Divide
-// 2. Proper depth buffer
-// 3. Shadows
-// 4. Revamp Material and texture system ie put all materials in the mesh and pointers to them in the triangle
-// 5. Caclulate Vertex norms for all 3 vertices and store them
-// 6. figure out a better way of per pixel shading
-// 7. redisign engine into a more API-like manner
+// 2. Shadows
+// 3. Revamp Material and texture system ie put all materials in the mesh and pointers to them in the triangle
+// 4. Caclulate Vertex norms for all 3 vertices and store them
+// 5. figure out a better way of per pixel shading
+// 6. redisign engine into a more API-like manner
 
 #define SHADER_TRIANGLE 0
 #define SHADER_FRAGMENT 1
@@ -109,7 +112,7 @@ class Texture
 		}
 
 		// Read SPR header (assuming a simple format)
-		int sprWidth, sprHeight;
+		int sprWidth = 0, sprHeight = 0;
 		file.read(reinterpret_cast<char*>(&sprWidth), sizeof(int));
 		file.read(reinterpret_cast<char*>(&sprHeight), sizeof(int));
 
@@ -496,7 +499,9 @@ public:
 	}
 
 	Vec3 Points[3];
-	Vec3 VertexPositions[3];
+	Vec3 WorldSpaceVerts[3];
+	Vec3 ViewSpaceVerts[3];
+	Vec3 ClipSpaceVerts[3];
 
 	Vec3 FaceNormal = Vec3();
 	Vec3 VertexNormals[3];
@@ -1260,9 +1265,11 @@ struct ShaderArgs
 	const Material* Mat = nullptr;
 
 	//Camera Info (ALL SHADERS)
+	Matrix ModelMat;
+	Matrix ViewMat;
+	Matrix ProjectionMat;
 	Vec3 CamPos = Vec3(0, 0, 0);
 	Vec3 CamLookDir = Vec3(0, 0, 0);
-	float ViewedDepthCentroid = 0.0f;
 
 	// Light Info (ALL SHADERS)
 	Vec3 LightPos = Vec3(0, 0, 0);
@@ -1289,7 +1296,7 @@ struct ShaderArgs
 
 	}
 
-	ShaderArgs(Triangle* Tri, const Material* Mat, const Vec3& CamPos, const Vec3& CamLookDir, const float& Depth, const Matrix& LightMVP, const Vec3& LightPos, const Vec3& LightColor, const float& LightAmbient, const float& LightDiffuse, const float& LightSpecular, const int SHADER_TYPE)
+	ShaderArgs(Triangle* Tri, const Material* Mat, const Vec3& CamPos, const Vec3& CamLookDir, const Matrix& ModelMatrix, const Matrix& ViewMatrix, const Matrix& ProjMatrix, const Matrix& LightMVP, const Vec3& LightPos, const Vec3& LightColor, const float& LightAmbient, const float& LightDiffuse, const float& LightSpecular, const int SHADER_TYPE)
 	{
 		this->Tri = Tri;
 		this->Mat = Mat;
@@ -1301,12 +1308,19 @@ struct ShaderArgs
 		this->LightDiffuse = LightDiffuse;
 		this->LightSpecular = LightSpecular;
 		this->ShaderType = SHADER_TYPE;
-		this->ViewedDepthCentroid = Depth;
+		this->ModelMat = ModelMatrix;
+		this->ViewMat = ViewMatrix;
+		this->ProjectionMat = ProjMatrix;
 	}
 };
 
 namespace EngineShaders
 {
+	const auto DefaultVertexShader = [](ShaderArgs& Args)
+	{
+
+	};
+
 	const auto WHACK_SHADER = [](ShaderArgs& Args)
 	{
 		// Compute the normalized direction from the vertex to the light source
@@ -1521,9 +1535,10 @@ namespace TerraPGE
 	int ShadowMapWidth = 512;
 
 	bool FpsEngineCounter = true;
+	bool MultiThreading = false;
 	bool DoCull = true;
 	bool DoLighting = true;
-	bool DoShadows = true;
+	bool DoShadows = false;
 	bool WireFrame = false;
     bool ShowTriLines = false;
 	bool DebugClip = false;
@@ -1534,6 +1549,12 @@ namespace TerraPGE
 	bool DebugDepthBuffer = false;
 	bool DebugShadowMap = false;
 
+	int CpuCores = 0;
+	int GPUDevCount = 0;
+	std::vector<std::wstring> GPUDevNames = {};
+	std::wstring PrimaryGPUDevName;
+	SIZE_T MaxMemoryMB = 0;
+
 	Vec2 PrevMousePos;
 	Vec2 DeltaMouse;
 	POINT Tmp;
@@ -1543,60 +1564,111 @@ namespace TerraPGE
 	float* DepthBuffer = new float[sx * sy];
 	float* ShadowMap = new float[ShadowMapWidth * ShadowMapHeight];
 
+	SIZE_T GetUsedMemory()
+	{
+		PROCESS_MEMORY_COUNTERS_EX  Pmc;
+
+		if (GetProcessMemoryInfo(GetCurrentProcess(), (PROCESS_MEMORY_COUNTERS*)&Pmc, sizeof(Pmc)))
+			return Pmc.PrivateUsage / 1024 / 1024;
+
+		return 0;
+	}
+
+	void UpdateSystemInfo()
+	{
+		SYSTEM_INFO SysInf;
+		MEMORYSTATUSEX MemInf;
+		DISPLAY_DEVICE DispDev;
+
+		DispDev.cb = sizeof(DispDev);
+		MemInf.dwLength = sizeof(MEMORYSTATUSEX);
+		int DevIdx = 0;
+
+		GetSystemInfo(&SysInf);
+		TerraPGE::CpuCores = SysInf.dwNumberOfProcessors;
+
+		if (GlobalMemoryStatusEx(&MemInf))
+			TerraPGE::MaxMemoryMB = (MemInf.ullTotalPhys / 1024 / 1024);
+
+		if (EnumDisplayDevices(NULL, DevIdx, &DispDev, 0)) 
+		{
+			TerraPGE::GPUDevNames.push_back(DispDev.DeviceString);
+			TerraPGE::GPUDevCount++;
+
+			if (DispDev.StateFlags & DISPLAY_DEVICE_PRIMARY_DEVICE)
+				TerraPGE::PrimaryGPUDevName = DispDev.DeviceString;
+		}
+
+	}
+
 	// Update screen info
 	void UpdateScreenInfo(GdiPP& Gdi)
 	{
+		// Update GDI info
 		Gdi.UpdateClientRgn();
+
+		// Update screen dimenstions
 		sx = Gdi.ClientRect.right - Gdi.ClientRect.left;
 		sy = Gdi.ClientRect.bottom - Gdi.ClientRect.top;
-		delete[] DepthBuffer;
 
+		// Update DepthBuffer
+		delete[] DepthBuffer;
 		DepthBuffer = new float[sx * sy];
 	}
 
 	// Delete buffers
 	void EngineCleanup()
 	{
+		// Cleanup buffers
 		delete[] DepthBuffer;
 		delete[] ShadowMap;
 	}
 
-	float SampleShadowMap(float* ShadowMap, float u, float v, int ShadowMapWidth, int ShadowMapHeight) 
+
+	float SampleShadowMap(float* ShadowBuffer, float u, float v, int MapWidth, int MapHeight) 
 	{
 		// Clamp texture coordinates to avoid going out of bounds
 		u = std::clamp<float>(u, 0.0f, 1.0f);
 		v = std::clamp<float>(v, 0.0f, 1.0f);
 
 		// Convert texture coordinates to array indices
-		int x = static_cast<int>(u * ShadowMapWidth);
-		int y = static_cast<int>(v * ShadowMapHeight);
+		int x = static_cast<int>(u * MapWidth);
+		int y = static_cast<int>(v * MapHeight);
 
 		// Sample the depth value from the shadow map
-		return ShadowMap[y * ShadowMapWidth + x];
+		return ShadowBuffer[y * MapWidth + x];
 	}
 
-	void SetShadowMapValue(float* ShadowMap, float Depth, float u, float v, int ShadowMapWidth, int ShadowMapHeight)
+	void SetShadowMapValue(float* ShadowBuffer, float Depth, float u, float v, int MapWidth, int MapHeight)
 	{
 		// Clamp texture coordinates to avoid going out of bounds
 		u = std::clamp<float>(u, 0.0f, 1.0f);
 		v = std::clamp<float>(v, 0.0f, 1.0f);
 
 		// Convert texture coordinates to array indices
-		int x = static_cast<int>(u * ShadowMapWidth);
-		int y = static_cast<int>(v * ShadowMapHeight);
+		int x = static_cast<int>(u * MapWidth);
+		int y = static_cast<int>(v * MapHeight);
 
 		// Sample the depth value from the shadow map
-		ShadowMap[y * ShadowMapWidth + x] = Depth;
+		ShadowBuffer[y * MapWidth + x] = Depth;
 	}
+
 
 	// Adapted from: https://www.avrfreaks.net/sites/default/files/triangles.c
 	template<typename T>
-	void __fastcall RenderTriangle(int x1, int y1, int x2, int y2, int x3, int y3, float* DepthBuffer, GdiPP& Gdi, T&& Shader, ShaderArgs& Args)
+	void __fastcall RenderTriangle(float* DepthBuffer, GdiPP& Gdi, T&& Shader, ShaderArgs& Args)
 	{
+		// Setup variables
 		Triangle& Tri = *Args.Tri;
-		float z = Args.ViewedDepthCentroid;
-		float FarNear = (TerraPGE::FFAR - TerraPGE::FNEAR);
+		float FarSubNear = TerraPGE::FFAR - TerraPGE::FNEAR;
+		float FarNear = TerraPGE::FFAR * TerraPGE::FNEAR;
 
+		int x1 = PixelRound(Tri.Points[0].x);
+		int y1 = PixelRound(Tri.Points[0].y);
+		int x2 = PixelRound(Tri.Points[1].x);
+		int y2 = PixelRound(Tri.Points[1].y);
+		int x3 = PixelRound(Tri.Points[2].x);
+		int y3 = PixelRound(Tri.Points[2].y);
 		float u1 = 0.0f;
 		float u2 = 0.0f;
 		float u3 = 0.0f;
@@ -1709,32 +1781,36 @@ namespace TerraPGE
 
 				for (int j = ax; j < bx; j++)
 				{
-					int idx = ContIdx(j, i, TerraPGE::sx);
-
-					Vec3 BaryCoords = CalculateBarycentricCoordinatesScreenSpace(Vec2((float)j, (float)i), Vec2((float)Tri.Points[0].x, (float)Tri.Points[0].y), Vec2((float)Tri.Points[1].x, (float)Tri.Points[1].y), Vec2((float)Tri.Points[2].x, (float)Tri.Points[2].y));
-					Vec3 InterpolatedPos = (Tri.VertexPositions[0] * BaryCoords.x) + (Tri.VertexPositions[1] * BaryCoords.y) + (Tri.VertexPositions[2] * BaryCoords.z);
-					float Depth = (z - TerraPGE::FNEAR) / FarNear;
-
-					if (Depth < DepthBuffer[idx])
-						DepthBuffer[idx] = Depth;
-					else
-						continue;
-
 					tex_u = (1.0f - t) * tex_su + t * tex_eu;
-					tex_v = (1.0f - t) * tex_sv + t* tex_ev;
+					tex_v = (1.0f - t) * tex_sv + t * tex_ev;
 					tex_w = (1.0f - t) * tex_sw + t * tex_ew;
 					t += tstep;
 
-					// My changes start here
+					int idx = ContIdx(j, i, TerraPGE::sx);
+
+					// Calculate the barycentric coordinates which we use for interpolation
+					Vec3 BaryCoords = CalculateBarycentricCoordinatesScreenSpace(Vec2((float)j, (float)i), Vec2((float)Tri.Points[0].x, (float)Tri.Points[0].y), Vec2((float)Tri.Points[1].x, (float)Tri.Points[1].y), Vec2((float)Tri.Points[2].x, (float)Tri.Points[2].y));
+					// Use Barycentric coords to interpolate our world position
+					Vec3 InterpolatedPos = (Tri.WorldSpaceVerts[0] * BaryCoords.x) + (Tri.WorldSpaceVerts[1] * BaryCoords.y) + (Tri.WorldSpaceVerts[2] * BaryCoords.z);
+
+					// Calculate our clip space position (The perspective divide is done by the * operator making these NDC coords)
+					Vec3 NdcPos = InterpolatedPos * (Args.ViewMat * Args.ProjectionMat);
+
+					// The NDC z component is depth this line linearizes that value as after perspective divide it is exponential
+					// this line also normalizes that value to [0, 1]
+					float Depth = (FarNear / (TerraPGE::FFAR - NdcPos.z * FarSubNear) - TerraPGE::FNEAR) / FarSubNear;
+
+					// Depth test
+					if (Depth < DepthBuffer[idx])
+						DepthBuffer[idx] = Depth;
+					else
+						continue; // Don't draw pixel
+
+					// Debug depth buffer (Grayscale the pixel * depth val)
 					if (TerraPGE::DebugDepthBuffer || TerraPGE::DebugShadowMap)
 					{
+						// I plan to add a way to visualize the shadow map here
 						float Val = Depth;
-
-						if (TerraPGE::DebugShadowMap)
-						{
-							int _idx = ContIdx(PixelRound(((j / TerraPGE::sx) * TerraPGE::ShadowMapWidth)), PixelRound(((i / TerraPGE::sy) * TerraPGE::ShadowMapHeight)), TerraPGE::ShadowMapWidth);
-							Val = ShadowMap[_idx];
-						}
 
 						Args.FragColor.R = 255.0f * Val;
 						Args.FragColor.G = 255.0f * Val;
@@ -1742,6 +1818,7 @@ namespace TerraPGE
 					}
 					else if (Args.ShaderType != SHADER_FRAGMENT || Tri.OverRideMaterialColor || !TerraPGE::DoLighting)
 					{
+						// This entire else if is mainly for debugging clipping
 						if (Tri.OverRideMaterialColor)
 						{
 							Args.FragColor.R = Tri.Col.x;
@@ -1766,10 +1843,19 @@ namespace TerraPGE
 					{
 						Vec3 InterpolatedNormal = ((Tri.FaceNormal * BaryCoords.x) + (Tri.FaceNormal * BaryCoords.y) + (Tri.FaceNormal * BaryCoords.z)).Normalized();
 
-						Vec3 ProjectedPos = InterpolatedPos * Args.LightMVP;
-						ProjectedPos.x = (ProjectedPos.x + 1.0f) * 0.5f * TerraPGE::sx; // TerraPGE::sx is screen width
-						ProjectedPos.y = (1.0f - ProjectedPos.y) * 0.5f * TerraPGE::sy; // TerraPGE::sy is screen height
-						ProjectedPos.z = ProjectedPos.z; // Z remains the same (or can be scaled for depth range)
+						// Set up some shader args and call fragment shader
+
+						if (TerraPGE::DoShadows)
+						{
+							// Get Light space position
+							Vec3 NdcPosLightSpace = InterpolatedPos * Args.LightMVP;
+							float ShadowDepth = (FarNear / (TerraPGE::FFAR - NdcPosLightSpace.z * FarSubNear) - TerraPGE::FNEAR) / FarSubNear;
+							// Scale to viewport
+							NdcPosLightSpace += Vec3(1.0f, 1.0f, 0.0f);
+							NdcPosLightSpace *= Vec3((float)(TerraPGE::ShadowMapWidth * 0.5f), (float)(TerraPGE::ShadowMapHeight * 0.5f), 1);
+							NdcPosLightSpace += Vec3(-1, -1, 0);
+							Args.IsInShadow = (ShadowDepth > SampleShadowMap(ShadowMap, ((float)j / (float)TerraPGE::sx), ((float)i / (float)TerraPGE::sy), TerraPGE::ShadowMapWidth, TerraPGE::ShadowMapHeight));
+						}
 
 						Args.FragPos = InterpolatedPos;
 						Args.FragNormal = InterpolatedNormal;
@@ -1779,6 +1865,7 @@ namespace TerraPGE
 						Shader(Args);
 					}
 
+					// Set pixel in pixel buffer
 					Gdi.QuickSetPixel(j, i, RGB(PixelRound(Args.FragColor.R), PixelRound(Args.FragColor.G), PixelRound(Args.FragColor.B)));
 				}
 
@@ -1831,32 +1918,36 @@ namespace TerraPGE
 
 				for (int j = ax; j < bx; j++)
 				{
-					Vec3 BaryCoords = CalculateBarycentricCoordinatesScreenSpace(Vec2((float)j, (float)i), Vec2((float)Tri.Points[0].x, (float)Tri.Points[0].y), Vec2((float)Tri.Points[1].x, (float)Tri.Points[1].y), Vec2((float)Tri.Points[2].x, (float)Tri.Points[2].y));
-					Vec3 InterpolatedPos = (Tri.VertexPositions[0] * BaryCoords.x) + (Tri.VertexPositions[1] * BaryCoords.y) + (Tri.VertexPositions[2] * BaryCoords.z);
-					float Depth = (z - TerraPGE::FNEAR) / FarNear;
-
-					int idx = ContIdx(j, i, TerraPGE::sx);
-
-					if (Depth < DepthBuffer[idx])
-						DepthBuffer[idx] = Depth;
-					else
-						continue;
-
 					tex_u = (1.0f - t) * tex_su + t * tex_eu;
 					tex_v = (1.0f - t) * tex_sv + t * tex_ev;
 					tex_w = (1.0f - t) * tex_sw + t * tex_ew;
 					t += tstep;
 
-					// My changes start here
+					int idx = ContIdx(j, i, TerraPGE::sx);
+
+					// Calculate the barycentric coordinates which we use for interpolation
+					Vec3 BaryCoords = CalculateBarycentricCoordinatesScreenSpace(Vec2((float)j, (float)i), Vec2((float)Tri.Points[0].x, (float)Tri.Points[0].y), Vec2((float)Tri.Points[1].x, (float)Tri.Points[1].y), Vec2((float)Tri.Points[2].x, (float)Tri.Points[2].y));
+					// Use Barycentric coords to interpolate our world position
+					Vec3 InterpolatedPos = (Tri.WorldSpaceVerts[0] * BaryCoords.x) + (Tri.WorldSpaceVerts[1] * BaryCoords.y) + (Tri.WorldSpaceVerts[2] * BaryCoords.z);
+
+					// Calculate our clip space position (The perspective divide is done by the * operator making these NDC coords)
+					Vec3 NdcPos = InterpolatedPos * (Args.ViewMat * Args.ProjectionMat);
+
+					// The NDC z component is depth this line linearizes that value as after perspective divide it is exponential
+					// this line also normalizes that value to [0, 1]
+					float Depth = (FarNear / (TerraPGE::FFAR - NdcPos.z * FarSubNear) - TerraPGE::FNEAR) / FarSubNear;
+
+					// Depth test
+					if (Depth < DepthBuffer[idx])
+						DepthBuffer[idx] = Depth;
+					else
+						continue; // Don't draw pixel
+
+					// Debug depth buffer (Grayscale the pixel * depth val)
 					if (TerraPGE::DebugDepthBuffer || TerraPGE::DebugShadowMap)
 					{
+						// I plan to add a way to visualize the shadow map here
 						float Val = Depth;
-
-						if (TerraPGE::DebugShadowMap)
-						{
-							int _idx = ContIdx(PixelRound(((j / TerraPGE::sx) * TerraPGE::ShadowMapWidth)), PixelRound(((i / TerraPGE::sy) * TerraPGE::ShadowMapHeight)), TerraPGE::ShadowMapWidth);
-							Val = ShadowMap[_idx];
-						}
 
 						Args.FragColor.R = 255.0f * Val;
 						Args.FragColor.G = 255.0f * Val;
@@ -1864,6 +1955,7 @@ namespace TerraPGE
 					}
 					else if (Args.ShaderType != SHADER_FRAGMENT || Tri.OverRideMaterialColor || !TerraPGE::DoLighting)
 					{
+						// This entire else if is mainly for debugging clipping
 						if (Tri.OverRideMaterialColor)
 						{
 							Args.FragColor.R = Tri.Col.x;
@@ -1888,11 +1980,7 @@ namespace TerraPGE
 					{
 						Vec3 InterpolatedNormal = ((Tri.FaceNormal * BaryCoords.x) + (Tri.FaceNormal * BaryCoords.y) + (Tri.FaceNormal * BaryCoords.z)).Normalized();
 
-						Vec3 ProjectedPos = InterpolatedPos * Args.LightMVP;
-						ProjectedPos.x = (ProjectedPos.x + 1.0f) * 0.5f * TerraPGE::sx; // TerraPGE::sx is screen width
-						ProjectedPos.y = (1.0f - ProjectedPos.y) * 0.5f * TerraPGE::sy; // TerraPGE::sy is screen height
-						ProjectedPos.z = ProjectedPos.z; // Z remains the same (or can be scaled for depth range)
-
+						// Set up some shader args and call fragment shader
 						Args.FragPos = InterpolatedPos;
 						Args.FragNormal = InterpolatedNormal;
 						Args.UVW = { tex_u, tex_v, tex_w };
@@ -1901,6 +1989,7 @@ namespace TerraPGE
 						Shader(Args);
 					}
 
+					// Set pixel in pixel buffer
 					Gdi.QuickSetPixel(j, i, RGB(PixelRound(Args.FragColor.R), PixelRound(Args.FragColor.G), PixelRound(Args.FragColor.B)));
 				}
 			}
@@ -1908,10 +1997,17 @@ namespace TerraPGE
 	}
 
 	// Render process but writes to buffer only
-	void __fastcall RenderTriangleDepthOnly(int x1, int y1, int x2, int y2, int x3, int y3, float* Buffer, float DepthCentroid, Triangle* Tri)
+	void __fastcall RenderTriangleDepthOnly(Triangle* Tri, float* Buffer, const Matrix& ViewProjMat)
 	{
-		float FarNear = (TerraPGE::FFAR - TerraPGE::FNEAR);
-		float Depth = (DepthCentroid - TerraPGE::FNEAR) / FarNear; // This should be calculated using an interpolated position but i havent figured it out yet
+		float FarSubNear = TerraPGE::FFAR - TerraPGE::FNEAR;
+		float FarNear = TerraPGE::FFAR * TerraPGE::FNEAR;
+
+		int x1 = PixelRound(Tri->Points[0].x);
+		int y1 = PixelRound(Tri->Points[0].y);
+		int x2 = PixelRound(Tri->Points[1].x);
+		int y2 = PixelRound(Tri->Points[1].y);
+		int x3 = PixelRound(Tri->Points[2].x);
+		int y3 = PixelRound(Tri->Points[2].y);
 
 		if (y2 < y1)
 		{
@@ -1959,12 +2055,24 @@ namespace TerraPGE
 
 				for (int j = ax; j < bx; j++)
 				{ 
-					if (Depth < SampleShadowMap(Buffer, (j / TerraPGE::sx), (i / TerraPGE::sy), TerraPGE::ShadowMapWidth, TerraPGE::ShadowMapHeight))
-						SetShadowMapValue(Buffer, (j / TerraPGE::sx), (i / TerraPGE::sy), Depth, TerraPGE::ShadowMapWidth, TerraPGE::ShadowMapHeight);
+					t += tstep;
+
+					// Calculate the barycentric coordinates which we use for interpolation
+					Vec3 BaryCoords = CalculateBarycentricCoordinatesScreenSpace(Vec2((float)j, (float)i), Vec2((float)Tri->Points[0].x, (float)Tri->Points[0].y), Vec2((float)Tri->Points[1].x, (float)Tri->Points[1].y), Vec2((float)Tri->Points[2].x, (float)Tri->Points[2].y));
+					// Use Barycentric coords to interpolate our world position
+					Vec3 InterpolatedPos = (Tri->WorldSpaceVerts[0] * BaryCoords.x) + (Tri->WorldSpaceVerts[1] * BaryCoords.y) + (Tri->WorldSpaceVerts[2] * BaryCoords.z);
+
+					// Calculate our clip space position (The perspective divide is done by the * operator making these NDC coords)
+					Vec3 NdcPos = InterpolatedPos * (ViewProjMat);
+
+					// The NDC z component is depth this line linearizes that value as after perspective divide it is exponential
+					// this line also normalizes that value to [0, 1]
+					float Depth = (FarNear / (TerraPGE::FFAR - NdcPos.z * FarSubNear) - TerraPGE::FNEAR) / FarSubNear;
+
+					if (Depth < SampleShadowMap(Buffer, ((float)j), ((float)i), TerraPGE::ShadowMapWidth, TerraPGE::ShadowMapHeight))
+						SetShadowMapValue(Buffer, ((float)j), ((float)i), Depth, TerraPGE::ShadowMapWidth, TerraPGE::ShadowMapHeight);
 					else
 						continue;
-
-					t += tstep;
 				}
 
 			}
@@ -1993,8 +2101,20 @@ namespace TerraPGE
 
 				for (int j = ax; j < bx; j++)
 				{
-					if (Depth < SampleShadowMap(Buffer, j, i, TerraPGE::ShadowMapWidth, TerraPGE::ShadowMapHeight))
-						SetShadowMapValue(Buffer, j, i, Depth, TerraPGE::ShadowMapWidth, TerraPGE::ShadowMapHeight);
+					// Calculate the barycentric coordinates which we use for interpolation
+					Vec3 BaryCoords = CalculateBarycentricCoordinatesScreenSpace(Vec2((float)j, (float)i), Vec2((float)Tri->Points[0].x, (float)Tri->Points[0].y), Vec2((float)Tri->Points[1].x, (float)Tri->Points[1].y), Vec2((float)Tri->Points[2].x, (float)Tri->Points[2].y));
+					// Use Barycentric coords to interpolate our world position
+					Vec3 InterpolatedPos = (Tri->WorldSpaceVerts[0] * BaryCoords.x) + (Tri->WorldSpaceVerts[1] * BaryCoords.y) + (Tri->WorldSpaceVerts[2] * BaryCoords.z);
+
+					// Calculate our clip space position (The perspective divide is done by the * operator making these NDC coords)
+					Vec3 NdcPos = InterpolatedPos * (ViewProjMat);
+
+					// The NDC z component is depth this line linearizes that value as after perspective divide it is exponential
+					// this line also normalizes that value to [0, 1]
+					float Depth = (FarNear / (TerraPGE::FFAR - NdcPos.z * FarSubNear) - TerraPGE::FNEAR) / FarSubNear;
+
+					if (Depth < SampleShadowMap(Buffer, ((float)j / (float)TerraPGE::sx), ((float)i / (float)TerraPGE::sy), TerraPGE::ShadowMapWidth, TerraPGE::ShadowMapHeight))
+						SetShadowMapValue(Buffer, ((float)j / (float)TerraPGE::sx), ((float)i / (float)TerraPGE::sy), Depth, TerraPGE::ShadowMapWidth, TerraPGE::ShadowMapHeight);
 					else
 						continue;
 
@@ -2006,27 +2126,34 @@ namespace TerraPGE
 
 
 	//TerraGL (Proposed name for GdiPP)
-	//TerraGE (Proposed name for this engine)
+	//TerraPGE (Proposed name for this engine)
 	//Engine Pipeline (In a Loop): Check Window State -> Check Inputs -> Clear Screen -> Make Draw Calls (Rendering Pipeline) -> Draw Double Buffer
 	void Run(WndCreator& Wnd, BrushPP& ClearBrush, DoTick_T DrawCallBack)
 	{
-		// Init Variables
+		// Init Variables and grab screen dimensions
 		GdiPP EngineGdi = GdiPP(Wnd.Wnd, true);
-		sx = Wnd.GetClientArea().Width;
-		sy = Wnd.GetClientArea().Height;
+		TerraPGE::sx = Wnd.GetClientArea().Width;
+		TerraPGE::sy = Wnd.GetClientArea().Height;
 
-		delete[] DepthBuffer;
+		TerraPGE::UpdateSystemInfo();
 
-		DepthBuffer = new float[(SIZE_T)(sx * sy)];
+		delete[] TerraPGE::DepthBuffer;
 
+		// Create depth buffer
+		TerraPGE::DepthBuffer = new float[(SIZE_T)(sx * sy)];
+
+		// Initial Client Region
 		EngineGdi.UpdateClientRgn();
 
+		// Counters
 		MSG msg = { 0 };
 		double ElapsedTime = 0.0f;
 		double FpsCounter = 0.0f;
 		int FrameCounter = 0;
 		auto Start = std::chrono::system_clock::now();
+		SIZE_T CurrMB = 0;
 
+		// Init Cursor position
 		SetCursorPos(sx / 2, sy / 2);
 		GetCursorPos(&Tmp);
 		PrevMousePos = { (float)Tmp.x, (float)Tmp.y };
@@ -2080,8 +2207,9 @@ namespace TerraPGE
 			// clear the screen
 			EngineGdi.Clear(GDIPP_PIXELCLEAR, ClearBrush);
 
-			std::fill(DepthBuffer, DepthBuffer + sx * sy, TerraPGE::FFAR);
-			std::fill(ShadowMap, ShadowMap + ShadowMapWidth * ShadowMapHeight, TerraPGE::FFAR);
+			// Clear Buffers
+			std::fill(DepthBuffer, DepthBuffer + sx * sy, 1.0f);
+			std::fill(ShadowMap, ShadowMap + ShadowMapWidth * ShadowMapHeight, 1.0f);
 
 			// call draw code
 			DrawCallBack(EngineGdi, Wnd, (float)ElapsedTime);
@@ -2089,12 +2217,13 @@ namespace TerraPGE
 			if (FpsEngineCounter)
 			{
 #ifdef UNICODE
-				std::wstring Str = FpsWStr + std::to_wstring(Fps);
+				// Draw FPS and some debug info
+				std::wstring Str = FpsWStr + std::to_wstring(Fps) + L" Memory Usage: " + std::to_wstring(CurrMB) + L"/" + std::to_wstring(TerraPGE::MaxMemoryMB) + L" MB";
 				Wnd.SetWndTitle(Str);
 				EngineGdi.DrawStringW(20, 20, Str, RGB(255, 0, 0), TRANSPARENT);
 #endif
 #ifndef UNICODE
-				std::string Str = FpsStr + std::to_string(Fps);
+				std::string Str = FpsStr + std::to_string(Fps) + " Memory Usage: " + std::to_string(CurrMB) + "/" + std::to_string(TerraPGE::MaxMemoryMB) + " MB";
 				Wnd.SetWndTitle(Str);
 				EngineGdi.DrawStringA(20, 20, Str, RGB(255, 0, 0), TRANSPARENT);
 #endif
@@ -2103,6 +2232,7 @@ namespace TerraPGE
 			// Draw to screen
 			EngineGdi.DrawDoubleBuffer();
 
+			// Calc elapsed time
 			ElapsedTime = std::chrono::duration<double>(std::chrono::system_clock::now() - Start).count();
 
 			if (FpsEngineCounter)
@@ -2118,6 +2248,9 @@ namespace TerraPGE
 					FrameCounter++;
 					FpsCounter += ElapsedTime;
 				}
+
+				// Get current memory usage
+				CurrMB = GetUsedMemory();
 			}
 		}
 
@@ -2136,14 +2269,17 @@ namespace TerraPGE
 		const Matrix RotM = Matrix::CreateRotationMatrix(RotationRads); // Rotation Matrix
 		const Matrix TransMat = Matrix::CreateTranslationMatrix(Pos); // Translation Matrix
 		ObjectMatrix = ((ObjectMatrix * RotM) * TransMat); // Matrices are applied in SRT order 
+
 		// Normal Matrix (it's weird)
 		Matrix NormalMat = ObjectMatrix.QuickInversed();
 		NormalMat.Transpose3x3();
 
 		// Light matrices (For shadow mapping)
+		// TODO calc these better (And probably move to class?)
 		Matrix LightProjectionMat;
 		LightProjectionMat.MakeOrthoMatrix(-20.0f, 20.0f, -20.0f, 20.0f, TerraPGE::FNEAR, TerraPGE::FFAR);
 		Matrix LightViewMatrix = Matrix::CalcViewMatrix(LightPos, Cam.Pos, Vec3(0, 1, 0));
+		Matrix LightVP = LightViewMatrix * LightProjectionMat;
 
 
 		std::vector<Triangle> TrisToRender = {};
@@ -2154,7 +2290,11 @@ namespace TerraPGE
 		Vec3 NormPos = Vec3(0, 0, 0);
 		Vec3 NormDir = Vec3(0, 0, 0);
 
+		// TODO
+		// Should not need either of these
+		// Depth calc should happen per pixel
 		float ViewedZCentroid = 0.0f;
+		float ZCentroidLight = 0.0f;
 
 		// Project and translate object 
 		for (const auto& Tri : MeshToRender.Triangles)
@@ -2162,6 +2302,11 @@ namespace TerraPGE
 			// 3D Space
 			Triangle Proj = Tri;
 			Proj.ApplyMatrix(ObjectMatrix);
+
+			for (int i = 0; i < 3; i++)
+			{
+				Proj.WorldSpaceVerts[i] = Proj.Points[i];
+			}
 
 			Vec3 TriNormal = Tri.FaceNormal;
 			if (MeshToRender.Normals.size() == 0)
@@ -2190,33 +2335,21 @@ namespace TerraPGE
 					Proj.VertexNormals[i] *= NormalMat;
 				}
 
-				Proj.VertexPositions[0] = Proj.Points[0];
-				Proj.VertexPositions[1] = Proj.Points[1];
-				Proj.VertexPositions[2] = Proj.Points[2];
 				NormDir = Proj.FaceNormal;
 				NormPos = Proj.NormalPositions[0];
 			}
 
 			Proj.FaceNormal = TriNormal;
 
-			// Shadow Mapping
-			if (TerraPGE::DoShadows)
-			{
-				Triangle ShadowTestProj = Proj;
-
-				ShadowTestProj.ApplyMatrix(LightViewMatrix); // light view matrix
-
-				float ViewedZCentroidLight = (ShadowTestProj.Points[0].z + ShadowTestProj.Points[1].z + ShadowTestProj.Points[2].z) / 3.0f;
-
-				ShadowTestProj.ApplyMatrix(LightProjectionMat); // light proj matrix
-
-				RenderTriangleDepthOnly(PixelRound(ShadowTestProj.Points[0].x), PixelRound(ShadowTestProj.Points[0].y),PixelRound(ShadowTestProj.Points[1].x), PixelRound(ShadowTestProj.Points[1].y), PixelRound(ShadowTestProj.Points[2].x), PixelRound(ShadowTestProj.Points[2].y), TerraPGE::ShadowMap, ViewedZCentroidLight, &ShadowTestProj);
-			}
-
-			if ((TriNormal.Dot(Proj.Points[0] - Cam.Pos) < 0.0f) || !DoCull || !MeshToRender.BackfaceCulling) // backface culling
+			if ((TriNormal.Dot(Proj.Points[0] - Cam.Pos) < 0.0f) || !TerraPGE::DoCull || !MeshToRender.BackfaceCulling) // backface culling
 			{
 				// 3d Space -> Viewed Space
 				Proj.ApplyMatrix(Cam.ViewMatrix);
+
+				for (int i = 0; i < 3; i++)
+				{
+					Proj.ViewSpaceVerts[i] = Proj.Points[i];
+				}
 
 				// Calc depth centroid for the object (easier than calculating per pixel)
 				ViewedZCentroid = (Proj.Points[0].z + Proj.Points[1].z + Proj.Points[2].z) / 3.0f;
@@ -2231,12 +2364,17 @@ namespace TerraPGE
 				{
 					Triangle ToProj = Clipped[i];
 
-					// Viewed Space -> Projected space
+					// Viewed Space -> clip space (This is actually NDC space because perspective division is already applied)
 					ToProj = Cam.ProjectTriangle(&ToProj); // Project from 3D Space To Screen Space
+
+					for (int i = 0; i < 3; i++)
+					{
+						Proj.ClipSpaceVerts[i] = Proj.Points[i];
+					}
 
 					// Should be a perspective divide here but im lazy
 
-					// Offset to normalized space (Ndc -> Screen Space)
+					// Offset to viewport space (Ndc -> Screen Space)
 					ToProj.Translate(Vec3(1.0f, 1.0f, 0.0f));
 					ToProj.Scale(Vec3((float)(TerraPGE::sx * 0.5f), (float)(TerraPGE::sy * 0.5f), 1));
 					ToProj.Translate(Vec3(-1, -1, 0));
@@ -2313,7 +2451,26 @@ namespace TerraPGE
 				else
 					MatToUse = &MeshToRender.Mat;
 
-				ShaderArgs Args(&ToDraw, MatToUse, Cam.Pos, Cam.LookDir, ViewedZCentroid, LightProjectionMat * LightViewMatrix, LightPos, LightColor, LightAmbient, LightDiffuse, LightSpecular, SHADER_TYPE);
+				// Shadow Mapping
+				if (TerraPGE::DoShadows)
+				{
+					Triangle ShadowTestProj = ToDraw;
+
+					for (int i = 0; i < 3; i++)
+					{
+						ShadowTestProj.Points[i] = Proj.WorldSpaceVerts[i];
+					}
+
+					ShadowTestProj.ApplyMatrix(LightVP); // light proj matrix
+
+					ShadowTestProj.Translate(Vec3(1.0f, 1.0f, 0.0f));
+					ShadowTestProj.Scale(Vec3((float)(TerraPGE::sx * 0.5f), (float)(TerraPGE::sy * 0.5f), 1));
+					ShadowTestProj.Translate(Vec3(-1, -1, 0));
+
+					RenderTriangleDepthOnly(&ShadowTestProj, TerraPGE::ShadowMap, LightVP);
+				}
+
+				ShaderArgs Args(&ToDraw, MatToUse, Cam.Pos, Cam.LookDir, ObjectMatrix, Cam.ViewMatrix, Cam.ProjectionMatrix, LightProjectionMat * LightViewMatrix, LightPos, LightColor, LightAmbient, LightDiffuse, LightSpecular, SHADER_TYPE);
 
 				// Calc lighting
 				if ((DoLighting) && SHADER_TYPE == SHADER_TRIANGLE)
@@ -2327,7 +2484,7 @@ namespace TerraPGE
 				{
 					if (!ShowTriLines)
 					{
-						RenderTriangle(PixelRound(ToDraw.Points[0].x), PixelRound(ToDraw.Points[0].y), PixelRound(ToDraw.Points[1].x), PixelRound(ToDraw.Points[1].y), PixelRound(ToDraw.Points[2].x), PixelRound(ToDraw.Points[2].y), DepthBuffer, Gdi, Shader, Args);
+						RenderTriangle(DepthBuffer, Gdi, Shader, Args);
 					    //Gdi.DrawFilledTriangle(PixelRound(ToDraw.Points[0].x), PixelRound(ToDraw.Points[0].y), PixelRound(ToDraw.Points[1].x), PixelRound(ToDraw.Points[1].y), PixelRound(ToDraw.Points[2].x), PixelRound(ToDraw.Points[2].y), BrushPP(RGB(ToDraw.Col.x, ToDraw.Col.y, ToDraw.Col.z)), PenPP(PS_SOLID, 1, RGB(ToDraw.Col.x, ToDraw.Col.y, ToDraw.Col.z)));
 					}
 					else

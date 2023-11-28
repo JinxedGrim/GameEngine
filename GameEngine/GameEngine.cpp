@@ -48,6 +48,8 @@ static Vec3 LightSrcPos = { 0, 19, -7 };
 static SimpleLightSrc sl = SimpleLightSrc(LightSrcPos, { 0, 10, 0 }, Vec3(253, 251, 211), 0.35f, 0.15f, 0.5f);
 static Camera Cam = Camera(Vec3(0, 1, 0), (float)((float)TerraPGE::sy / (float)TerraPGE::sx), TerraPGE::FOV, TerraPGE::FNEAR, TerraPGE::FFAR);
 
+bool LockCamera = false;
+
 void Settings()
 {
 	while (true)
@@ -140,9 +142,13 @@ void WndCtrlEvent(HMENU CtrlID, ULONG Msg)
 DoTick_T Draw(GdiPP& Gdi, WndCreatorW& Wnd, const float& ElapsedTime)
 {
 	static float PrevFov = Cam.Fov;
-	Cam.ViewAngles += Vec3((float)TerraPGE::DeltaMouse.y, 0, 0);
-	Cam.ViewAngles.x = std::clamp<float>(Cam.ViewAngles.x, -89.0f, 89.0f);
-	Cam.ViewAngles -= Vec3(0, (float)TerraPGE::DeltaMouse.x, 0);
+	
+	if (!LockCamera)
+	{
+		Cam.ViewAngles += Vec3((float)TerraPGE::DeltaMouse.y, 0, 0);
+		Cam.ViewAngles.x = std::clamp<float>(Cam.ViewAngles.x, -89.0f, 89.0f);
+		Cam.ViewAngles -= Vec3(0, (float)TerraPGE::DeltaMouse.x, 0);
+	}
 
 	if (PrevFov != Cam.Fov)
 	{
@@ -175,6 +181,13 @@ DoTick_T Draw(GdiPP& Gdi, WndCreatorW& Wnd, const float& ElapsedTime)
 		TerraPGE::UpdateMouseIn = !TerraPGE::UpdateMouseIn;
 	}
 
+	if (GetAsyncKeyState(VK_HOME))
+	{
+		LockCamera = !LockCamera;
+		Cam.ViewMatrix = Matrix::CalcViewMatrix(LightSrcPos, Cam.Pos, Vec3(0, 1, 0));
+		Cam.Pos = LightSrcPos; 
+	}
+
 	if (GetAsyncKeyState(VK_SPACE) & 0x8000)
 	{
 		Cam.Pos += (Cam.GetNewVelocity(Vec3(0, 1, 0) * Cam.CamRotation)) * ElapsedTime;
@@ -205,18 +218,20 @@ DoTick_T Draw(GdiPP& Gdi, WndCreatorW& Wnd, const float& ElapsedTime)
 		Cam.Pos += (Cam.GetNewVelocity(Vec3(0, 0, -1) * Cam.CamRotation)) * ElapsedTime;
 	}
 
-	Cam.CamRotation = Matrix::CreateRotationMatrix(Cam.ViewAngles); // Pitch Yaw Roll
-	Cam.LookDir = Cam.InitialLook * Cam.CamRotation;
-	Vec3 T = Cam.Pos + Cam.LookDir;
-	Cam.CalcCamViewMatrix(T);
-
+	if (!LockCamera)
+	{
+		Cam.CamRotation = Matrix::CreateRotationMatrix(Cam.ViewAngles); // Pitch Yaw Roll
+		Cam.LookDir = Cam.InitialLook * Cam.CamRotation;
+		Vec3 T = Cam.Pos + Cam.LookDir;
+		Cam.CalcCamViewMatrix(T);
+	}
 
 	FTheta += 1.0f * ElapsedTime;
 
 	TerraPGE::RenderMesh(Gdi, Cam, Plane, Vec3(1.0f, 1.0f, 1.0f), Vec3(0.0f, 0.0f, 0.0f), Vec3(0.0f, 0.0f, 0.0f), sl.LightPos, sl.Color, sl.AmbientCoeff, sl.DiffuseCoeff, sl.SpecularCoeff, EngineShaders::Shader_Frag_Phong_Shadows);
 	//TerraPGE::RenderMesh(Gdi, Cam, RYNO, Vec3(1.0f, 1.0f, 1.0f), Vec3(0.0f, 0.0f, 0.0f),  Vec3(10.0f, 2.5f, 0.0f), sl.LightPos, sl.Color, sl.AmbientCoeff, sl.DiffuseCoeff, sl.SpecularCoeff, EngineShaders::Shader_Texture_Only);
 	//TerraPGE::RenderMesh(Gdi, Cam, RCAMMO, Vec3(1.0f, 1.0f, 1.0f), Vec3(0.0f, 0.0f, 0.0f), Vec3(-10.0f, 2.5f, 0.0f), sl.LightPos, sl.Color, sl.AmbientCoeff, sl.DiffuseCoeff, sl.SpecularCoeff, EngineShaders::Shader_Texture_Only);
-	//TerraPGE::RenderMesh(Gdi, Cam, CubeMsh, Vec3(1.0f, 1.0f, 1.0f), Vec3(0.0f, 0.0f, 0.0f), Vec3(0.0f, 1.5f, 2.0f), sl.LightPos, sl.Color, sl.AmbientCoeff, sl.DiffuseCoeff, sl.SpecularCoeff, EngineShaders::Shader_Texture_Only);
+	TerraPGE::RenderMesh(Gdi, Cam, CubeMsh, Vec3(1.0f, 1.0f, 1.0f), Vec3(0.0f, 0.0f, 0.0f), Vec3(0.0f, 1.5f, 0.0f), sl.LightPos, sl.Color, sl.AmbientCoeff, sl.DiffuseCoeff, sl.SpecularCoeff, EngineShaders::Shader_Texture_Only);
 
 
 //	TerraPGE::RenderMesh(Gdi, Cam, Meshes.at(CurrMesh), Vec3(1.0f, 1.0f, 1.0f), Vec3(FTheta * RotSpeedX, FTheta * RotSpeedY, FTheta * RotSpeedZ), Vec3(1, 0, 10), sl.LightPos, sl.Color, sl.AmbientCoeff, sl.DiffuseCoeff, sl.SpecularCoeff, EngineShaders::Shader_Texture_Only);

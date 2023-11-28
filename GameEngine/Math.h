@@ -111,6 +111,8 @@ public:
 
 	void  MakeOrthoMatrix(const float& Left, const float& Right, const float& Top, const float& Bottom, const float& Near, const float& Far);
 
+	static Matrix CalcOrthoMatrix(const float& Left, const float& Right, const float& Top, const float& Bottom, const float& Near, const float& Far);
+
 	static Matrix CalcViewMatrix(const Vec3& Pos, const Vec3& Target, const Vec3& Up);
 
 	void MakeViewMatrix(const Vec3& Pos, const Vec3& Target, const Vec3& Up);
@@ -497,9 +499,9 @@ public:
 
 	void Lerped(const Vec3& B, float t)
 	{
-		this->x + (B.x - this->x) * t;
-		this->y + (B.y - this->y) * t;
-		this->z + (B.z - this->z) * t;
+		this->x = this->x + (B.x - this->x) * t;
+		this->y = this->y + (B.y - this->y) * t;
+		this->z = this->z + (B.z - this->z) * t;
 	}
 
 	Vec3 __inline __fastcall GetDirectionToVector(const Vec3 b) const
@@ -874,10 +876,12 @@ Matrix Matrix::CalcViewMatrix(const Vec3& Pos, const Vec3& Target, const Vec3& U
 	ViewMat.fMatrix[2][0] = NewForward.x;   ViewMat.fMatrix[2][1] = NewForward.y;	ViewMat.fMatrix[2][2] = NewForward.z;    ViewMat.fMatrix[2][3] = 0.0f;
 	ViewMat.fMatrix[3][0] = Pos.x;		    ViewMat.fMatrix[3][1] = Pos.y;	        ViewMat.fMatrix[3][2] = Pos.z;           ViewMat.fMatrix[3][3] = 1.0f;
 
+	ViewMat.QuickInverse();
+
 	return ViewMat;
 }
 
-static Matrix CalcOrthoMatrix(const float& Left, const float& Right, const float& Top, const float& Bottom, const float& Near, const float& Far)
+Matrix Matrix::CalcOrthoMatrix(const float& Left, const float& Right, const float& Top, const float& Bottom, const float& Near, const float& Far)
 {
 	Matrix OrthoMat;
 
@@ -894,6 +898,8 @@ static Matrix CalcOrthoMatrix(const float& Left, const float& Right, const float
 	OrthoMat.fMatrix[0][1] = OrthoMat.fMatrix[0][2] = OrthoMat.fMatrix[0][3] = 0.0f;
 	OrthoMat.fMatrix[1][0] = OrthoMat.fMatrix[1][2] = OrthoMat.fMatrix[1][3] = 0.0f;
 	OrthoMat.fMatrix[2][0] = OrthoMat.fMatrix[2][1] = OrthoMat.fMatrix[2][3] = 0.0f;
+
+	return OrthoMat;
 }
 
 Vec3 CalculateBarycentricCoordinates(const Vec3& A, const Vec3& B, const Vec3& C, const Vec3& P)
