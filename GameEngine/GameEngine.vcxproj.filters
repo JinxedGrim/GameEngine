@@ -38,6 +38,9 @@
     <ClInclude Include="..\..\..\..\Desktop\My Stuff\My Librarys\Graphics\WndCreator.hpp">
       <Filter>Header Files\Core</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\..\..\Desktop\My Stuff\My Librarys\Graphics\TerraGL.h">
+      <Filter>Header Files\Core</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="TeaPot.obj">

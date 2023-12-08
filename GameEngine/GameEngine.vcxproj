@@ -169,6 +169,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\..\..\Desktop\My Stuff\My Librarys\Graphics\GdiPP.hpp" />
+    <ClInclude Include="..\..\..\..\Desktop\My Stuff\My Librarys\Graphics\TerraGL.h" />
     <ClInclude Include="..\..\..\..\Desktop\My Stuff\My Librarys\Graphics\WndCreator.hpp" />
     <ClInclude Include="TerraPGE.h" />
     <ClInclude Include="Math.h" />

@@ -11,6 +11,11 @@
 #include "Math.h"
 #include "Graphics/GdiPP.hpp"
 #include "Graphics/WndCreator.hpp"
+#include "Graphics/TerraGL.h"
+
+// The entire premise of this project is to build a game engine without using any libraries, but the std library and the WinAPI. 
+// GdiPP is more or less straight WinAPI, but you do have to link with a dll which is sort of cheating but it's about the only way to do graphics without any libs like DX or OpenGl
+// Direct2D and DirectWrite are justified the same way
 
 // Windows only include
 #include <Psapi.h>
@@ -2344,9 +2349,6 @@ namespace TerraPGE
 				{
 					Proj.ViewSpaceVerts[i] = Proj.Points[i];
 				}
-
-				// Calc depth centroid for the object (easier than calculating per pixel)
-				ViewedZCentroid = (Proj.Points[0].z + Proj.Points[1].z + Proj.Points[2].z) / 3.0f;
 
 				Vec3 PlaneNormal = { 0.0f, 0.0f, 1.0f };
 				int Count = Proj.ClipAgainstPlane(Cam.NearPlane, PlaneNormal, Clipped[0], Clipped[1], DebugClip);
