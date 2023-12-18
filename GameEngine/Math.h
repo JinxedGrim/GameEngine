@@ -830,7 +830,7 @@ void Matrix::CalcRotationMatrix(const Vec3& RotationDeg) // pitch yaw roll
 	//return A;
 }
 
-void __fastcall Matrix::MakeOrthoMatrix(const float& Left, const float& Right, const float& Top, const float& Bottom, const float& Near, const float& Far)
+void __fastcall Matrix::MakeOrthoMatrix(const float& Left, const float& Right, const float& Bottom, const float& Top, const float& Near, const float& Far)
 {
 	this->fMatrix[0][0] = 2.0f / (Right - Left);
 	this->fMatrix[1][1] = 2.0f / (Top - Bottom);
@@ -881,7 +881,7 @@ Matrix Matrix::CalcViewMatrix(const Vec3& Pos, const Vec3& Target, const Vec3& U
 	return ViewMat;
 }
 
-Matrix Matrix::CalcOrthoMatrix(const float& Left, const float& Right, const float& Top, const float& Bottom, const float& Near, const float& Far)
+Matrix Matrix::CalcOrthoMatrix(const float& Left, const float& Right, const float& Bottom, const float& Top, const float& Near, const float& Far)
 {
 	Matrix OrthoMat;
 
