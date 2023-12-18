@@ -41,6 +41,15 @@
     <ClInclude Include="..\..\..\..\Desktop\My Stuff\My Librarys\Graphics\TerraGL.h">
       <Filter>Header Files\Core</Filter>
     </ClInclude>
+    <ClInclude Include="TerraAL.h">
+      <Filter>Header Files\Core</Filter>
+    </ClInclude>
+    <ClInclude Include="ParrallelPP.h">
+      <Filter>Header Files\Core</Filter>
+    </ClInclude>
+    <ClInclude Include="TerraPGE_Cleanup.h">
+      <Filter>Header Files\Core</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="TeaPot.obj">

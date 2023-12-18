@@ -830,7 +830,7 @@ void Matrix::CalcRotationMatrix(const Vec3& RotationDeg) // pitch yaw roll
 	//return A;
 }
 
-void __fastcall Matrix::MakeOrthoMatrix(const float& Left, const float& Right, const float& Top, const float& Bottom, const float& Near, const float& Far)
+void __fastcall Matrix::MakeOrthoMatrix(const float& Left, const float& Right, const float& Bottom, const float& Top, const float& Near, const float& Far)
 {
 	this->fMatrix[0][0] = 2.0f / (Right - Left);
 	this->fMatrix[1][1] = 2.0f / (Top - Bottom);
@@ -881,7 +881,7 @@ Matrix Matrix::CalcViewMatrix(const Vec3& Pos, const Vec3& Target, const Vec3& U
 	return ViewMat;
 }
 
-Matrix Matrix::CalcOrthoMatrix(const float& Left, const float& Right, const float& Top, const float& Bottom, const float& Near, const float& Far)
+Matrix Matrix::CalcOrthoMatrix(const float& Left, const float& Right, const float& Bottom, const float& Top, const float& Near, const float& Far)
 {
 	Matrix OrthoMat;
 
@@ -975,8 +975,8 @@ class Vec4
 		if (this->w != 0)
 		{
 			this->x /= w;
-			this->x /= y;
-			this->x /= z;
+			this->y /= w;
+			this->z /= w;
 		}
 	}
 
@@ -994,16 +994,15 @@ class Vec4
 
 	void operator *= (const Matrix& b)
 	{
-		float Tmpx = this->x;
-		float Tmpy = this->y;
-		float Tmpz = this->z;
+		float _tmpx = this->x;
+		float _tmpy = this->y;
+		float _tmpz = this->z;
 
-		this->x = Tmpx * b.fMatrix[0][0] + Tmpy * b.fMatrix[1][0] + Tmpz * b.fMatrix[2][0] + this->w * b.fMatrix[3][0];
-		this->y = Tmpx * b.fMatrix[0][1] + Tmpy * b.fMatrix[1][1] + Tmpz * b.fMatrix[2][1] + this->w * b.fMatrix[3][1];
-		this->z = Tmpx * b.fMatrix[0][2] + Tmpy * b.fMatrix[1][2] + Tmpz * b.fMatrix[2][2] + this->w * b.fMatrix[3][2];
-		this->w = Tmpx * b.fMatrix[0][3] + Tmpy * b.fMatrix[1][3] + Tmpz * b.fMatrix[2][3] + this->w * b.fMatrix[3][3];
 
-		this->CorrectPerspective();
+		this->x = _tmpx * b.fMatrix[0][0] + _tmpy * b.fMatrix[1][0] + _tmpz * b.fMatrix[2][0] + this->w * b.fMatrix[3][0];
+		this->y = _tmpx * b.fMatrix[0][1] + _tmpy * b.fMatrix[1][1] + _tmpz * b.fMatrix[2][1] + this->w * b.fMatrix[3][1];
+		this->z = _tmpx * b.fMatrix[0][2] + _tmpy * b.fMatrix[1][2] + _tmpz * b.fMatrix[2][2] + this->w * b.fMatrix[3][2];
+		this->w = _tmpx * b.fMatrix[0][3] + _tmpy * b.fMatrix[1][3] + _tmpz * b.fMatrix[2][3] + this->w * b.fMatrix[3][3];
 	}
 
 	Vec4& operator=(const Vec3& b) 
