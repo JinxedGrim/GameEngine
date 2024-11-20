@@ -1,14 +1,37 @@
 #pragma once
 #include <math.h>
 #include <vector>
-#include <Windows.h>
+#include <ostream>
 
 #define PI 3.14159265358979323846
 
-#define ToDegree(Deg) (float)((Deg) * (float)(180.0f / PI))
-#define ToRad(Rad) (float)((Rad) * (float)(PI / 180.0f))
-#define ToDegreeD(Deg) (double)((Deg) * (180.0 / PI))
-#define ToRadD(Rad) (double)((Rad) * (PI / 180.0))
+#ifndef PixelRound
+	#define PixelRound(Val) (int)(Val + 0.5f)
+#endif
+
+#ifndef PixelRoundFloor
+	#define PixelRoundFloor(Val) (int)(Val)
+#endif
+
+#ifndef PixelRoundMinMax
+	#define PixelRoundMinMax(Val, Minimum, Maximum) std::max(Minimum, std::min(PixelRoundFloor(Val), Maximum))
+#endif
+
+#ifndef ToDegree
+	#define ToDegree(Deg) (float)((Deg) * (float)(180.0f / PI))
+#endif
+
+#ifndef ToRad
+	#define ToRad(Rad) (float)((Rad) * (float)(PI / 180.0f))
+#endif
+
+#ifndef ToDegreeD
+	#define ToDegreeD(Deg) (double)((Deg) * (180.0 / PI))
+#endif
+
+#ifndef ToRadD
+	#define ToRadD(Rad) (double)((Rad) * (PI / 180.0))
+#endif
 
 float Clamp(float Min, float Max, float Val)
 {

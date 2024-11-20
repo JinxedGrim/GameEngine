@@ -7,6 +7,7 @@
 
 #ifndef UseOGL
 //#define SSE_SIMD_42_SUPPORT
+//#include "TerraPGE.h"
 #include "TerraPGE.h"
 #else
 // gonna add a opengl version
@@ -48,7 +49,7 @@ static Vec3 LightSrcPos = { 0, 30, -34 };
 static DirectionalLight sl = DirectionalLight(LightSrcPos, { 0, 10, 0 }, Vec3(253, 251, 211), 0.35f, 0.15f, 0.5f);
 static Camera Cam = Camera(Vec3(0, 1, 0), (float)((float)TerraPGE::sy / (float)TerraPGE::sx), TerraPGE::FOV, TerraPGE::FNEAR, TerraPGE::FFAR);
 
-static Renderable CubeRender = Renderable(CubeMsh, Cam, Vec3(1.0f, 1.0f, 1.0f), Vec3(0.0f, 0.0f, 0.0f), Vec3(0.0f, 5.f, -4.0f), EngineShaders::Shader_Frag_Phong_Shadows);
+static Renderable CubeRender = Renderable(CubeMsh, Cam, Vec3(1.0f, 1.0f, 1.0f), Vec3(0.0f, 0.0f, 0.0f), Vec3(0.0f, 5.f, -4.0f), EngineShaders::Shader_Texture_Only);
 static Renderable PlaneRender = Renderable(Plane, Cam, Vec3(1.0f, 1.0f, 1.0f), Vec3(0.0f, 0.0f, 0.0f), Vec3(0.0f, 0.0f, 0.0f), EngineShaders::Shader_Frag_Phong_Shadows);
 static Renderable RCAMMO_Render = Renderable(RCAMMO, Cam, Vec3(1.0f, 1.0f, 1.0f), Vec3(0.0f, 0.0f, 0.0f), Vec3(0.0f, 0.0f, 0.0f), EngineShaders::Shader_Frag_Phong_Shadows);
 
@@ -235,7 +236,7 @@ DoTick_T Draw(GdiPP& Gdi, WndCreatorW& Wnd, const float& ElapsedTime, std::vecto
 
 	ToRender->push_back(CubeRender);
 	//ToRender->push_back(PlaneRender);
-	ToRender->push_back(RCAMMO_Render);
+	ToRender->push_back(PlaneRender);
 
 	Lights->push_back(&sl);
 
@@ -251,7 +252,7 @@ DoTick_T Draw(GdiPP& Gdi, WndCreatorW& Wnd, const float& ElapsedTime, std::vecto
 //	if (CurrMesh <= 2)
 //		TerraPGE::RenderMesh(Gdi, Cam, Meshes.at(CurrMesh), Vec3(1.0f, 1.0f, 1.0f), Vec3(FTheta * RotSpeedX, FTheta * RotSpeedY, FTheta * RotSpeedZ), Vec3(10, 0, 10), sl.LightPos, sl.Color, sl.AmbientCoeff, sl.DiffuseCoeff, sl.SpecularCoeff, EngineShaders::Shader_Gradient_Centroid, SHADER_FRAGMENT);
 
-	TerraPGE::RenderMesh(Gdi, Cam, sl.LightMesh, Vec3(1.0f, 1.0f, 1.0f), Vec3(0, 0, 0), Vec3(0, 0, 0), Lights->data(), Lights->size(), EngineShaders::Shader_Material, ShaderTypes::SHADER_TRIANGLE);
+	//TerraPGE::RenderMesh(Gdi, Cam, sl.LightMesh, Vec3(1.0f, 1.0f, 1.0f), Vec3(0, 0, 0), Vec3(0, 0, 0), Lights->data(), Lights->size(), EngineShaders::Shader_Material, ShaderTypes::SHADER_TRIANGLE);
 
 	if (TerraPGE::FpsEngineCounter && ShowStrs)
 	{

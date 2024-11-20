@@ -10,11 +10,11 @@
 #include <unordered_map>
 #include <filesystem>
 
+#include "Math.h"
 #include "Graphics/GdiPP.hpp"
 #include "Graphics/WndCreator.hpp"
 #include "Graphics/TerraGL.h"
 #include "ParrallelPP.h"
-#include "Shading.h"
 
 #define FLOAT_LOWEST 0.0000001f
 
@@ -30,7 +30,6 @@
 #include <Psapi.h>
 
 //     TO DO 
-// 1. Fix the shadows during culling 
 // 3. Revamp Material and texture system ie put all materials in the mesh and pointers to them in the triangle
 // 4. Caclulate Vertex norms for all 3 vertices and store them
 // 5. figure out a better way of per pixel shading
@@ -44,10 +43,1787 @@
 // X. Proper UI system
 // X. Probably migrate to unicode
 
+enum class ShaderTypes
+{
+	SHADER_TRIANGLE = 0,
+	SHADER_FRAGMENT = 1,
+};
+
+enum class LightTypes
+{
+	PointLight = 0,
+	DirectionalLight = 1,
+	SpotLight = 2,
+};
+
 constexpr auto VK_W = 0x57;
 constexpr auto VK_A = 0x41;
 constexpr auto VK_S = 0x53;
 constexpr auto VK_D = 0x44;
+
+#include <iostream>
+#include <fstream>
+#include <vector>
+
+class TextureCoords
+{
+	public:
+
+	TextureCoords()
+	{
+		u = 0;
+		v = 0;
+		w = 1.0f;
+	}
+
+	TextureCoords(float _u, float _v, float _w = 1.0f)
+	{
+		u = _u;
+		v = _v;
+		w = _w;
+	}
+
+	float u = 0;
+	float v = 0;
+	float w = 1.0f;
+
+	void __inline CorrectPerspective(float _w)
+	{
+		if (_w != 0)
+		{
+			this->u = this->u / _w;
+			this->v = this->v / _w;
+			this->w = 1.0f / _w;
+		}
+	}
+
+	TextureCoords Lerp(const TextureCoords& end, float t) const
+	{
+		TextureCoords result;
+
+		result.u = this->u + (end.u - this->u) * t;
+		result.v = this->v + (end.v - this->v) * t;
+		result.w = this->w + (end.w - this->w) * t;
+
+		return result;
+	}
+
+	void Lerped(const TextureCoords& end, float t) 
+	{
+		this->u = this->u + (end.u - this->u) * t;
+		this->v = this->v + (end.v - this->v) * t;
+		this->w = this->w + (end.w - this->w) * t;
+	}
+};
+
+class Texture
+{
+	public:
+	
+	enum class WrappingMode
+	{
+		Clamp,
+		Repeat,
+		MirroredRepeat
+	};
+
+	private:
+
+	int Width = 0;
+	int Height = 0;
+	std::vector<unsigned char> PixelData = {};
+	WrappingMode WrapMode;
+
+	// Function to load a BMP file and store pixel data
+	bool LoadBMP(const std::string& filename)
+	{
+		std::ifstream file(filename, std::ios::in | std::ios::binary);
+
+		if (!file || !file.is_open())
+		{
+			return false;
+		}
+
+		// Read the BMP header
+		char header[54];
+		file.read(header, 54);
+
+		// Check the BMP signature
+		if (header[0] != 'B' || header[1] != 'M')
+		{
+			file.close();
+			return false;
+		}
+
+		// Extract width and height from the header
+		Width = *(int*)&header[18];
+		Height = *(int*)&header[22];
+		int colorDepth = *(int*)&header[28]; // Bits per pixel
+
+		// Calculate the number of bytes per pixel (based on color depth)
+		int bytesPerPixel = colorDepth / 8;
+
+		// Calculate the size of the pixel data (excluding padding)
+		int dataSize = Width * Height * bytesPerPixel;
+
+		// Read pixel data
+		std::vector<unsigned char> rawPixelData(dataSize);
+		file.read(reinterpret_cast<char*>(rawPixelData.data()), dataSize);
+
+		file.close();
+
+		// If color depth is greater than 3 (such as 4), convert to 3 (24 bits)
+		if (bytesPerPixel > 3) {
+			// Convert to 24-bit (3 bytes per pixel)
+			PixelData.resize(Width * Height * 3);
+			for (int i = 0, j = 0; i < dataSize; i += bytesPerPixel, j += 3) {
+				PixelData[j] = rawPixelData[i];         // Red
+				PixelData[j + 1] = rawPixelData[i + 1]; // Green
+				PixelData[j + 2] = rawPixelData[i + 2]; // Blue
+			}
+		}
+		else {
+			// Color depth is already 3, no need to convert
+			PixelData = std::move(rawPixelData);
+		}
+
+		return true;
+	}
+
+	bool LoadSPR(const std::string& filename) 
+	{
+		std::ifstream file(filename, std::ios::in | std::ios::binary);
+
+		if (!file) {
+			std::cerr << "Failed to open SPR file." << std::endl;
+			return false;
+		}
+
+		// Read SPR header (assuming a simple format)
+		int sprWidth = 0, sprHeight = 0;
+		file.read(reinterpret_cast<char*>(&sprWidth), sizeof(int));
+		file.read(reinterpret_cast<char*>(&sprHeight), sizeof(int));
+
+
+		// Ensure that the header was read correctly
+		if (sprWidth <= 0 || sprHeight <= 0) {
+			std::cerr << "Invalid SPR file format." << std::endl;
+			return false;
+		}
+
+		// Update the texture width and height
+		this->Width = sprWidth;
+		this->Height = sprHeight;
+
+		// Read pixel data
+		int dataSize = this->Width * this->Height * 3; // Assuming 3 channels (RGB)
+		this->PixelData.resize(dataSize);
+		file.read(reinterpret_cast<char*>(this->PixelData.data()), dataSize);
+
+		file.close();
+
+		return true;
+	}
+
+	public:
+
+	bool Used = false;
+
+	void SetWrapMode(WrappingMode WrapMode)
+	{
+		this->WrapMode = WrapMode;
+	}
+
+	Texture()
+	{
+		this->Used = false;
+		this->Width = 0;
+		this->Height = 0;
+	}
+
+	Texture(const std::string& Filename, WrappingMode Mode = WrappingMode::Clamp)
+	{
+		Width = 0;
+		Height = 0;
+		if (Filename.find(".bmp") != std::string::npos)
+		{
+			Used = LoadBMP(Filename);
+		}
+		else if (Filename.find(".spr") != std::string::npos)
+		{
+			Used = LoadSPR(Filename);
+		}
+
+		this->WrapMode = Mode;
+	}
+
+	Color GetPixelColor(float u, float v) const 
+	{
+		if (this->PixelData.empty())
+		{
+			return Color(255, 0, 0);
+		}
+
+		if (WrapMode == WrappingMode::Repeat)
+		{
+			u = u - std::floor(u); // Repeat mode
+			v = v - std::floor(v);
+		}
+		else if (WrapMode == WrappingMode::MirroredRepeat)
+		{
+			if (static_cast<int>(std::floor(u)) % 2) { u = 1.0f - (u - std::floor(u)); }
+			else { u = u - std::floor(u); }
+			if (static_cast<int>(std::floor(v)) % 2) { v = 1.0f - (v - std::floor(v)); }
+			else { v = v - std::floor(v); }
+		}
+
+		// Calculate pixel coordinates
+		int x = PixelRound(u * (float)(this->Width - 1.0f));
+		int y = PixelRound(v * (float)(this->Height - 1.0f));
+
+		// Ensure coordinates are within bounds
+		x = std::clamp<int>(x, 0, (this->Width - 1));
+		y = std::clamp<int>(y, 0, (this->Height - 1));
+
+		// Calculate the index in the pixel data
+		int index = (x + this->Width * y) * 3;
+
+		// Extract RGB values
+   		float b = static_cast<float>(this->PixelData[index]);
+		float g = static_cast<float>(this->PixelData[index + 1]);
+		float r = static_cast<float>(this->PixelData[index + 2]);
+
+		return Color(r, g, b);
+	}
+};
+
+class Material
+{
+	public:
+
+	static std::vector<Material*> LoadedMaterials;
+
+	Material* FindMaterial(std::string Name)
+	{
+		for (Material* M : LoadedMaterials)
+		{
+			if (M->MaterialName == Name)
+			{
+				return M;
+			}
+		}
+
+		return nullptr;
+	}
+
+	Material()
+	{
+		Material* RetMat = FindMaterial("DefaultMat");
+		if (RetMat == nullptr)
+		{
+			Material* m = new Material(Vec3(255.0f, 0, 0), Vec3(255.0f * 0.75f, 0.0f, 0.0f), Vec3(255.0f * 0.25f, 0.0f, 0.0f), 96.0f, "DefaultMat");
+			LoadedMaterials.push_back(m);
+		}
+		else
+		{
+			*this = *RetMat;
+		}
+	}
+	Material(Vec3 AmbientColor, Vec3 DiffuseColor, Vec3 SpecularColor, float Shininess, std::string Name = "")
+	{
+		this->AmbientColor = AmbientColor;
+		this->DiffuseColor = DiffuseColor;
+		this->SpecularColor = SpecularColor;
+		this->Shininess = Shininess;
+		this->MaterialName = Name;
+	}
+
+	bool LoadMaterial(std::string MtlFn, std::string MtlName)
+	{
+		if (FindMaterial(MtlName) != nullptr)
+		{
+			*this = *FindMaterial(MtlName);
+			return true;
+		}
+
+		std::ifstream mtlFile(MtlFn);
+		if (!mtlFile.is_open())
+		{
+			// Error handling for failed MTL file loading
+			// You can return a default material or throw an exception
+			*this = Material();
+			return false;
+		}
+
+		std::string line;
+		while (std::getline(mtlFile, line))
+		{
+			std::stringstream ss(line);
+			std::string keyword;
+			ss >> keyword;
+
+			if (keyword == "newmtl")
+			{
+				std::string name;
+				ss >> name;
+
+				if (name == MtlName)
+				{
+					this->MaterialName = name;
+					// Parse the properties for the material
+					while (std::getline(mtlFile, line))
+					{
+						std::stringstream ssProp(line);
+						std::string propKeyword;
+						ssProp >> propKeyword;
+
+						if (propKeyword == "Ka")
+						{
+							ssProp >> this->AmbientColor.x >> this->AmbientColor.y >> this->AmbientColor.z;
+							this->AmbientColor *= 255.0f;
+						}
+						else if (propKeyword == "Kd")
+						{
+							ssProp >> this->DiffuseColor.x >> this->DiffuseColor.y >> this->DiffuseColor.z;
+							this->DiffuseColor *= 255.0f;
+						}
+						else if (propKeyword == "Ks")
+						{
+							ssProp >> this->SpecularColor.x >> this->SpecularColor.y >> this->SpecularColor.z;
+							this->SpecularColor *= 255.0f;
+						}
+						else if (propKeyword == "Ns")
+						{
+							ssProp >> this->Shininess;
+						}
+						else if (propKeyword == "map_Ka")
+						{
+							std::string textureFilePath;
+							ssProp >> textureFilePath;
+							if (textureFilePath != "")
+							{
+								this->TexA = Texture(textureFilePath);
+							}
+						}
+						else if (propKeyword == "map_Kd")
+						{
+							std::string textureFilePath;
+							ssProp >> textureFilePath;
+							if (textureFilePath != "")
+							{
+								//this->TexD = Texture(textureFilePath);
+							}
+						}
+						// Add more properties as needed
+
+						// Check if the end of material is reached
+						if (line.find("newmtl") != std::string::npos)
+							break;
+					}
+
+					break; // Exit the loop once the material is found
+				}
+			}
+		}
+
+		mtlFile.close();
+
+		return true;
+	}
+
+	Vec3 AmbientColor = Vec3(255.0f * 0.15f, 0, 0);
+	Vec3 DiffuseColor = Vec3(255.0f * 0.25f, 255.0f * 0.25f, 255.0f * 0.25f);
+	Vec3 SpecularColor = Vec3(255.0f * 0.25f, 255.0f * 0.25f, 255.0f * 0.25f);
+	float Shininess = 32.0f;
+
+	Texture TexA = Texture();
+	Texture TexD = Texture();
+
+	std::string MaterialName = "DefaultMat";
+};
+
+std::vector<Material*> Material::LoadedMaterials;
+
+class Ray;
+
+class Triangle
+{
+public:
+	Triangle()
+	{
+		memset(Points, 0, sizeof(Points));
+	}
+
+	Triangle(const Vec3& P1, const Vec3& P2, const Vec3& P3)
+	{
+		this->Points[0] = P1;
+		this->Points[1] = P2;
+		this->Points[2] = P3;
+	}
+
+	void Translate(const Vec3& Value)
+	{
+		this->Points[0] += Value;
+		this->Points[1] += Value;
+		this->Points[2] += Value;
+	}
+
+	const void Translated(Triangle* Out, const Vec3& Value)
+	{
+		Out->Points[0] = this->Points[0] + Value;
+		Out->Points[1] = this->Points[1] + Value;
+		Out->Points[2] = this->Points[2] + Value;
+	}
+
+	void Scale(const Vec3 &Value)
+	{
+		this->Points[0] *= Value;
+		this->Points[1] *= Value;
+		this->Points[2] *= Value;
+	}
+
+	const void Scaled(Triangle* Out, const Vec3& Value)
+	{
+		Out->Points[0] = this->Points[0] * Value;
+		Out->Points[1] = this->Points[1] * Value;
+		Out->Points[2] = this->Points[2] * Value;
+	}
+
+	void Rotate(const Matrix &Rot)
+	{
+		this->Points[0] *= Rot;
+		this->Points[1] *= Rot;
+		this->Points[2] *= Rot;
+	}
+
+	const void Rotated(Triangle* Out, const Matrix &Rot)
+	{
+		Out->Points[0] = this->Points[0] * Rot;
+		Out->Points[1] = this->Points[1] * Rot;
+		Out->Points[2] = this->Points[2] * Rot;
+	}
+
+	void ApplyMatrix(const Matrix &MatToApply)
+	{
+		this->Points[0] *= MatToApply;
+		this->Points[1] *= MatToApply;
+		this->Points[2] *= MatToApply;
+	}
+
+	void ApplyPerspectiveDivide()
+	{
+		this->TexCoords[0].CorrectPerspective(this->Points[0].w);
+		this->TexCoords[1].CorrectPerspective(this->Points[1].w);
+		this->TexCoords[2].CorrectPerspective(this->Points[2].w);
+
+		this->Points[0].CorrectPerspective();
+		this->Points[1].CorrectPerspective();
+		this->Points[2].CorrectPerspective();
+	}
+
+	int ClipAgainstPlane(const Vec3& PointOnPlane, const Vec3& PlaneNormalized, Triangle& Out1, Triangle& Out2, bool DebugClip = false)
+	{
+		Vec3 p0 = this->Points[0].GetVec3();
+		Vec3 p1 = this->Points[1].GetVec3();
+		Vec3 p2 = this->Points[2].GetVec3();
+		TextureCoords& t0 = this->TexCoords[0];
+		TextureCoords& t1 = this->TexCoords[1];
+		TextureCoords& t2 = this->TexCoords[2];
+
+		float PlanePointDot = PlaneNormalized.Dot(PointOnPlane);
+		float dist0 = PlaneNormalized.Dot(p0) - PlanePointDot;
+		float dist1 = PlaneNormalized.Dot(p1) - PlanePointDot;
+		float dist2 = PlaneNormalized.Dot(p2) - PlanePointDot;
+
+		Vec3* InsidePoints[3] = {};
+		Vec3* OutsidePoints[3] = {};
+		TextureCoords* InsideTex[3] = {};
+		TextureCoords* OutsideTex[3] = {};
+		int InsideCount = 0;
+		int OutsideCount = 0;
+		int InsideTexCount = 0;
+		int OutsideTexCount = 0;
+
+		if (dist0 >= 0)
+		{
+			InsidePoints[InsideCount++] = &p0; InsideTex[InsideTexCount++] = &t0;
+		}
+		else
+		{
+			OutsidePoints[OutsideCount++] = &p0; OutsideTex[OutsideTexCount++] = &t0;
+		}
+
+		if (dist1 >= 0)
+		{
+			InsidePoints[InsideCount++] = &p1; InsideTex[InsideTexCount++] = &t1;
+		}
+		else
+		{
+			OutsidePoints[OutsideCount++] = &p1; OutsideTex[OutsideTexCount++] = &t1;
+		}
+
+		if (dist2 >= 0)
+		{
+			InsidePoints[InsideCount++] = &p2; InsideTex[InsideTexCount++] = &t2;
+		}
+		else
+		{
+			OutsidePoints[OutsideCount++] = &p2; OutsideTex[OutsideTexCount++] = &t2;
+		}
+
+		int Count = 0;
+
+		if (InsideCount == 3)
+		{
+			Out1 = *this;
+			Count = 1;
+		}
+		else if (InsideCount == 1)
+		{
+			Out1 = *this;
+
+			if (DebugClip)
+			{
+				Out1.Col = Vec3(0, 0, 255);
+				Out1.OverrideTextureColor = true;
+			}
+
+			Out1.Points[0] = *InsidePoints[0];
+			Out1.TexCoords[0] = *InsideTex[0];
+
+			float t = 0.0f;
+			Out1.Points[1] = InsidePoints[0]->CalculateIntersectionPoint(*OutsidePoints[0], PointOnPlane, PlaneNormalized, &t);
+			Out1.TexCoords[1] = InsideTex[0]->Lerp(*OutsideTex[0], t);
+
+			Out1.Points[2] = InsidePoints[0]->CalculateIntersectionPoint(*OutsidePoints[1], PointOnPlane, PlaneNormalized, &t);
+			Out1.TexCoords[2] = InsideTex[0]->Lerp(*OutsideTex[1], t);
+
+			Count = 1;
+		}
+		else if (InsideCount == 2)
+		{
+			Out1 = *this;
+			Out2 = *this;
+
+			if (DebugClip)
+			{
+				Out1.Col = Vec3(0, 255, 0);
+				Out1.OverrideTextureColor = true;
+				Out2.Col = Vec3(255, 0, 0);
+				Out2.OverrideTextureColor = true;
+			}
+
+
+			Out1.Points[0] = *InsidePoints[0];
+			Out1.Points[1] = *InsidePoints[1];
+			Out1.TexCoords[0] = *InsideTex[0];
+			Out1.TexCoords[1] = *InsideTex[1];
+
+			float t = 0.0f;
+			Out1.Points[2] = InsidePoints[0]->CalculateIntersectionPoint(*OutsidePoints[0], PointOnPlane, PlaneNormalized, &t);
+			Out1.TexCoords[2] = InsideTex[0]->Lerp(*OutsideTex[0], t);
+
+			Out2.Points[0] = *InsidePoints[1];
+			Out2.Points[1] = Out1.Points[2];
+			Out2.TexCoords[0] = *InsideTex[1];
+			Out2.TexCoords[1] = Out1.TexCoords[2];
+
+			Out2.Points[2] = InsidePoints[1]->CalculateIntersectionPoint(*OutsidePoints[0], PointOnPlane, PlaneNormalized, &t);
+			Out2.TexCoords[2] = InsideTex[1]->Lerp(*OutsideTex[0], t);
+
+			Count = 2;
+		}
+
+		return Count;
+	}
+
+	Vec4 Points[3] = {};
+	Vec3 WorldSpaceVerts[3] = {};
+	Vec4 ViewSpaceVerts[3] = {};
+
+	Vec3 FaceNormal = Vec3();
+	Vec3 VertexNormals[3] = {};
+	Vec3 NormalPositions[4] = {};
+	Vec3 NormDirections[4] = {};
+
+	TextureCoords TexCoords[3] = {};
+
+	Vec3 Col = Vec3(255, 0, 0);
+	Material Mat = Material();
+
+	bool UseMeshMaterial = false;
+	bool HasTexture = false;
+	bool OverrideTextureColor = false;
+};
+
+class Mesh
+{
+	public:
+
+	Mesh()
+	{
+
+	}
+
+	Mesh(std::vector<Triangle> Triangles, std::string MeshName = "")
+	{
+		this->Triangles = Triangles;
+		this->MeshName = MeshName;
+		this->TriangleCount = (int)Triangles.size();
+		this->NormalCount = 0;
+		this->VertexCount = 0;
+		this->ChangeMatInfo(Material());
+		this->CalculateNormals();
+	}
+
+	Mesh(std::string Fn)
+	{
+		this->LoadMesh(Fn);
+	}
+
+	Mesh(Mesh m, Material Mat)
+	{
+		*this = m;
+		if (this->Normals.size() == 0)
+		{
+			this->CalculateNormals();
+		}
+
+		this->ChangeMatInfo(Mat);
+	}
+
+	void TranslateTriangles(Vec3 Value)
+	{
+		for (int i = 0; i < this->Triangles.size(); i++)
+		{
+			Triangles.at(i).Translate(Value);
+		}
+	}
+
+	void ScaleTriangles(Vec3 Value)
+	{
+		for (int i = 0; i < this->Triangles.size(); i++)
+		{
+			this->Triangles.at(i).Points[0] *= Value;
+			this->Triangles.at(i).Points[1] *= Value;
+			this->Triangles.at(i).Points[2] *= Value;
+		}
+	}
+
+	Mesh ScaledTriangles(Vec3 Value)
+	{
+		Mesh Out = *this;
+		for (int i = 0; i < this->Triangles.size(); i++)
+		{
+			Out.Triangles.at(i).Points[0] * Value;
+			Out.Triangles.at(i).Points[1] * Value;
+			Out.Triangles.at(i).Points[2] * Value;
+		}
+	}
+
+	void ChangeMatInfo(Material MatToApply)
+	{
+		this->Mat = MatToApply;
+		for (auto & Tri : this->Triangles)
+		{
+			Tri.Mat = this->Mat;
+
+			if(Tri.Mat.TexA.Used || Tri.Mat.TexD.Used)
+				Tri.HasTexture = true;
+		}
+	}
+
+	bool LoadMesh(std::string FnPath)
+	{
+		std::ifstream ifs = std::ifstream(FnPath);
+
+		if (!ifs.is_open())
+			return false;
+
+		std::vector<Vec3> VertCache;
+		std::vector<Vec3> NormalCache;
+		std::vector<TextureCoords> TexCache;
+
+		std::string MtlLibFn = "";
+		Material CurrMat = Material();
+
+		std::cout << "Loading Mesh: " << FnPath << std::endl;
+
+		while (!ifs.eof())
+		{
+			char Line[128];
+			char Unused;
+			std::stringstream SS;
+
+			ifs.getline(Line, 128);
+
+			SS << Line;
+			std::string Str = SS.str();
+
+			std::cout << "Verts: ";
+
+			if (Str.find("v ") != std::string::npos)
+			{
+				Vec3 Vert;
+				SS >> Unused >> Vert.x >> Vert.y >> Vert.z;
+				VertCache.push_back(Vert);
+			}
+			else if (Str.find("vn ") != std::string::npos)
+			{
+				Vec3 Normal;
+				SS >> Unused >> Unused >> Normal.x >> Normal.y >> Normal.z;
+				NormalCache.push_back(Normal);
+			}
+			else if (Str.find("vt ") != std::string::npos)
+			{
+				TextureCoords TexCoord;
+				SS >> Unused >> Unused >> TexCoord.u >> TexCoord.v;
+
+				if (std::fabs(TexCoord.u) > 1.0f)
+				{
+					TexCoord.u = std::fabs(fmod(TexCoord.u, 1.0f));
+				}
+				if (std::fabs(TexCoord.v) > 1.0f)
+				{
+					TexCoord.v = std::fabs(fmod(TexCoord.v, 1.0f));
+				}
+
+				TexCache.push_back(TexCoord);
+			}
+			else if (Str.find("f ") != std::string::npos)
+			{
+				std::vector<std::string> Indices;
+				std::string IndexStr;
+				while (SS >> IndexStr)
+				{
+					if (IndexStr[0] == 'f')
+						continue; // Skip the 'f' character
+
+					Indices.push_back(IndexStr);
+				}
+				if (Indices.size() == 3)
+				{
+					Triangle Tmp;
+					for (int i = 0; i < 3; i++)
+					{
+						std::stringstream IndexSS(Indices[i]);
+						std::string IndexPart;
+
+						int vertexIndex = 0, texCoordIndex = 0, normalIndex = 0;
+
+						if (std::getline(IndexSS, IndexPart, '/'))
+							vertexIndex = std::stoi(IndexPart) - 1;
+
+						if (std::getline(IndexSS, IndexPart, '/'))
+						{
+							if (!IndexPart.empty())
+								texCoordIndex = std::stoi(IndexPart) - 1;
+							else
+								texCoordIndex = -1;
+						}
+						else
+						{
+							texCoordIndex = -1;
+						}
+
+						if (std::getline(IndexSS, IndexPart, '/'))
+						{
+							if (!IndexPart.empty())
+								normalIndex = std::stoi(IndexPart) - 1;
+							else
+								normalIndex = -1;
+						}
+						else
+						{
+							normalIndex = -1;
+						}
+
+						Vec3 vertex = VertCache[vertexIndex];
+
+						// Store the texture coordinates for this vertex
+						if (texCoordIndex >= 0)
+							Tmp.TexCoords[i] = TexCache[texCoordIndex];
+						else
+							Tmp.TexCoords[i] = {0, 0}; // Default value if no texture coordinates provided
+
+						if (normalIndex >= 0)
+							Tmp.FaceNormal = NormalCache[normalIndex];
+
+						Tmp.Points[i] = vertex;
+					}
+
+					Tmp.Mat = CurrMat; // Assign the current material to the triangle
+					Tmp.HasTexture = Tmp.Mat.TexA.Used || Tmp.Mat.TexA.Used;
+
+					this->Triangles.push_back(Tmp);
+				}
+			}
+			else if (Str.find("usemtl ") != std::string::npos)
+			{
+				//char Prefix[7];
+				std::string MaterialFn;
+				SS >> Unused >> Unused >> Unused >> Unused >> Unused >> Unused >> MaterialFn;
+				CurrMat.LoadMaterial(MtlLibFn, MaterialFn); // Update the current material
+				this->MatCount++;
+
+				if (this->MatCount > 1)
+				{
+					this->Mat.MaterialName = "Multiple";
+					this->UseSingleMat = false;
+				}
+				else
+				{
+					this->Mat = CurrMat;
+				}
+			}
+			else if (Str.find("mtllib ") != std::string::npos)
+			{
+				SS >> Unused >> Unused >> Unused >> Unused >> Unused >> Unused >> MtlLibFn;
+			}
+
+#ifdef _DEBUG
+			std::cout << Vertices.size() << " Normals: ";
+			std::cout << Normals.size() << " TexturedCahce: " << TexCache.size();
+			std::cout << " Faces: " << Triangles.size() << "\r";
+#endif
+
+		}
+
+		FnPath = FnPath.substr(FnPath.find_last_of("/\\") + 1);
+		FnPath = FnPath.substr(0, FnPath.find_last_of(".obj") - 3);
+
+		this->MeshName = FnPath;
+		this->Vertices = VertCache;
+		this->Normals = NormalCache;
+		this->NormalCount = (int)NormalCache.size();
+		this->TexCoords = TexCache;
+		this->TexCoordsCount = (int)TexCache.size();
+		this->VertexCount = (int)VertCache.size();
+		this->TriangleCount = (int)Triangles.size();
+
+		if (Normals.size() == 0)
+			this->CalculateNormals();
+
+#ifdef _DEBUG
+		std::cout << Vertices.size() << " Normals: ";
+		std::cout << Normals.size() << " TexturedCahce: " << TexCache.size();
+		std::cout << " Faces: " << Triangles.size() << "\n\n";
+#endif
+
+		return true;
+	}
+
+	void CalculateNormals()
+	{
+		for (Triangle& Tri : this->Triangles)
+		{
+			Vec3 Norm = (Tri.Points[1] - Tri.Points[0]).GetVec3().CrossNormalized((Tri.Points[2] - Tri.Points[0]));
+			this->Normals.push_back(Norm);
+			Tri.FaceNormal = Norm;
+
+			for (int i = 0; i < 3; i++)
+			{
+				Tri.VertexNormals[i] = Norm;
+			}
+		}
+
+		this->NormalCount = (int)this->Normals.size();
+	}
+
+	std::string MeshName = "";
+	std::vector<Vec3> Vertices = {};
+	std::vector<Triangle> Triangles = {};
+	std::vector<TextureCoords> TexCoords = {};
+	std::vector<Vec3> Normals = {};
+
+	std::vector<Material> ModelMats = {};
+
+	Material Mat = Material();
+
+	int VertexCount = 0;
+	int TriangleCount = 0;
+	int NormalCount = 0;
+	int TexCount = 0;
+	int TexCoordsCount = 0;
+	int MatCount = 0;
+	bool UseSingleMat = true;
+	bool BackfaceCulling = true;
+};
+
+const Mesh CubeMesh = Mesh(
+	{
+		//SOUTH SIDE OF CUBE
+		{ {0.0f, 0.0f, 0.0f}, {0.0f, 1.0f, 0.0f}, {1.0f, 1.0f, 0.0f} },
+		{ {0.0f, 0.0f, 0.0f}, {1.0f, 1.0f, 0.0f}, {1.0f, 0.0f, 0.0f} },
+
+		// EAST FACE
+		{ {1.0f, 0.0f, 0.0f}, {1.0f, 1.0f, 0.0f}, {1.0f, 1.0f, 1.0f} },
+		{ {1.0f, 0.0f, 0.0f}, {1.0f, 1.0f, 1.0f}, {1.0f, 0.0f, 1.0f} },
+
+		// NORTH FACE
+		{ {1.0f, 0.0f, 1.0f}, {1.0f, 1.0f, 1.0f}, {0.0f, 1.0f, 1.0f} },
+		{ {1.0f, 0.0f, 1.0f}, {0.0f, 1.0f, 1.0f}, {0.0f, 0.0f, 1.0f} },
+
+		// WEST FACE
+		{ {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f, 1.0f}, {0.0f, 1.0f, 0.0f} },
+		{ {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f, 0.0f} },
+
+		// TOP FACE
+		{ {0.0f, 1.0f, 0.0f}, {0.0f, 1.0f, 1.0f}, {1.0f, 1.0f, 1.0f} },
+		{ {0.0f, 1.0f, 0.0f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f, 0.0f} },
+
+		// BOTTOM FACE
+		{ {1.0f, 0.0f, 1.0f}, {0.0f, 0.0f, 1.0f}, {0.0f, 0.0f, 0.0f} },
+		{ {1.0f, 0.0f, 1.0f}, {0.0f, 0.0f, 0.0f}, {1.0f, 0.0f, 0.0f} },
+	},
+"Cube");
+
+class Cube : public Mesh
+{
+	public:
+	Cube(float Length, float Width, float Height, Material Mat = Material(), Texture* T = nullptr) : Mesh(CubeMesh, Mat)
+	{
+		for (int i = 0; i < CubeMesh.Triangles.size(); i++)
+		{
+			this->Triangles[i].Points[0] *= Vec3(Length, Width, Height);
+			this->Triangles[i].Points[1] *= Vec3(Length, Width, Height);
+			this->Triangles[i].Points[2] *= Vec3(Length, Width, Height);
+
+			if (T != nullptr)
+			{
+				this->Triangles[i].HasTexture = true;
+				this->Triangles[i].Mat = Mat;
+				this->Triangles[i].Mat.TexA = *T;
+
+				if ((i+1) % 2 == 0)
+				{
+					this->Triangles[i].TexCoords[0] = { 0.0f, 1.0f };
+					this->Triangles[i].TexCoords[1] = { 1.0f, 0.0f };
+					this->Triangles[i].TexCoords[2] = { 1.0f, 1.0f };
+
+				}
+				else
+				{
+					this->Triangles[i].TexCoords[0] = { 0.0f, 1.0f };
+					this->Triangles[i].TexCoords[1] = { 0.0f, 0.0f };
+					this->Triangles[i].TexCoords[2] = { 1.0f, 0.0f };
+
+				}
+			}
+		}
+	}
+
+};
+
+class Sphere : public Mesh
+{
+	public:
+	Sphere(float Radius, int LatitudeSegments, int LongitudeSegments, Material Mat = Material()) : Mesh()
+	{
+		this->Triangles = {};
+		// whole function is a pasted parameterized equation
+
+		for (int lat = 0; lat <= LatitudeSegments; ++lat)
+		{
+			float theta = (float)(lat * PI / LatitudeSegments);
+			float sinTheta = std::sin(theta);
+			float cosTheta = std::cos(theta);
+
+			for (int lon = 0; lon <= LongitudeSegments; ++lon)
+			{
+				float phi = (float)(lon * 2 * PI / LongitudeSegments);
+				float sinPhi = std::sin(phi);
+				float cosPhi = std::cos(phi);
+
+				float x = Radius * sinTheta * cosPhi;
+				float y = Radius * cosTheta;
+				float z = Radius * sinTheta * sinPhi;
+
+				this->Vertices.push_back(Vec3(x, y, z));
+			}
+		}
+		for (int lat = 0; lat < LatitudeSegments; ++lat)
+		{
+			for (int lon = 0; lon < LongitudeSegments; ++lon)
+			{
+				int currentVertex = lat * (LongitudeSegments + 1) + lon;
+				int nextVertex = currentVertex + 1;
+				int topVertex = currentVertex + LongitudeSegments + 1;
+				int topNextVertex = topVertex + 1;
+
+				this->Triangles.push_back(Triangle(this->Vertices[currentVertex], this->Vertices[topVertex], this->Vertices[nextVertex]));
+
+				this->Triangles.push_back(Triangle(this->Vertices[nextVertex], this->Vertices[topVertex], this->Vertices[topNextVertex]));
+
+				this->VertexCount = (int)Vertices.size();
+				this->TriangleCount = (int)Triangles.size();
+			}
+		}
+		this->CalculateNormals();
+		this->ChangeMatInfo(Mat);
+	}
+};
+
+class LightObject
+{
+	public:
+	LightObject(Vec3 Pos, Vec3 LightDir, Vec3 LightColor, float AmbientCoeff, float DiffuseCoeff, float SpecularCoeff, float Far = 0.1f, float Near = 150.0f)
+	{
+		this->LightPos = Pos;
+		this->LightDir = LightDir;
+		this->Color = LightColor;
+		
+		this->AmbientCoeff = AmbientCoeff;
+		this->DiffuseCoeff = DiffuseCoeff;
+		this->SpecularCoeff = SpecularCoeff;
+
+		this->LightMesh = CubeMesh;
+		this->LightMesh.Mat.AmbientColor = LightColor;
+		this->LightMesh.Mat.DiffuseColor = LightColor;
+		this->LightMesh.Mat.SpecularColor = LightColor;
+
+		this->Far = Far;
+		this->Near = Near;
+
+		this->Render = false;
+	}
+
+	LightObject(Vec3 Pos, Vec3 LightDir, Vec3 LightColor, float AmbientCoeff, float DiffuseCoeff, float SpecularCoeff, Mesh LightMesh, float Far = 0.1f, float Near = 150.0f)
+	{
+		this->LightPos = Pos;
+		this->LightDir = LightDir;
+		this->Color = LightColor;
+		
+		this->AmbientCoeff = AmbientCoeff;
+		this->DiffuseCoeff = DiffuseCoeff;
+		this->SpecularCoeff = SpecularCoeff;
+	
+		this->LightMesh = LightMesh;
+
+		this->Far = Far;
+		this->Near = Near;
+		this->Render = false;
+	}
+
+	virtual Matrix CalcVpMat() = 0;
+
+	Vec3 LightDir = Vec3(0, 0, -1);
+	Vec3 LightPos = Vec3(0, 0, 0);
+	Vec3 Color = Vec3(253, 251, 211);
+	Mesh LightMesh = Mesh();
+	bool Render = false;
+
+	float AmbientCoeff = 0.1f;  // Lowest level of light possible (only the objects mat ambient color)
+	float SpecularCoeff = 0.5f; // How much the lights color will combine with the objects specular color
+	float DiffuseCoeff = 0.25f; // How much the light will combine with the objects diffuse mat color
+
+	float Far = 0.1f;
+	float Near = 150.0f;
+};
+
+class PointLight: public LightObject
+{
+
+};
+
+class DirectionalLight: public LightObject
+{
+	public:
+	float Left = -40.0f;
+	float Right = 40.0f;
+	float Top = 40.0f;
+	float Bottom = -40.0f;
+	Vec3 CenterPoint = Vec3();
+
+	DirectionalLight(Vec3 Pos, Vec3 LightDir, Vec3 LightColor, float Left, float Right, float Bottom, float Top, float AmbientCoeff, float DiffuseCoeff, float SpecularCoeff, Vec3 CenterPoint = Vec3()) : LightObject(Pos, LightDir, LightColor, AmbientCoeff, DiffuseCoeff, SpecularCoeff)
+	{
+		this->Left = Left;
+		this->Right = Right;
+		this->Top = Bottom;
+		this->Bottom = Top;
+		this->CenterPoint = CenterPoint;
+	}
+	DirectionalLight(Vec3 Pos, Vec3 LightDir, Vec3 LightColor, float Left, float Right, float Bottom, float Top, float AmbientCoeff, float DiffuseCoeff, float SpecularCoeff, Mesh LightMesh, Vec3 CenterPoint = Vec3()) : LightObject(Pos, LightDir, LightColor, AmbientCoeff, DiffuseCoeff, SpecularCoeff, LightMesh)
+	{
+		this->Left = Left;
+		this->Right = Right;
+		this->Top = Bottom;
+		this->Bottom = Top;
+		this->CenterPoint = CenterPoint;
+	}
+
+	DirectionalLight(Vec3 Pos, Vec3 LightDir, Vec3 LightColor, float AmbientCoeff, float DiffuseCoeff, float SpecularCoeff, Mesh LightMesh, Vec3 CenterPoint = Vec3()) : LightObject(Pos, LightDir, LightColor, AmbientCoeff, DiffuseCoeff, SpecularCoeff, LightMesh)
+	{
+		this->Left = -40.0f;
+		this->Right = 40.0f;
+		this->Top = 40.0f;
+		this->Bottom = -40.0f;
+		this->CenterPoint = CenterPoint;
+	}
+
+	DirectionalLight(Vec3 Pos, Vec3 LightDir, Vec3 LightColor, float AmbientCoeff, float DiffuseCoeff, float SpecularCoeff, Vec3 CenterPoint = Vec3()) : LightObject(Pos, LightDir, LightColor, AmbientCoeff, DiffuseCoeff, SpecularCoeff)
+	{
+		this->Left = -40.0f;
+		this->Right = 40.0f;
+		this->Top = 40.0f;
+		this->Bottom = -40.0f;
+		this->CenterPoint = CenterPoint;
+	}
+
+	__inline Matrix CalcVpMat() override
+	{
+		Matrix LightProjectionMat = Matrix::CalcOrthoMatrix(Left, Right, Bottom, Top, Far, Near);
+		Matrix LightViewMatrix = Matrix::CalcViewMatrix(((this->CenterPoint - this->LightPos).Normalized()) * 50.0f, Vec3(0.0f, 0.0f, 0.0f), Vec3(0, 1, 0));
+		return LightViewMatrix * LightProjectionMat;
+	}
+};
+
+class SpotLight: public LightObject
+{
+	public:
+	float CutoffAngle = 0.0f;
+	float ConstantAttenuation = 0.0f;
+	float LinearAttenuation = 0.0f;
+	float QuadraticAttenuation = 0.0f;
+
+	SpotLight(Vec3 Pos, Vec3 LightDir, Vec3 LightColor, float CutoffAngle, float ConstantAttenuation, float LinearAttenuation, float QuadraticAttenuation, float AmbientCoeff, float DiffuseCoeff, float SpecularCoeff) : LightObject(Pos, LightDir, LightColor, AmbientCoeff, DiffuseCoeff, SpecularCoeff)
+	{
+		this->CutoffAngle = CutoffAngle;
+		this->ConstantAttenuation = ConstantAttenuation;
+		this->LinearAttenuation = LinearAttenuation;
+		this->QuadraticAttenuation = QuadraticAttenuation;
+	}
+
+	//SpotLight(Vec3 Pos, Vec3 LightDir, Vec3 LightColor, float AmbientCoeff, float DiffuseCoeff, float SpecularCoeff, float CutoffAngle, float ConstantAttenuation = 0.0f, float LinearAttenuation = 0.0f, float QuadraticAttenuation = 0.0f) : LightObject(Pos, LightDir, LightColor, AmbientCoeff, DiffuseCoeff, SpecularCoeff)
+	//{
+	//	this->CutoffAngle = CutoffAngle;
+	//	this->ConstantAttenuation = ConstantAttenuation;
+	//	this->LinearAttenuation = LinearAttenuation;
+	//	this->QuadraticAttenuation = QuadraticAttenuation;
+	//}
+
+	__inline Matrix CalcVpMat() override
+	{
+
+	}
+};
+
+class Camera
+{
+public:
+	Camera()
+	{
+
+	}
+
+	Camera(Vec3 Position, float AspectRatio, float Fov, float Near, float Far)
+	{
+		this->Pos = Position;
+
+		this->AspectRatio = AspectRatio;
+		this->Fov = Fov;
+		this->Near = Near;
+		this->Far = Far;
+		this->NearPlane = { 0.0f, 0.0f, Near };
+
+		this->CalcProjectionMat();
+	}
+
+	Camera(Vec3 Position, Vec3 TargetLook, Vec3 CamUp, float AspectRatio, float Fov, float Near, float Far)
+	{
+		this->Pos = Position;
+
+		this->AspectRatio = AspectRatio;
+		this->Fov = Fov;
+		this->Near = Near;
+		this->Far = Far;
+		this->CamUp = CamUp;
+		this->NearPlane = { 0.0f, 0.0f, Near };
+		this->CalcProjectionMat();
+		this->PointAt(TargetLook);
+	}
+
+	// Calculate the projection matrix with some screen args
+	static Matrix CalcProjectionMat(float AspectRatio, float Fov, float Near, float Far)
+	{
+		Matrix Result = {};
+
+		float FovRads = 1.0f / tanf(ToRad(Fov * 0.5f));
+
+		Result.fMatrix[0][0] = AspectRatio / FovRads;
+		Result.fMatrix[1][1] = -FovRads;  // THIS NEGATIVE IS FOR TERRAGL
+		Result.fMatrix[2][2] = Far / (Far - Near);
+		Result.fMatrix[3][2] = (-Far * Near) / (Far - Near);
+		Result.fMatrix[2][3] = 1.0f;
+		Result.fMatrix[3][3] = 0.0f;
+
+		return Result;
+	}
+
+	//Calculate projection matrix of this camera
+	void CalcProjectionMat()
+	{
+		float FovRads = abs(1.0f / tanf((ToRad(Fov * 0.5f))));
+
+		this->ProjectionMatrix.fMatrix[0][0] = this->AspectRatio / FovRads;
+		this->ProjectionMatrix.fMatrix[1][1] = -FovRads; // THIS NEGATIVE IS FOR TERRAGL
+		this->ProjectionMatrix.fMatrix[2][2] = this->Far / (this->Far - this->Near);
+		this->ProjectionMatrix.fMatrix[3][2] = (-this->Far * this->Near) / (this->Far - this->Near);
+		this->ProjectionMatrix.fMatrix[2][3] = 1.0f;
+		this->ProjectionMatrix.fMatrix[3][3] = 0.0f;
+	}
+
+	Triangle ProjectTriangle(const Triangle* InTriangle, Matrix& Mat)
+	{
+		Triangle OutTri;
+
+		OutTri.Points[0] = InTriangle->Points[0] * Mat;
+		OutTri.Points[1] = InTriangle->Points[1] * Mat;
+		OutTri.Points[2] = InTriangle->Points[2] * Mat;
+
+		return OutTri;
+	}
+
+	Mesh ProjectMesh(Mesh InMesh)
+	{
+		Mesh OutMesh = Mesh();
+
+		for (int i = 0; i < InMesh.Triangles.size(); i++)
+		{
+			Triangle NewTri;
+
+			NewTri.Points[0] = InMesh.Triangles.at(i).Points[0] * this->ProjectionMatrix;
+			NewTri.Points[1] = InMesh.Triangles.at(i).Points[1] * this->ProjectionMatrix;
+			NewTri.Points[2] = InMesh.Triangles.at(i).Points[2] * this->ProjectionMatrix;
+
+			OutMesh.Triangles.push_back(NewTri);
+		}
+
+		return OutMesh;
+	}
+
+	Triangle ProjectTriangle(const Triangle* InTriangle)
+	{
+		Triangle OutTri = *InTriangle;
+
+		OutTri.Points[0] = InTriangle->Points[0] * this->ProjectionMatrix;
+		OutTri.Points[1] = InTriangle->Points[1] * this->ProjectionMatrix;
+		OutTri.Points[2] = InTriangle->Points[2] * this->ProjectionMatrix;
+
+		return OutTri;
+	}
+
+	void ProjectTriangle(const Triangle* InTriangle, Triangle &OutTri)
+	{
+		OutTri.Points[0] = InTriangle->Points[0] * this->ProjectionMatrix;
+		OutTri.Points[1] = InTriangle->Points[1] * this->ProjectionMatrix;
+		OutTri.Points[2] = InTriangle->Points[2] * this->ProjectionMatrix;
+	}
+
+	Triangle TriangleProjected(const Triangle* InTriangle)
+	{
+		return
+		{
+			InTriangle->Points[0] * this->ProjectionMatrix,
+			InTriangle->Points[1] * this->ProjectionMatrix,
+			InTriangle->Points[2] * this->ProjectionMatrix
+		};
+	}
+
+	static Matrix PointAt(const Vec3 &CamPos, const Vec3 &Target, const Vec3 &Up)
+	{
+		Vec3 NewForward = (Target - CamPos).Normalized();
+
+		Vec3 NewUp = (Up - (NewForward * Up.Dot(NewForward))).Normalized();
+
+		Vec3 NewRight = NewUp.Cross(NewForward);
+
+		Matrix DimensioningAndTrans;
+		DimensioningAndTrans.fMatrix[0][0] = NewRight.x;	    DimensioningAndTrans.fMatrix[0][1] = NewRight.y;	    DimensioningAndTrans.fMatrix[0][2] = NewRight.z;      DimensioningAndTrans.fMatrix[0][3] = 0.0f;
+		DimensioningAndTrans.fMatrix[1][0] = NewUp.x;		    DimensioningAndTrans.fMatrix[1][1] = NewUp.y;		    DimensioningAndTrans.fMatrix[1][2] = NewUp.z;         DimensioningAndTrans.fMatrix[1][3] = 0.0f;
+		DimensioningAndTrans.fMatrix[2][0] = NewForward.x;		DimensioningAndTrans.fMatrix[2][1] = NewForward.y;		DimensioningAndTrans.fMatrix[2][2] = NewForward.z;    DimensioningAndTrans.fMatrix[2][3] = 0.0f;
+		DimensioningAndTrans.fMatrix[3][0] = CamPos.x;			DimensioningAndTrans.fMatrix[3][1] = CamPos.y;	    	DimensioningAndTrans.fMatrix[3][2] = CamPos.z;        DimensioningAndTrans.fMatrix[3][3] = 1.0f;
+
+		return DimensioningAndTrans;
+	}
+
+	void __inline __fastcall PointAt(const Vec3& Target)
+	{
+		Vec3 NewForward = (Target - this->Pos).Normalized();
+
+		Vec3 NewUp = (this->CamUp - (NewForward * this->CamUp.Dot(NewForward))).Normalized();
+
+		Vec3 NewRight = NewUp.Cross(NewForward);
+
+		this->ViewMatrix.fMatrix[0][0] = NewRight.x;	    this->ViewMatrix.fMatrix[0][1] = NewRight.y;	    this->ViewMatrix.fMatrix[0][2] = NewRight.z;      this->ViewMatrix.fMatrix[0][3] = 0.0f;
+		this->ViewMatrix.fMatrix[1][0] = NewUp.x;		    this->ViewMatrix.fMatrix[1][1] = NewUp.y;		    this->ViewMatrix.fMatrix[1][2] = NewUp.z;         this->ViewMatrix.fMatrix[1][3] = 0.0f;
+		this->ViewMatrix.fMatrix[2][0] = NewForward.x;		this->ViewMatrix.fMatrix[2][1] = NewForward.y;		this->ViewMatrix.fMatrix[2][2] = NewForward.z;    this->ViewMatrix.fMatrix[2][3] = 0.0f;
+		this->ViewMatrix.fMatrix[3][0] = this->Pos.x;		this->ViewMatrix.fMatrix[3][1] = this->Pos.y;	    this->ViewMatrix.fMatrix[3][2] = this->Pos.z;     this->ViewMatrix.fMatrix[3][3] = 1.0f;
+	}
+
+	void __inline __fastcall CalcCamViewMatrix(const Vec3 &Target)
+	{
+		//this->ViewMatrix = this->PointAt(this->Pos, Target, this->CamUp).QuickInversed();
+		this->PointAt(Target);
+		this->ViewMatrix.QuickInverse();
+	}
+
+	Vec3 GetNewVelocity(const Vec3 &Direction)
+	{
+		return Direction * this->Velocity;
+	}
+
+	Vec3 GetNewVelocity()
+	{
+		return this->LookDir * this->Velocity;
+	}
+
+	Vec3 Pos = Vec3(0, 0, 0);
+	Vec3 ViewAngles = Vec3(0, 0, 0);
+	Vec3 InitialLook = Vec3(0, 0, 1);
+	Vec3 LookDir = Vec3(0, 0, 0);
+	Vec3 CamUp = Vec3(0, 1, 0);
+	Vec3 NearPlane = { 0, 0, 0.1f };
+	float Velocity = 8.0f;
+
+	Matrix ProjectionMatrix = {};
+	Matrix ViewMatrix = {};
+	Matrix CamRotation = {};
+	float Fov = 0.f;
+	float AspectRatio = 0.f;
+	float Near = 0.f;
+	float Far = 0.f;
+};
+
+class Ray
+{
+	//Ray(t) = (ox + t * dx, oy + t * dy, oz + t * dz)
+	public:
+
+	Ray(const Vec3 &OriginPoint, const Vec3 &Direction, const Vec3 SpeedMult = Vec3(1, 1, 1))
+	{
+		this->Origin = OriginPoint;
+		this->Direction = Direction;
+		this->SpeedMult = SpeedMult;
+	}
+
+	void GenerateMesh()
+	{
+		const int NumLineSegments = 20;  // Number of line segments
+		const float LineRadius = 0.01f;  // Radius of the line segments
+
+		std::vector<Triangle> Tris;
+
+		// Generate triangles for the line mesh
+		for (int i = 0; i < NumLineSegments; ++i) 
+		{
+			float t1 = float(i) / float(NumLineSegments - 1);
+			float t2 = float(i + 1) / float(NumLineSegments - 1);
+
+			// Calculate the positions of the vertices along the ray's path
+			Vec3 Vertex1 = this->Origin + this->Direction * t1;
+			Vec3 Vertex2 = this->Origin + this->Direction * t2;
+
+			// Calculate perpendicular vectors for the line segments
+			Vec3 Tangent = this->Direction.Normalized();
+			Vec3 Bitangent = this->Direction.Cross(Vec3(0, 1, 0));
+			Vec3 Normal = Tangent.Cross(Bitangent);
+
+			// Calculate vertices for the triangles
+			Vec3 tri1Vertices[3] = {
+				Vertex1 - Bitangent * LineRadius,
+				Vertex1 + Bitangent * LineRadius,
+				Vertex2 - Bitangent * LineRadius
+			};
+
+			Vec3 tri2Vertices[3] = {
+				Vertex2 - Bitangent * LineRadius,
+				Vertex1 + Bitangent * LineRadius,
+				Vertex2 + Bitangent * LineRadius
+			};
+
+			// Create triangles and add them to the array
+			Triangle tri1(tri1Vertices[0], tri1Vertices[1], tri1Vertices[2]);
+			Triangle tri2(tri2Vertices[0], tri2Vertices[1], tri2Vertices[2]);
+
+			Tris.push_back(tri1);
+			Tris.push_back(tri2);
+		}
+
+		mesh = Mesh(Tris, "Ray");
+		mesh.BackfaceCulling = false;
+		mesh.Mat.AmbientColor = Vec3(0, 255, 0);
+	}
+
+	void Step(float DeltaTime)
+	{
+		// Update the ray's position based on its direction and speed multiplier
+		Origin.x += (Direction.x * SpeedMult.x) * DeltaTime;
+		Origin.y += (Direction.y * SpeedMult.y) * DeltaTime;
+		Origin.z += (Direction.z * SpeedMult.z) * DeltaTime;
+	}
+
+	Vec3 LocationAt(float T) const
+	{
+		// Calculate the location of the ray at time T
+		return Vec3(
+			Origin.x + (Direction.x * SpeedMult.x) * T,
+			Origin.y + (Direction.y * SpeedMult.y) * T,
+			Origin.z + (Direction.z * SpeedMult.z) * T);
+	}
+
+	Mesh mesh;
+	Vec3 Origin = {0, 0, 0};
+	Vec3 Direction = {1.0f, 0, 0};
+	Vec3 SpeedMult = { 1, 1, 1 };
+};
+
+template<typename T>
+class BufferObject
+{
+	__int64 Width;
+	__int64 Height;
+	T* Buffer = nullptr;
+
+	BufferObject(__int64 Width, __int64 Height, __int64 Depth)
+	{
+		Buffer = new T[Width * Height];
+	}
+
+	~BufferObject()
+	{
+		delete[] Buffer;
+	}
+};
+
+struct ShaderArgs
+{
+	ShaderTypes ShaderType = ShaderTypes::SHADER_TRIANGLE;
+	LightTypes LightType = LightTypes::DirectionalLight;
+
+	// Triangle Info (ALL SHADERS)
+	Triangle* Tri = nullptr;
+	const Material* Mat = nullptr;
+
+	//Camera Info (ALL SHADERS)
+	Matrix ModelMat;
+	Matrix ViewMat;
+	Matrix ProjectionMat;
+	Vec3 CamPos = Vec3(0, 0, 0);
+	Vec3 CamLookDir = Vec3(0, 0, 0);
+
+	// Light Info (ALL SHADERS)
+	LightObject** Lights;
+	size_t LightCount;
+
+	// Fragment Info (SHADER_TYPE == SHADER_FRAGMENT)
+	Vec3 FragPos = Vec3(0, 0, 0);
+	Vec3 FragNormal = Vec3(0.0f, 0.0f, 0.0f);
+	Vec3 BaryCoords = Vec3(0, 0, 0);
+	Color FragColor = Color(0.0f, 0.0f, 0.0f);
+	Vec2 PixelCoords = Vec2(0, 0);
+	TextureCoords UVW = { 0.0f, 0.0f, 0.0f };
+
+	// ShadowInfo
+	Vec3 LightSpacePos;
+	bool IsInShadow = false;
+
+	ShaderArgs() 
+	{
+
+	}
+
+	ShaderArgs(Triangle* Tri, const Material* Mat, const Vec3& CamPos, const Vec3& CamLookDir, const Matrix& ModelMatrix, const Matrix& ViewMatrix, const Matrix& ProjMatrix, LightObject** Lights, const size_t LightCount, const ShaderTypes SHADER_TYPE)
+	{
+		this->Tri = Tri;
+		this->Mat = Mat;
+		this->CamPos = CamPos;
+		this->CamLookDir = CamLookDir;
+		this->Lights = Lights;
+		this->LightCount = LightCount;
+		this->ShaderType = SHADER_TYPE;
+		this->ModelMat = ModelMatrix;
+		this->ViewMat = ViewMatrix;
+		this->ProjectionMat = ProjMatrix;
+	}
+};
+
+struct VertexShaderArgs
+{
+	Vec3 Vertex;
+	Matrix MVP;
+
+};
+
+namespace EngineShaders
+{
+	const auto DefaultVertexShader = [](ShaderArgs& Args)
+	{
+
+	};
+
+	const auto WHACK_SHADER = [](ShaderArgs& Args)
+	{
+		LightObject* Light = nullptr;
+		if (Args.LightCount > 0)
+		{
+			Light = Args.Lights[0];
+		}
+
+		Vec3 LDir = (Light->LightPos - ((Args.Tri->Points[0] + Args.Tri->Points[1] + Args.Tri->Points[2]) / 3.0f)).Normalized();
+
+		float Li = std::max<float>(0.0f, Args.Tri->FaceNormal.Dot(LDir));
+
+		Vec3 AmbientCol = Args.Mat->AmbientColor * Light->AmbientCoeff;
+		Vec3 DiffuseCol = Args.Mat->DiffuseColor * Li;
+
+		Args.Tri->Col = (AmbientCol + DiffuseCol) * Light->Color;
+	};
+
+	const auto Shader_Phong_LOW_LOD = [](ShaderArgs& Args)
+	{
+		LightObject* Light = nullptr;
+		if (Args.LightCount > 0)
+		{
+			Light = Args.Lights[0];
+		}
+
+		Vec3 LDir = (Light->LightPos - ((Args.Tri->Points[0] + Args.Tri->Points[1] + Args.Tri->Points[2]) / 3.0f)).Normalized();
+
+		float Li = std::max<float>(0.0f, Args.Tri->FaceNormal.Dot(LDir));
+
+		Vec3 AmbientCol = (Args.Mat->AmbientColor * Light->AmbientCoeff);
+		Vec3 DiffuseCol = ((Light->Color * Li) + (Args.Mat->DiffuseColor * Li)) * Light->DiffuseCoeff;
+
+		Args.Tri->Col.x = std::clamp<float>((AmbientCol.x + DiffuseCol.x), 0.0f, 255.0f);
+		Args.Tri->Col.y = std::clamp<float>((AmbientCol.y + DiffuseCol.y), 0.0f, 255.0f);
+		Args.Tri->Col.z = std::clamp<float>((AmbientCol.z + DiffuseCol.z), 0.0f, 255.0f);
+	};
+
+	const auto Shader_Phong = [](ShaderArgs& Args)
+	{
+		LightObject* Light = nullptr;
+		if (Args.LightCount > 0)
+		{
+			Light = Args.Lights[0];
+		}
+		else
+		{
+			return;
+		}
+
+		float Intensity = 1.0f;
+		Vec3 LDir = (Light->LightPos - ((Args.Tri->Points[0] + Args.Tri->Points[1] + Args.Tri->Points[2]) / 3.0f)).Normalized();
+		float Li = Args.Tri->FaceNormal.Dot(LDir);
+
+		Intensity = std::max<float>(0.0f, Li);
+		Vec3 RDir = LDir - Args.Tri->FaceNormal * 2.0f * Li;
+
+		float SpecularIntensity = pow(std::max<float>(0.0f, RDir.Dot(Args.CamLookDir)), Args.Mat->Shininess);
+
+		Vec3 AmbientCol = (Args.Mat->AmbientColor) * Light->AmbientCoeff;
+		Vec3 DiffuseCol = ((Light->Color * Intensity) + (Args.Mat->DiffuseColor * Intensity)) * Light->DiffuseCoeff;
+		Vec3 SpecularClr = ((Light->Color * Light->SpecularCoeff) + (Args.Mat->SpecularColor * Light->SpecularCoeff)) * SpecularIntensity;
+
+		Args.Tri->Col.x = std::clamp<float>((AmbientCol.x + DiffuseCol.x + SpecularClr.x), 0.0f, 255.0f);
+		Args.Tri->Col.y = std::clamp<float>((AmbientCol.y + DiffuseCol.y + SpecularClr.y), 0.0f, 255.0f);
+		Args.Tri->Col.z = std::clamp<float>((AmbientCol.z + DiffuseCol.z + SpecularClr.z), 0.0f, 255.0f);
+	};
+
+	const auto Shader_Material = [](ShaderArgs& Args)
+	{
+		Args.Tri->Col = Args.Mat->AmbientColor;
+	};
+
+	const auto Shader_Frag_Phong = [](ShaderArgs& Args)
+	{
+		LightObject* Light = nullptr;
+		if (Args.LightCount > 0)
+		{
+			Light = Args.Lights[0];
+		}
+		else
+		{
+			return;
+		}
+
+		Vec3 LDir = Light->LightPos.GetDirectionToVector(Args.FragPos);
+		float Li = Args.FragNormal.Dot(LDir);
+
+		// Calculate the reflection direction using the formula: R = I - 2 * (I dot N) * N
+		float Intensity = std::max<float>(0.0f, Li);
+		//Vec3 RDir = (LDir - Args.FragNormal * 2.0f * Li).Normalized();
+		Vec3 RDir = (-LDir).GetReflectection(Args.FragNormal);
+
+		// Calculate the specular intensity
+		float SpecularIntensity = pow(std::max<float>(0.0f, (-RDir).Dot(Args.CamLookDir)), Args.Mat->Shininess);
+
+		Vec3 AmbientCol = (Args.Mat->AmbientColor) * Light->AmbientCoeff;
+		Vec3 DiffuseCol = ((Light->Color * Intensity) + (Args.Mat->DiffuseColor * Intensity)) * Light->DiffuseCoeff;
+		Vec3 SpecularClr = ((Light->Color * Light->SpecularCoeff) + (Args.Mat->SpecularColor * Light->SpecularCoeff)) * SpecularIntensity;
+
+		Args.FragColor.R = std::clamp<float>((AmbientCol.x + DiffuseCol.x + SpecularClr.x), 0.0f, 255.0f);
+		Args.FragColor.G = std::clamp<float>((AmbientCol.y + DiffuseCol.y + SpecularClr.y), 0.0f, 255.0f);
+		Args.FragColor.B = std::clamp<float>((AmbientCol.z + DiffuseCol.z + SpecularClr.z), 0.0f, 255.0f);
+		Args.FragColor.A = 255.0f;
+	};
+
+	const auto Shader_Frag_Phong_Shadows = [](ShaderArgs& Args)
+	{
+		LightObject* Light = nullptr;
+		if (Args.LightCount > 0)
+		{
+			Light = Args.Lights[0];
+		}
+		else
+		{
+			return;
+		}
+
+		Vec3 LDir = Light->LightPos.GetDirectionToVector(Args.FragPos);
+		float Li = Args.FragNormal.Dot(LDir);
+
+		// Calculate the reflection direction using the formula: R = I - 2 * (I dot N) * N
+		float Intensity = std::max<float>(0.0f, Li);
+		//Vec3 RDir = (LDir - Args.FragNormal * 2.0f * Li).Normalized();
+		Vec3 RDir = (-LDir).GetReflectection(Args.FragNormal);
+
+		// Calculate the specular intensity
+		float SpecularIntensity = pow(std::max<float>(0.0f, (-RDir).Dot(Args.CamLookDir)), Args.Mat->Shininess);
+
+		Vec3 AmbientCol = (Args.Mat->AmbientColor) * Light->AmbientCoeff;
+		Vec3 DiffuseCol = ((Light->Color * Intensity) + (Args.Mat->DiffuseColor * Intensity)) * Light->DiffuseCoeff;
+		Vec3 SpecularClr = ((Light->Color * Light->SpecularCoeff) + (Args.Mat->SpecularColor * Light->SpecularCoeff)) * SpecularIntensity;
+
+		float ShadowMult = 1.0f;
+
+		if (Args.IsInShadow)
+		{
+			ShadowMult = 0.5f;
+		}
+
+		Args.FragColor.R = std::clamp<float>((AmbientCol.x + DiffuseCol.x + SpecularClr.x) * ShadowMult, 0.0f, 255.0f);
+		Args.FragColor.G = std::clamp<float>((AmbientCol.y + DiffuseCol.y + SpecularClr.y) * ShadowMult, 0.0f, 255.0f);
+		Args.FragColor.B = std::clamp<float>((AmbientCol.z + DiffuseCol.z + SpecularClr.z) * ShadowMult, 0.0f, 255.0f);
+		Args.FragColor.A = 255.0f;
+	};
+
+	const auto Shader_Gradient = [](ShaderArgs& Args)
+	{
+		LightObject* Light = nullptr;
+		if (Args.LightCount > 0)
+		{
+			Light = Args.Lights[0];
+		}
+		else
+		{
+			return;
+		}
+
+		float Intensity = 1.0f;
+		Vec3 LDir = (Light->LightPos - Args.FragPos).Normalized();
+		float Li = Args.FragNormal.Dot(LDir);
+
+		Intensity = std::max<float>(0.0f, Li);
+
+		Args.FragColor.R = std::clamp<float>(((255.0f * Args.BaryCoords.x) * Intensity), 0.0f, 255.0f);
+		Args.FragColor.G = std::clamp<float>(((255.0f * Args.BaryCoords.y) * Intensity), 0.0f, 255.0f);
+		Args.FragColor.B = std::clamp<float>(((255.0f * Args.BaryCoords.z) * Intensity), 0.0f, 255.0f);
+		Args.FragColor.A = 255.0f;
+	};
+
+	const auto Shader_Gradient_Centroid = [](ShaderArgs& Args)
+	{
+		LightObject* Light = nullptr;
+		if (Args.LightCount > 0)
+		{
+			Light = Args.Lights[0];
+		}
+		else
+		{
+			return;
+		}
+
+		Vec3 Centroid = ((Args.Tri->Points[0] + Args.Tri->Points[1] + Args.Tri->Points[2]) / 3.0f);
+		Vec3 BaryCoords = CalculateBarycentricCoordinatesScreenSpace(Args.PixelCoords, Vec2(Centroid.x, Centroid.y), Vec2(Args.Tri->Points[1].x, Args.Tri->Points[1].y), Vec2(Args.Tri->Points[2].x, Args.Tri->Points[2].y));
+		Vec3 BaryCoords2 = CalculateBarycentricCoordinatesScreenSpace(Args.PixelCoords, Vec2(Args.Tri->Points[0].x, Args.Tri->Points[0].y), Vec2(Args.Tri->Points[1].x, Args.Tri->Points[1].y), Vec2(Centroid.x, Centroid.y));
+
+		float Intensity = 1.0f;
+		Vec3 LDir = (Light->LightPos - Args.FragPos).Normalized();
+		float Li = Args.FragNormal.Dot(LDir);
+
+		Intensity = std::max<float>(0.0f, Li);
+
+		Args.FragColor.R = std::clamp<float>(((255.0f * BaryCoords2.x) * Intensity), 0.0f, 255.0f);
+		Args.FragColor.G = std::clamp<float>(((255.0f * BaryCoords.y) * Intensity), 0.0f, 255.0f);
+		Args.FragColor.B = std::clamp<float>(((255.0f * BaryCoords.z) * Intensity), 0.0f, 255.0f);
+		Args.FragColor.A = 255.0f;
+	};
+
+	const auto Shader_Tex_Phong = [](ShaderArgs& Args)
+	{
+		LightObject* Light = nullptr;
+		if (Args.LightCount > 0)
+		{
+			Light = Args.Lights[0];
+		}
+		else
+		{
+			return;
+		}
+
+		Vec3 TexturCol = Vec3();
+
+		if (Args.Tri->Mat.TexA.Used)
+		{
+			TexturCol = Args.Tri->Mat.TexA.GetPixelColor(Args.UVW.u, 1.0f - Args.UVW.v).GetRGB();
+			Args.FragColor.R = std::clamp<float>(TexturCol.x, 0.0f, 255.0f);
+			Args.FragColor.G = std::clamp<float>(TexturCol.y, 0.0f, 255.0f);
+			Args.FragColor.B = std::clamp<float>(TexturCol.z, 0.0f, 255.0f);
+			Args.FragColor.A = 255.0f;
+		}
+		else
+		{
+			Shader_Frag_Phong(Args);
+		}
+		Vec3 LDir = Light->LightPos.GetDirectionToVector(Args.FragPos);
+		float Li = Args.FragNormal.Dot(LDir);
+
+		// Calculate the reflection direction using the formula: R = I - 2 * (I dot N) * N
+		float Intensity = std::max<float>(0.0f, Li);
+		//Vec3 RDir = (LDir - Args.FragNormal * 2.0f * Li).Normalized();
+		Vec3 RDir = (-LDir).GetReflectection(Args.FragNormal);
+
+		float SpecularIntensity = pow(std::max<float>(0.0f, (-RDir).Dot(Args.CamLookDir)), Args.Mat->Shininess);
+
+		Vec3 AmbientCol = (TexturCol) * Light->AmbientCoeff;
+		Vec3 DiffuseCol = ((Light->Color * Intensity) + (TexturCol * Intensity)) * Light->DiffuseCoeff;
+		Vec3 SpecularClr = ((Light->Color * Light->SpecularCoeff) + (TexturCol * Light->SpecularCoeff)) * SpecularIntensity;
+
+		Args.FragColor.R = std::clamp<float>((AmbientCol.x + DiffuseCol.x + SpecularClr.x), 0.0f, 255.0f);
+		Args.FragColor.G = std::clamp<float>((AmbientCol.y + DiffuseCol.y + SpecularClr.y), 0.0f, 255.0f);
+		Args.FragColor.B = std::clamp<float>((AmbientCol.z + DiffuseCol.z + SpecularClr.z), 0.0f, 255.0f);
+		Args.FragColor.A = 255.0f;
+	};
+
+	const auto Shader_Texture_Only = [](ShaderArgs& Args)
+	{
+		Vec3 TexturCol = Vec3();
+
+		if (Args.Tri->Mat.TexA.Used)
+		{
+			TexturCol = Args.Tri->Mat.TexA.GetPixelColor(Args.UVW.u, 1.0f - Args.UVW.v).GetRGB();
+			Args.FragColor.R = std::clamp<float>(TexturCol.x, 0.0f, 255.0f);
+			Args.FragColor.G = std::clamp<float>(TexturCol.y, 0.0f, 255.0f);
+			Args.FragColor.B = std::clamp<float>(TexturCol.z, 0.0f, 255.0f);
+			Args.FragColor.A = 255.0f;
+		}
+		else
+		{
+			Shader_Frag_Phong(Args);
+		}
+	};
+}
 
 class Renderable
 {
@@ -98,7 +1874,7 @@ namespace TerraPGE
 	bool DoLighting = true;
 	bool DoShadows = true;
 	bool WireFrame = false;
-	bool ShowTriLines = false;
+    bool ShowTriLines = false;
 	bool DebugClip = false;
 	bool LockCursor = true;
 	bool CursorShow = false;
@@ -154,7 +1930,7 @@ namespace TerraPGE
 		if (GlobalMemoryStatusEx(&MemInf))
 			TerraPGE::MaxMemoryMB = (MemInf.ullTotalPhys / 1024 / 1024);
 
-		if (EnumDisplayDevices(NULL, DevIdx, &DispDev, 0))
+		if (EnumDisplayDevices(NULL, DevIdx, &DispDev, 0)) 
 		{
 			TerraPGE::GPUDevNames.push_back(DispDev.DeviceString);
 			TerraPGE::GPUDevCount++;
@@ -353,7 +2129,8 @@ namespace TerraPGE
 						{
 							// Make this better TODO
 							Vec4 ShadowNdcPos = InterpolatedPos * Args.Lights[0]->CalcVpMat();
-
+							
+							
 							ShadowNdcPos.CorrectPerspective();
 
 							ShadowNdcPos *= (Vec3((float)(TerraPGE::ShadowMapWidth * 0.5f), (float)(TerraPGE::ShadowMapHeight * 0.5f), 1.0f));
@@ -1081,7 +2858,7 @@ namespace TerraPGE
 				float t = 0.0f;
 
 				for (int j = ax; j < bx; j++)
-				{
+				{ 
 					t += tstep;
 
 					// Calculate the barycentric coordinates which we use for interpolation
@@ -1402,7 +3179,7 @@ namespace TerraPGE
 			}
 		}
 	}
-
+		
 	void RenderMeshDepth(GdiPP& Gdi, const Mesh& MeshToRender, const Vec3& Scalar, const Vec3& RotationRads, const Vec3& Pos, const Vec3& LightPos, float* Buffer)
 	{
 		Matrix ObjectMatrix = Matrix::CreateScalarMatrix(Scalar); // Scalar Matrix
@@ -1546,7 +3323,7 @@ namespace TerraPGE
 			// call draw code
 			DrawCallBack(EngineGdi, Wnd, (float)ElapsedTime, &ToRender, &Lights);
 
-			LightObject** LightsToRender = new LightObject * [Lights.size()];
+			LightObject** LightsToRender = new LightObject*[Lights.size()];
 
 			for (int idx = 0; idx < Lights.size(); idx++)
 			{
@@ -1568,7 +3345,7 @@ namespace TerraPGE
 			{
 #ifdef UNICODE
 				// Draw FPS and some debug info
-				std::wstring Str = FpsWStr + std::to_wstring(Fps) + L" Memory Usage: " + std::to_wstring(CurrMB) + L"/" + std::to_wstring(TerraPGE::MaxMemoryMB) + L" MB " + (DoMultiThreading ? L"(MultiThreaded)" : L"");
+				std::wstring Str = FpsWStr + std::to_wstring(Fps) + L" Memory Usage: " + std::to_wstring(CurrMB) + L"/" + std::to_wstring(TerraPGE::MaxMemoryMB) + L" MB " + (DoMultiThreading ?  L"(MultiThreaded)" : L"");
 				Wnd.SetWndTitle(Str);
 				EngineGdi.DrawStringW(20, 20, Str, RGB(255, 0, 0), TRANSPARENT);
 #endif

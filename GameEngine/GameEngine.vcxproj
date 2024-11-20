@@ -171,11 +171,17 @@
     <ClInclude Include="..\..\..\..\Desktop\My Stuff\My Librarys\Graphics\GdiPP.hpp" />
     <ClInclude Include="..\..\..\..\Desktop\My Stuff\My Librarys\Graphics\TerraGL.h" />
     <ClInclude Include="..\..\..\..\Desktop\My Stuff\My Librarys\Graphics\WndCreator.hpp" />
+    <ClInclude Include="Camera.h" />
+    <ClInclude Include="Lighting.h" />
+    <ClInclude Include="Materials.h" />
+    <ClInclude Include="Mesh.h" />
     <ClInclude Include="ParrallelPP.h" />
+    <ClInclude Include="Shading.h" />
     <ClInclude Include="TerraAL.h" />
-    <ClInclude Include="TerraPGE.h" />
+    <ClInclude Include="TerraPGE_Old.h" />
     <ClInclude Include="Math.h" />
-    <ClInclude Include="TerraPGE_Cleanup.h" />
+    <ClInclude Include="TerraPGE.h" />
+    <ClInclude Include="Texture.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="TeaPot.obj">
