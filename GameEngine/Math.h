@@ -1,14 +1,37 @@
 #pragma once
 #include <math.h>
 #include <vector>
-#include <Windows.h>
+#include <ostream>
 
 #define PI 3.14159265358979323846
 
+#ifndef PixelRound
+#define PixelRound(Val) (int)(Val + 0.5f)
+#endif
+
+#ifndef PixelRoundFloor
+#define PixelRoundFloor(Val) (int)(Val)
+#endif
+
+#ifndef PixelRoundMinMax
+#define PixelRoundMinMax(Val, Minimum, Maximum) std::max(Minimum, std::min(PixelRoundFloor(Val), Maximum))
+#endif
+
+#ifndef ToDegree
 #define ToDegree(Deg) (float)((Deg) * (float)(180.0f / PI))
+#endif
+
+#ifndef ToRad
 #define ToRad(Rad) (float)((Rad) * (float)(PI / 180.0f))
+#endif
+
+#ifndef ToDegreeD
 #define ToDegreeD(Deg) (double)((Deg) * (180.0 / PI))
+#endif
+
+#ifndef ToRadD
 #define ToRadD(Rad) (double)((Rad) * (PI / 180.0))
+#endif
 
 float Clamp(float Min, float Max, float Val)
 {
@@ -28,7 +51,7 @@ class Vec4;
 
 class Matrix
 {
-public:
+	public:
 
 	Matrix()
 	{
@@ -121,15 +144,15 @@ public:
 	{
 		Matrix result;
 
-		for (int row = 0; row < 4; row++) 
+		for (int row = 0; row < 4; row++)
 		{
-			for (int col = 0; col < 4; col++) 
+			for (int col = 0; col < 4; col++)
 			{
 				float sum = 0;
 
-				for (int i = 0; i < 4; i++) 
+				for (int i = 0; i < 4; i++)
 				{
-					sum += fMatrix[row][i] * b.fMatrix[i][col];			
+					sum += fMatrix[row][i] * b.fMatrix[i][col];
 				}
 				result.fMatrix[row][col] = sum;
 			}
@@ -286,7 +309,7 @@ std::ostream& operator << (std::ostream& os, const Matrix& v)
 
 class Vec2
 {
-public:
+	public:
 	Vec2(float _x, float _y)
 	{
 		this->x = _x;
@@ -315,7 +338,7 @@ public:
 
 class Vec3
 {
-public:
+	public:
 	Vec3()
 	{
 		this->x = 0.0f;
@@ -328,7 +351,7 @@ public:
 		this->x = _x;
 		this->y = _y;
 		this->z = _z;
- 	}
+	}
 
 	Vec4 MakeVec4();
 
@@ -358,7 +381,7 @@ public:
 	}
 
 	// Distance from one vec3 to another
-	float Distance(Vec3 &b) const
+	float Distance(Vec3& b) const
 	{
 		return (float)sqrt(pow(b.x - this->x, 2) + pow(b.y - this->y, 2) + pow(b.z - this->z, 2));
 	}
@@ -394,7 +417,7 @@ public:
 	}
 
 	// Calculates Dot Product (How similar two vecs are)
-	const float Dot(const Vec3& Rhs) const 
+	const float Dot(const Vec3& Rhs) const
 	{
 		return { this->x * Rhs.x + this->y * Rhs.y + this->z * Rhs.z };
 	}
@@ -429,7 +452,7 @@ public:
 		return Out;
 	}
 
-	Vec3 CalculateIntersectionPoint(const Vec3& LineEnd, const Vec3 &PointOnPlane, const Vec3 &PlaneNormalized, float* OutT = nullptr) const
+	Vec3 CalculateIntersectionPoint(const Vec3& LineEnd, const Vec3& PointOnPlane, const Vec3& PlaneNormalized, float* OutT = nullptr) const
 	{
 		Vec3 LineStart = *this;
 		float Dist = -PlaneNormalized.Dot(PointOnPlane);
@@ -462,7 +485,7 @@ public:
 	}
 
 	// returns euler angles needed to look at a point specified by B
-	Vec3 CalcAngle(const Vec3 b, const bool Degree = true) 
+	Vec3 CalcAngle(const Vec3 b, const bool Degree = true)
 	{
 		// this will only work on right up forward games
 		Vec3 Angles;
@@ -492,7 +515,7 @@ public:
 		return Vec3(this->x + (B.x - this->x) * t, this->y + (B.y - this->y) * t, this->z + (B.z - this->z) * t);
 	}
 
-	static Vec3 Lerp(const Vec3& A, const Vec3& B, float t) 
+	static Vec3 Lerp(const Vec3& A, const Vec3& B, float t)
 	{
 		return Vec3(A.x + (B.x - A.x) * t, A.y + (B.y - A.y) * t, A.z + (B.z - A.z) * t);
 	}
@@ -645,7 +668,7 @@ public:
 		this->y *= b;
 		this->z *= b;
 	}
-	
+
 	void operator *= (const Matrix& b)
 	{
 		float Tmpx = this->x;
@@ -692,7 +715,7 @@ public:
 	}
 
 	friend std::ostream& operator<<(std::ostream& os, const Vec3& v);
-public:
+	public:
 	float x;
 	float y;
 	float z;
@@ -830,7 +853,7 @@ void Matrix::CalcRotationMatrix(const Vec3& RotationDeg) // pitch yaw roll
 	//return A;
 }
 
-void __fastcall Matrix::MakeOrthoMatrix(const float& Left, const float& Right, const float& Top, const float& Bottom, const float& Near, const float& Far)
+void __fastcall Matrix::MakeOrthoMatrix(const float& Left, const float& Right, const float& Bottom, const float& Top, const float& Near, const float& Far)
 {
 	this->fMatrix[0][0] = 2.0f / (Right - Left);
 	this->fMatrix[1][1] = 2.0f / (Top - Bottom);
@@ -881,7 +904,7 @@ Matrix Matrix::CalcViewMatrix(const Vec3& Pos, const Vec3& Target, const Vec3& U
 	return ViewMat;
 }
 
-Matrix Matrix::CalcOrthoMatrix(const float& Left, const float& Right, const float& Top, const float& Bottom, const float& Near, const float& Far)
+Matrix Matrix::CalcOrthoMatrix(const float& Left, const float& Right, const float& Bottom, const float& Top, const float& Near, const float& Far)
 {
 	Matrix OrthoMat;
 
@@ -975,8 +998,8 @@ class Vec4
 		if (this->w != 0)
 		{
 			this->x /= w;
-			this->x /= y;
-			this->x /= z;
+			this->y /= w;
+			this->z /= w;
 		}
 	}
 
@@ -994,19 +1017,18 @@ class Vec4
 
 	void operator *= (const Matrix& b)
 	{
-		float Tmpx = this->x;
-		float Tmpy = this->y;
-		float Tmpz = this->z;
+		float _tmpx = this->x;
+		float _tmpy = this->y;
+		float _tmpz = this->z;
 
-		this->x = Tmpx * b.fMatrix[0][0] + Tmpy * b.fMatrix[1][0] + Tmpz * b.fMatrix[2][0] + this->w * b.fMatrix[3][0];
-		this->y = Tmpx * b.fMatrix[0][1] + Tmpy * b.fMatrix[1][1] + Tmpz * b.fMatrix[2][1] + this->w * b.fMatrix[3][1];
-		this->z = Tmpx * b.fMatrix[0][2] + Tmpy * b.fMatrix[1][2] + Tmpz * b.fMatrix[2][2] + this->w * b.fMatrix[3][2];
-		this->w = Tmpx * b.fMatrix[0][3] + Tmpy * b.fMatrix[1][3] + Tmpz * b.fMatrix[2][3] + this->w * b.fMatrix[3][3];
 
-		this->CorrectPerspective();
+		this->x = _tmpx * b.fMatrix[0][0] + _tmpy * b.fMatrix[1][0] + _tmpz * b.fMatrix[2][0] + this->w * b.fMatrix[3][0];
+		this->y = _tmpx * b.fMatrix[0][1] + _tmpy * b.fMatrix[1][1] + _tmpz * b.fMatrix[2][1] + this->w * b.fMatrix[3][1];
+		this->z = _tmpx * b.fMatrix[0][2] + _tmpy * b.fMatrix[1][2] + _tmpz * b.fMatrix[2][2] + this->w * b.fMatrix[3][2];
+		this->w = _tmpx * b.fMatrix[0][3] + _tmpy * b.fMatrix[1][3] + _tmpz * b.fMatrix[2][3] + this->w * b.fMatrix[3][3];
 	}
 
-	Vec4& operator=(const Vec3& b) 
+	Vec4& operator=(const Vec3& b)
 	{
 		x = b.x;
 		y = b.y;
@@ -1055,7 +1077,7 @@ class Vec4
 		};
 	}
 
-	Vec4 operator*(const float& b) const 
+	Vec4 operator*(const float& b) const
 	{
 		return
 		{
@@ -1106,7 +1128,7 @@ class Vec4
 		this->z *= b.z;
 	}
 
-	operator Vec3() const 
+	operator Vec3() const
 	{
 		return Vec3(x, y, z);
 	}
@@ -1130,7 +1152,7 @@ std::ostream& operator << (std::ostream& os, const Vec4& v)
 	return os;
 }
 
-Vec3 CalculateBarycentricCoordinatesScreenSpace(const Vec2& PixelCoord, const Vec2& Vert0PixelCoord, const Vec2& Vert1PixelCoord, const Vec2& Vert2PixelCoord) 
+Vec3 CalculateBarycentricCoordinatesScreenSpace(const Vec2& PixelCoord, const Vec2& Vert0PixelCoord, const Vec2& Vert1PixelCoord, const Vec2& Vert2PixelCoord)
 {
 	// Calculate the vectors from vertex0 to the fragment and the other two vertices.
 	Vec2 v0f = PixelCoord - Vert0PixelCoord;

@@ -6,6 +6,8 @@
 #define _CRT_SECURE_NO_WARNINGS
 
 #ifndef UseOGL
+//#define SSE_SIMD_42_SUPPORT
+//#include "TerraPGE.h"
 #include "TerraPGE.h"
 #else
 // gonna add a opengl version
@@ -30,23 +32,26 @@ DWORD len = GetCurrentDirectoryA(MAX_PATH, cwd);
 
 std::string CWD = cwd;
 
-static Texture Txt = Texture("Test.bmp");
+static Texture* Txt = new Texture("Test.bmp");
 static Mesh RYNO = Mesh("RYNO.obj");
 static Mesh RCAMMO = Mesh("RC_AMMO.obj");
 static Mesh AK47 = Mesh("AK47.obj");
 static Mesh Plane = Mesh("FlatTerrain.obj");
-static Mesh CubeMsh = Cube(1, 1, 1, Material(), &Txt);
+static Mesh CubeMsh = Cube(1, 1, 1, new Material(), Txt);
 
-
-//static Mesh Mountains = Mesh("Mountains.obj");
+static Mesh Mountains = Mesh("Mountains.obj");
 //static Mesh TeaPot = Mesh(("TeaPot.obj"));
 //static Mesh Axis = Mesh("Axis.obj");
 //static Mesh Spyro = Mesh("Spyro.obj");
 //static Mesh DragStat = Mesh("DragonStatue.obj");
 static std::vector<Mesh> Meshes = {};//{Cube(1, 1, 1, Material(), &Txt), RYNO, Sphere(1, 20, 20, TeaPot.Mat), TeaPot, Axis, AK47, Spyro, Mountains, DragStat };
-static Vec3 LightSrcPos = { 0, 19, -7 };
-static SimpleLightSrc sl = SimpleLightSrc(LightSrcPos, { 0, 10, 0 }, Vec3(253, 251, 211), 0.35f, 0.15f, 0.5f);
+static Vec3 LightSrcPos = { 0, 30, -34 };
+static DirectionalLight sl = DirectionalLight(LightSrcPos, { 0, 10, 0 }, Vec3(253, 251, 211), 0.35f, 0.15f, 0.5f);
 static Camera Cam = Camera(Vec3(0, 1, 0), (float)((float)TerraPGE::sy / (float)TerraPGE::sx), TerraPGE::FOV, TerraPGE::FNEAR, TerraPGE::FFAR);
+
+static Renderable CubeRender = Renderable(CubeMsh, Cam, Vec3(1.0f, 1.0f, 1.0f), Vec3(0.0f, 0.0f, 0.0f), Vec3(0.0f, 5.f, -4.0f), EngineShaders::Shader_Texture_Only);
+static Renderable PlaneRender = Renderable(Plane, Cam, Vec3(1.0f, 1.0f, 1.0f), Vec3(0.0f, 0.0f, 0.0f), Vec3(0.0f, 0.0f, 0.0f), EngineShaders::Shader_Frag_Phong_Shadows);
+static Renderable RCAMMO_Render = Renderable(RCAMMO, Cam, Vec3(1.0f, 1.0f, 1.0f), Vec3(0.0f, 0.0f, 0.0f), Vec3(0.0f, 0.0f, 0.0f), EngineShaders::Shader_Frag_Phong_Shadows);
 
 bool LockCamera = false;
 
@@ -86,15 +91,15 @@ void Settings()
 		}
 		if (GetAsyncKeyState(VK_F5))
 		{
-			RotSpeedZ += 15.0f;
-			if (RotSpeedZ >= 45.0f)
-			{
-				RotSpeedZ = 0.f;
-			}
+			TerraPGE::DoMultiThreading = !TerraPGE::DoMultiThreading;
 		}
 		if (GetAsyncKeyState(VK_F6))
 		{
-			TerraPGE::DoCull = !TerraPGE::DoCull;
+			static bool ca = false;
+
+			if(!ca)
+				Txt->Delete();
+			ca = true;
 		}
 		if (GetAsyncKeyState(VK_F7))
 		{
@@ -132,14 +137,7 @@ void Settings()
 	}
 }
 
-void WndCtrlEvent(HMENU CtrlID, ULONG Msg)
-{
-	if (CtrlID == (HMENU)201)
-	{
-	}
-}
-
-DoTick_T Draw(GdiPP& Gdi, WndCreatorW& Wnd, const float& ElapsedTime)
+DoTick_T Draw(GdiPP& Gdi, WndCreatorW& Wnd, const float& ElapsedTime, std::vector<Renderable>* ToRender, std::vector<LightObject*>* Lights)
 {
 	static float PrevFov = Cam.Fov;
 	
@@ -160,14 +158,14 @@ DoTick_T Draw(GdiPP& Gdi, WndCreatorW& Wnd, const float& ElapsedTime)
 	{
 		if (IsFullScreen)
 		{
-			Wnd.ResetStyle(WndModes::Windowed);
-			Wnd.ResetStyleEx(WndExModes::WindowedEx);
+			Wnd.ResetStyle((LONG_PTR)WndModes::Windowed);
+			Wnd.ResetStyleEx((LONG_PTR)WndExModes::WindowedEx);
 			IsFullScreen = !IsFullScreen;
 		}
 		else
 		{
-			Wnd.ResetStyle(WndModes::FullScreen);
-			Wnd.ResetStyleEx(WndExModes::FullScreenEx);
+			Wnd.ResetStyle((LONG_PTR)WndModes::FullScreen);
+			Wnd.ResetStyleEx((LONG_PTR)WndExModes::FullScreenEx);
 			IsFullScreen = !IsFullScreen;
 		}
 		TerraPGE::UpdateScreenInfo(Gdi);
@@ -184,8 +182,11 @@ DoTick_T Draw(GdiPP& Gdi, WndCreatorW& Wnd, const float& ElapsedTime)
 	if (GetAsyncKeyState(VK_HOME))
 	{
 		LockCamera = !LockCamera;
-		Cam.ViewMatrix = Matrix::CalcViewMatrix(LightSrcPos, Cam.Pos, Vec3(0, 1, 0));
-		Cam.Pos = LightSrcPos; 
+		Matrix Proj;
+		Proj.MakeOrthoMatrix(-40.0f, 40.0f, -40.0f, 40.0f, TerraPGE::FNEAR, TerraPGE::FFAR);
+		Cam.ProjectionMatrix = Proj;
+		Cam.ViewMatrix = Matrix::CalcViewMatrix(((Vec3(0.0f, 0.0f, 0.0f) - LightSrcPos).Normalized()) * 100.0f, Vec3(0.0f, 0.0f, 0.0f), Vec3(0, 1, 0));
+		Cam.Pos = -((Vec3(0.0f, 0.0f, 0.0f) - LightSrcPos).Normalized()) * 100.0f;
 	}
 
 	if (GetAsyncKeyState(VK_SPACE) & 0x8000)
@@ -228,19 +229,34 @@ DoTick_T Draw(GdiPP& Gdi, WndCreatorW& Wnd, const float& ElapsedTime)
 
 	FTheta += 1.0f * ElapsedTime;
 
-	TerraPGE::RenderMesh(Gdi, Cam, Plane, Vec3(1.0f, 1.0f, 1.0f), Vec3(0.0f, 0.0f, 0.0f), Vec3(0.0f, 0.0f, 0.0f), sl.LightPos, sl.Color, sl.AmbientCoeff, sl.DiffuseCoeff, sl.SpecularCoeff, EngineShaders::Shader_Frag_Phong_Shadows);
 	//TerraPGE::RenderMesh(Gdi, Cam, RYNO, Vec3(1.0f, 1.0f, 1.0f), Vec3(0.0f, 0.0f, 0.0f),  Vec3(10.0f, 2.5f, 0.0f), sl.LightPos, sl.Color, sl.AmbientCoeff, sl.DiffuseCoeff, sl.SpecularCoeff, EngineShaders::Shader_Texture_Only);
 	//TerraPGE::RenderMesh(Gdi, Cam, RCAMMO, Vec3(1.0f, 1.0f, 1.0f), Vec3(0.0f, 0.0f, 0.0f), Vec3(-10.0f, 2.5f, 0.0f), sl.LightPos, sl.Color, sl.AmbientCoeff, sl.DiffuseCoeff, sl.SpecularCoeff, EngineShaders::Shader_Texture_Only);
-	TerraPGE::RenderMesh(Gdi, Cam, CubeMsh, Vec3(1.0f, 1.0f, 1.0f), Vec3(0.0f, 0.0f, 0.0f), Vec3(0.0f, 1.5f, 0.0f), sl.LightPos, sl.Color, sl.AmbientCoeff, sl.DiffuseCoeff, sl.SpecularCoeff, EngineShaders::Shader_Texture_Only);
 
+	// Camera shouldnt be in this class at all...
+	// TODO
+	CubeRender.Cam = Cam;
+	PlaneRender.Cam = Cam;
+	RCAMMO_Render.Cam = Cam;
+
+	ToRender->push_back(CubeRender);
+	//ToRender->push_back(PlaneRender);
+	ToRender->push_back(PlaneRender);
+
+	Lights->push_back(&sl);
+
+	//TerraPGE::RenderMesh(Gdi, Cam, CubeMsh, Vec3(1.0f, 1.0f, 1.0f), Vec3(0.0f, 0.0f, 0.0f), Vec3(0.0f, 5.f, -4.0f), sl.LightPos, sl.Color, sl.AmbientCoeff, sl.DiffuseCoeff, sl.SpecularCoeff, EngineShaders::Shader_Frag_Phong_Shadows);
+	//TerraPGE::RenderMesh(Gdi, Cam, Plane, Vec3(1.0f, 1.0f, 1.0f), Vec3(0.0f, 0.0f, 0.0f), Vec3(0.0f, 0.0f, 0.0f), sl.LightPos, sl.Color, sl.AmbientCoeff, sl.DiffuseCoeff, sl.SpecularCoeff, EngineShaders::Shader_Frag_Phong_Shadows);
+
+	//Renderable CubeRend = Renderable(CubeMesh, Vec3(1.0f, 1.0f, 1.0f), Vec3(0.0f, 0.0f, 0.0f), Vec3(0.0f, 5.f, -4.0f));
+	//Renderable PlaneRend = Renderable(Plane, Vec3(1.0f, 1.0f, 1.0f), Vec3(0.0f, 0.0f, 0.0f), Vec3(0.0f, 0.0f, 0.0f));
+	//Renderable LightSrcRend = Renderable(sl.LightMesh, Vec3(1.0f, 1.0f, 1.0f), Vec3(0, 0, 0));
 
 //	TerraPGE::RenderMesh(Gdi, Cam, Meshes.at(CurrMesh), Vec3(1.0f, 1.0f, 1.0f), Vec3(FTheta * RotSpeedX, FTheta * RotSpeedY, FTheta * RotSpeedZ), Vec3(1, 0, 10), sl.LightPos, sl.Color, sl.AmbientCoeff, sl.DiffuseCoeff, sl.SpecularCoeff, EngineShaders::Shader_Texture_Only);
 
 //	if (CurrMesh <= 2)
 //		TerraPGE::RenderMesh(Gdi, Cam, Meshes.at(CurrMesh), Vec3(1.0f, 1.0f, 1.0f), Vec3(FTheta * RotSpeedX, FTheta * RotSpeedY, FTheta * RotSpeedZ), Vec3(10, 0, 10), sl.LightPos, sl.Color, sl.AmbientCoeff, sl.DiffuseCoeff, sl.SpecularCoeff, EngineShaders::Shader_Gradient_Centroid, SHADER_FRAGMENT);
 
-	TerraPGE::RenderMesh(Gdi, Cam, sl.LightMesh, Vec3(1.0f, 1.0f, 1.0f), Vec3(0, 0, 0), sl.LightPos, sl.LightPos, sl.Color, 1.0f, 0.f, 0.f, EngineShaders::Shader_Material, SHADER_TRIANGLE);
-
+	//TerraPGE::RenderMesh(Gdi, Cam, sl.LightMesh, Vec3(1.0f, 1.0f, 1.0f), Vec3(0, 0, 0), Vec3(0, 0, 0), Lights->data(), Lights->size(), EngineShaders::Shader_Material, ShaderTypes::SHADER_TRIANGLE);
 
 	if (TerraPGE::FpsEngineCounter && ShowStrs)
 	{
@@ -291,7 +307,9 @@ DoTick_T Draw(GdiPP& Gdi, WndCreatorW& Wnd, const float& ElapsedTime)
 int APIENTRY WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _In_ LPSTR lpCmdLine, _In_ int nShowCmd)
 {
 	BrushPP ClearBrush = (HBRUSH)GetStockObject(BLACK_BRUSH);
-	WndCreator Wnd = WndCreator(CS_OWNDC, L"GameEngine", L"Game Engine", LoadCursor(NULL, IDC_ARROW), NULL, ClearBrush, WndExModes::BorderLessEx, WndModes::BorderLess | WndModes::ClipChildren, 0, 0, TerraPGE::sx, TerraPGE::sy);
+	WndCreatorW Wnd = WndCreatorW(CS_OWNDC, L"GameEngine", L"Game Engine", LoadCursorW(NULL, IDC_ARROW), NULL, ClearBrush, (DWORD)WndExModes::BorderLessEx, (DWORD)WndModes::BorderLess | (DWORD)WndModes::ClipChildren, 0, 0, TerraPGE::sx, TerraPGE::sy);
+
+	RCAMMO.BackfaceCulling = false;
 
 	//Meshes[4].CalculateNormals();
 #ifdef _DEBUG
@@ -301,8 +319,6 @@ int APIENTRY WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance,
 	//Console.Hide();
 
 	std::thread Sett(Settings);
-
-	WndCtrlEventProcessor = WndCtrlEvent;
 
 	TerraPGE::Run(Wnd, ClearBrush, (DoTick_T)Draw);
 
