@@ -207,7 +207,7 @@ class Triangle
 	TextureCoords TexCoords[3] = {};
 
 	Vec3 Col = Vec3(255, 0, 0);
-	Material Mat = Material();
+	Material* Material;
 
 	bool UseMeshMaterial = false;
 	bool HasTexture = false;
@@ -230,7 +230,7 @@ class Mesh
 		this->TriangleCount = (int)Triangles.size();
 		this->NormalCount = 0;
 		this->VertexCount = 0;
-		this->ChangeMatInfo(Material());
+		this->ChangeMatInfo(new Material());
 		this->CalculateNormals();
 	}
 
@@ -239,7 +239,7 @@ class Mesh
 		this->LoadMesh(Fn);
 	}
 
-	Mesh(Mesh m, Material Mat)
+	Mesh(Mesh m, Material* Mat)
 	{
 		*this = m;
 		if (this->Normals.size() == 0)
@@ -279,14 +279,15 @@ class Mesh
 		}
 	}
 
-	void ChangeMatInfo(Material MatToApply)
+	void ChangeMatInfo(Material* MatToApply)
 	{
-		this->Mat = MatToApply;
+		this->Materials.push_back(MatToApply);
+
 		for (auto& Tri : this->Triangles)
 		{
-			Tri.Mat = this->Mat;
+			Tri.Material = MatToApply;
 
-			if (Tri.Mat.TexA.Used || Tri.Mat.TexD.Used)
+			if (Tri.Material->Textures.size() > 0 && Tri.Material->Textures.at(0)->Used)
 				Tri.HasTexture = true;
 		}
 	}
@@ -303,7 +304,7 @@ class Mesh
 		std::vector<TextureCoords> TexCache;
 
 		std::string MtlLibFn = "";
-		Material CurrMat = Material();
+		Material* CurrMat = nullptr;
 
 		std::cout << "Loading Mesh: " << FnPath << std::endl;
 
@@ -410,8 +411,8 @@ class Mesh
 						Tmp.Points[i] = vertex;
 					}
 
-					Tmp.Mat = CurrMat; // Assign the current material to the triangle
-					Tmp.HasTexture = Tmp.Mat.TexA.Used || Tmp.Mat.TexA.Used;
+					Tmp.Material = CurrMat; // Assign the current material to the triangle
+					Tmp.HasTexture = (Tmp.Material->Textures.size() > 0 && Tmp.Material->Textures.at(0)->Used);
 
 					this->Triangles.push_back(Tmp);
 				}
@@ -421,18 +422,9 @@ class Mesh
 				//char Prefix[7];
 				std::string MaterialFn;
 				SS >> Unused >> Unused >> Unused >> Unused >> Unused >> Unused >> MaterialFn;
-				CurrMat.LoadMaterial(MtlLibFn, MaterialFn); // Update the current material
+				CurrMat = Material::LoadMaterial(MtlLibFn, MaterialFn); // Update the current material
 				this->MatCount++;
-
-				if (this->MatCount > 1)
-				{
-					this->Mat.MaterialName = "Multiple";
-					this->UseSingleMat = false;
-				}
-				else
-				{
-					this->Mat = CurrMat;
-				}
+				this->Materials.push_back(CurrMat);
 			}
 			else if (Str.find("mtllib ") != std::string::npos)
 			{
@@ -492,11 +484,8 @@ class Mesh
 	std::vector<Vec3> Vertices = {};
 	std::vector<Triangle> Triangles = {};
 	std::vector<TextureCoords> TexCoords = {};
+	std::vector<Material*> Materials = {};
 	std::vector<Vec3> Normals = {};
-
-	std::vector<Material> ModelMats = {};
-
-	Material Mat = Material();
 
 	int VertexCount = 0;
 	int TriangleCount = 0;
@@ -539,7 +528,7 @@ const Mesh CubeMesh = Mesh(
 class Cube : public Mesh
 {
 	public:
-	Cube(float Length, float Width, float Height, Material Mat = Material(), Texture* T = nullptr) : Mesh(CubeMesh, Mat)
+	Cube(float Length, float Width, float Height, Material* Mat = new Material(), Texture* T = nullptr) : Mesh(CubeMesh, Mat)
 	{
 		for (int i = 0; i < CubeMesh.Triangles.size(); i++)
 		{
@@ -550,8 +539,8 @@ class Cube : public Mesh
 			if (T != nullptr)
 			{
 				this->Triangles[i].HasTexture = true;
-				this->Triangles[i].Mat = Mat;
-				this->Triangles[i].Mat.TexA = *T;
+				this->Triangles[i].Material = Mat;
+				Mat->Textures.push_back(T);
 
 				if ((i + 1) % 2 == 0)
 				{
@@ -576,7 +565,7 @@ class Cube : public Mesh
 class Sphere : public Mesh
 {
 	public:
-	Sphere(float Radius, int LatitudeSegments, int LongitudeSegments, Material Mat = Material()) : Mesh()
+	Sphere(float Radius, int LatitudeSegments, int LongitudeSegments, Material* Mat = new Material()) : Mesh()
 	{
 		this->Triangles = {};
 		// whole function is a pasted parameterized equation

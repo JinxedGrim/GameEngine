@@ -31,10 +31,9 @@
 
 //     TO DO 
 // 1. Fix the shadows during culling 
-// 3. Revamp Material and texture system ie put all materials in the mesh and pointers to them in the triangle
-// 4. Caclulate Vertex norms for all 3 vertices and store them
-// 5. figure out a better way of per pixel shading
-// 6. redisign engine into a more API-like manner
+// 3. Caclulate Vertex norms for all 3 vertices and store them
+// 4. figure out a better way of per pixel shading (CUDA?)
+// 5. redisign engine into a more API-like manner
 // X. Audio system 
 // X. Voice 
 // X. More light types
@@ -193,17 +192,17 @@ namespace TerraPGE
 	void __fastcall RenderTriangleThreaded(float* DepthBuffer, GdiPP& Gdi, T&& Shader, ShaderArgs Args)
 	{
 		// Setup variables
-		Triangle& Tri = *Args.Tri;
+		Triangle* Tri = Args.Tri;
 		float FarSubNear = TerraPGE::FFAR - TerraPGE::FNEAR;
 		float FarNear = TerraPGE::FFAR * TerraPGE::FNEAR;
 		Matrix Vp = (Args.ViewMat * Args.ProjectionMat);
 
-		int x1 = PixelRound(Tri.Points[0].x);
-		int y1 = PixelRound(Tri.Points[0].y);
-		int x2 = PixelRound(Tri.Points[1].x);
-		int y2 = PixelRound(Tri.Points[1].y);
-		int x3 = PixelRound(Tri.Points[2].x);
-		int y3 = PixelRound(Tri.Points[2].y);
+		int x1 = PixelRound(Tri->Points[0].x);
+		int y1 = PixelRound(Tri->Points[0].y);
+		int x2 = PixelRound(Tri->Points[1].x);
+		int y2 = PixelRound(Tri->Points[1].y);
+		int x3 = PixelRound(Tri->Points[2].x);
+		int y3 = PixelRound(Tri->Points[2].y);
 		float u1 = 0.0f;
 		float u2 = 0.0f;
 		float u3 = 0.0f;
@@ -214,17 +213,17 @@ namespace TerraPGE
 		float v2 = 0.0f;
 		float v3 = 0.0f;
 
-		if (Tri.Mat.TexA.Used)
+		if (Tri->Material->HasUsableTexture())
 		{
-			u1 = Tri.TexCoords[0].u;
-			u2 = Tri.TexCoords[1].u;
-			u3 = Tri.TexCoords[2].u;
-			v1 = Tri.TexCoords[0].v;
-			v2 = Tri.TexCoords[1].v;
-			v3 = Tri.TexCoords[2].v;
-			w1 = Tri.TexCoords[0].w;
-			w2 = Tri.TexCoords[1].w;
-			w3 = Tri.TexCoords[2].w;
+			u1 = Tri->TexCoords[0].u;
+			u2 = Tri->TexCoords[1].u;
+			u3 = Tri->TexCoords[2].u;
+			v1 = Tri->TexCoords[0].v;
+			v2 = Tri->TexCoords[1].v;
+			v3 = Tri->TexCoords[2].v;
+			w1 = Tri->TexCoords[0].w;
+			w2 = Tri->TexCoords[1].w;
+			w3 = Tri->TexCoords[2].w;
 		}
 
 		if (y2 < y1)
@@ -326,9 +325,9 @@ namespace TerraPGE
 						int idx = ContIdx(j, i, TerraPGE::sx);
 
 						// Calculate the barycentric coordinates which we use for interpolation
-						Vec3 BaryCoords = CalculateBarycentricCoordinatesScreenSpace(Vec2((float)j, (float)i), Vec2((float)Tri.Points[0].x, (float)Tri.Points[0].y), Vec2((float)Tri.Points[1].x, (float)Tri.Points[1].y), Vec2((float)Tri.Points[2].x, (float)Tri.Points[2].y));
+						Vec3 BaryCoords = CalculateBarycentricCoordinatesScreenSpace(Vec2((float)j, (float)i), Vec2((float)Tri->Points[0].x, (float)Tri->Points[0].y), Vec2((float)Tri->Points[1].x, (float)Tri->Points[1].y), Vec2((float)Tri->Points[2].x, (float)Tri->Points[2].y));
 						// Use Barycentric coords to interpolate our world position
-						Vec4 InterpolatedPos = Vec4((Tri.WorldSpaceVerts[0] * BaryCoords.x) + (Tri.WorldSpaceVerts[1] * BaryCoords.y) + (Tri.WorldSpaceVerts[2] * BaryCoords.z), 1.0f);
+						Vec4 InterpolatedPos = Vec4((Tri->WorldSpaceVerts[0] * BaryCoords.x) + (Tri->WorldSpaceVerts[1] * BaryCoords.y) + (Tri->WorldSpaceVerts[2] * BaryCoords.z), 1.0f);
 
 						// World Pos -> Clipped Space
 						Vec4 NdcPos = InterpolatedPos * Vp;
@@ -395,32 +394,32 @@ namespace TerraPGE
 							Args.FragColor.G = 255.0f * Val;
 							Args.FragColor.B = 255.0f * Val;
 						}
-						else if (Args.ShaderType != ShaderTypes::SHADER_FRAGMENT || Tri.OverrideTextureColor || !TerraPGE::DoLighting)
+						else if (Args.ShaderType != ShaderTypes::SHADER_FRAGMENT || Tri->OverrideTextureColor || !TerraPGE::DoLighting)
 						{
 							// This entire else if is mainly for debugging clipping
-							if (Tri.OverrideTextureColor)
+							if (Tri->OverrideTextureColor)
 							{
-								Args.FragColor.R = Tri.Col.x;
-								Args.FragColor.G = Tri.Col.y;
-								Args.FragColor.B = Tri.Col.z;
+								Args.FragColor.R = Tri->Col.x;
+								Args.FragColor.G = Tri->Col.y;
+								Args.FragColor.B = Tri->Col.z;
 							}
-							else if (Tri.Mat.TexA.Used)
+							else if (Tri->Material->HasUsableTexture())
 							{
-								Vec3 TexturCol = Args.Tri->Mat.TexA.GetPixelColor(tex_u, 1.0f - tex_v).GetRGB();
+								Vec3 TexturCol = Args.Tri->Material->Textures.at(0)->GetPixelColor(tex_u, 1.0f - tex_v).GetRGB();
 								Args.FragColor.R = TexturCol.x;
 								Args.FragColor.G = TexturCol.y;
 								Args.FragColor.B = TexturCol.z;
 							}
 							else
 							{
-								Args.FragColor.R = Tri.Mat.AmbientColor.x;
-								Args.FragColor.G = Tri.Mat.AmbientColor.y;
-								Args.FragColor.B = Tri.Mat.AmbientColor.z;
+								Args.FragColor.R = Tri->Material->AmbientColor.x;
+								Args.FragColor.G = Tri->Material->AmbientColor.y;
+								Args.FragColor.B = Tri->Material->AmbientColor.z;
 							}
 						}
 						else
 						{
-							Vec3 InterpolatedNormal = ((Tri.FaceNormal * BaryCoords.x) + (Tri.FaceNormal * BaryCoords.y) + (Tri.FaceNormal * BaryCoords.z)).Normalized();
+							Vec3 InterpolatedNormal = ((Tri->FaceNormal * BaryCoords.x) + (Tri->FaceNormal * BaryCoords.y) + (Tri->FaceNormal * BaryCoords.z)).Normalized();
 
 							// Set up some shader args and call fragment shader=
 							Args.FragPos = InterpolatedPos;
@@ -496,9 +495,9 @@ namespace TerraPGE
 						int idx = ContIdx(j, i, TerraPGE::sx);
 
 						// Calculate the barycentric coordinates which we use for interpolation
-						Vec3 BaryCoords = CalculateBarycentricCoordinatesScreenSpace(Vec2((float)j, (float)i), Vec2((float)Tri.Points[0].x, (float)Tri.Points[0].y), Vec2((float)Tri.Points[1].x, (float)Tri.Points[1].y), Vec2((float)Tri.Points[2].x, (float)Tri.Points[2].y));
+						Vec3 BaryCoords = CalculateBarycentricCoordinatesScreenSpace(Vec2((float)j, (float)i), Vec2((float)Tri->Points[0].x, (float)Tri->Points[0].y), Vec2((float)Tri->Points[1].x, (float)Tri->Points[1].y), Vec2((float)Tri->Points[2].x, (float)Tri->Points[2].y));
 						// Use Barycentric coords to interpolate our world position
-						Vec4 InterpolatedPos = Vec4((Tri.WorldSpaceVerts[0] * BaryCoords.x) + (Tri.WorldSpaceVerts[1] * BaryCoords.y) + (Tri.WorldSpaceVerts[2] * BaryCoords.z), 1.0f);
+						Vec4 InterpolatedPos = Vec4((Tri->WorldSpaceVerts[0] * BaryCoords.x) + (Tri->WorldSpaceVerts[1] * BaryCoords.y) + (Tri->WorldSpaceVerts[2] * BaryCoords.z), 1.0f);
 
 						// World Pos -> Clipped Space
 						Vec4 NdcPos = InterpolatedPos * Vp;
@@ -563,32 +562,32 @@ namespace TerraPGE
 							Args.FragColor.G = 255.0f * Val;
 							Args.FragColor.B = 255.0f * Val;
 						}
-						else if (Args.ShaderType != ShaderTypes::SHADER_FRAGMENT || Tri.OverrideTextureColor || !TerraPGE::DoLighting)
+						else if (Args.ShaderType != ShaderTypes::SHADER_FRAGMENT || Tri->OverrideTextureColor || !TerraPGE::DoLighting)
 						{
 							// This entire else if is mainly for debugging clipping
-							if (Tri.OverrideTextureColor)
+							if (Tri->OverrideTextureColor)
 							{
-								Args.FragColor.R = Tri.Col.x;
-								Args.FragColor.G = Tri.Col.y;
-								Args.FragColor.B = Tri.Col.z;
+								Args.FragColor.R = Tri->Col.x;
+								Args.FragColor.G = Tri->Col.y;
+								Args.FragColor.B = Tri->Col.z;
 							}
-							else if (Tri.Mat.TexA.Used)
+							else if (Tri->Material->HasUsableTexture())
 							{
-								Vec3 TexturCol = Args.Tri->Mat.TexA.GetPixelColor(tex_u, 1.0f - tex_v).GetRGB();
+								Vec3 TexturCol = Tri->Material->Textures.at(0)->GetPixelColor(tex_u, 1.0f - tex_v).GetRGB();
 								Args.FragColor.R = TexturCol.x;
 								Args.FragColor.G = TexturCol.y;
 								Args.FragColor.B = TexturCol.z;
 							}
 							else
 							{
-								Args.FragColor.R = Tri.Mat.AmbientColor.x;
-								Args.FragColor.G = Tri.Mat.AmbientColor.y;
-								Args.FragColor.B = Tri.Mat.AmbientColor.z;
+								Args.FragColor.R = Tri->Material->AmbientColor.x;
+								Args.FragColor.G = Tri->Material->AmbientColor.y;
+								Args.FragColor.B = Tri->Material->AmbientColor.z;
 							}
 						}
 						else
 						{
-							Vec3 InterpolatedNormal = ((Tri.FaceNormal * BaryCoords.x) + (Tri.FaceNormal * BaryCoords.y) + (Tri.FaceNormal * BaryCoords.z)).Normalized();
+							Vec3 InterpolatedNormal = ((Tri->FaceNormal * BaryCoords.x) + (Tri->FaceNormal * BaryCoords.y) + (Tri->FaceNormal * BaryCoords.z)).Normalized();
 
 							// Set up some shader args and call fragment shader=
 							Args.FragPos = InterpolatedPos;
@@ -638,7 +637,7 @@ namespace TerraPGE
 		float w2 = 0.0f;
 		float w3 = 0.0f;
 
-		if (Tri.Mat.TexA.Used)
+		if (Tri.Material->HasUsableTexture())
 		{
 			u1 = Tri.TexCoords[0].u;
 			u2 = Tri.TexCoords[1].u;
@@ -824,18 +823,18 @@ namespace TerraPGE
 							Args.FragColor.G = Tri.Col.y;
 							Args.FragColor.B = Tri.Col.z;
 						}
-						else if (Tri.Mat.TexA.Used)
+						else if (Tri.Material->HasUsableTexture())
 						{
-							Vec3 TexturCol = Args.Tri->Mat.TexA.GetPixelColor(tex_u, 1.0f - tex_v).GetRGB();
+							Vec3 TexturCol = Args.Tri->Material->Textures.at(0)->GetPixelColor(tex_u, 1.0f - tex_v).GetRGB();
 							Args.FragColor.R = TexturCol.x;
 							Args.FragColor.G = TexturCol.y;
 							Args.FragColor.B = TexturCol.z;
 						}
 						else
 						{
-							Args.FragColor.R = Tri.Mat.AmbientColor.x;
-							Args.FragColor.G = Tri.Mat.AmbientColor.y;
-							Args.FragColor.B = Tri.Mat.AmbientColor.z;
+							Args.FragColor.R = Tri.Material->AmbientColor.x;
+							Args.FragColor.G = Tri.Material->AmbientColor.y;
+							Args.FragColor.B = Tri.Material->AmbientColor.z;
 						}
 					}
 					else
@@ -988,18 +987,18 @@ namespace TerraPGE
 							Args.FragColor.G = Tri.Col.y;
 							Args.FragColor.B = Tri.Col.z;
 						}
-						else if (Tri.Mat.TexA.Used)
+						else if (Tri.Material->HasUsableTexture())
 						{
-							Vec3 TexturCol = Args.Tri->Mat.TexA.GetPixelColor(tex_u, 1.0f - tex_v).GetRGB();
+							Vec3 TexturCol = Args.Tri->Material->Textures.at(0)->GetPixelColor(tex_u, 1.0f - tex_v).GetRGB();
 							Args.FragColor.R = TexturCol.x;
 							Args.FragColor.G = TexturCol.y;
 							Args.FragColor.B = TexturCol.z;
 						}
 						else
 						{
-							Args.FragColor.R = Tri.Mat.AmbientColor.x;
-							Args.FragColor.G = Tri.Mat.AmbientColor.y;
-							Args.FragColor.B = Tri.Mat.AmbientColor.z;
+							Args.FragColor.R = Tri.Material->AmbientColor.x;
+							Args.FragColor.G = Tri.Material->AmbientColor.y;
+							Args.FragColor.B = Tri.Material->AmbientColor.z;
 						}
 					}
 					else
@@ -1334,9 +1333,9 @@ namespace TerraPGE
 				const Texture* TexToUse = nullptr;
 
 				if (!MeshToRender.UseSingleMat)
-					MatToUse = &ToDraw.Mat;
+					MatToUse = ToDraw.Material;
 				else
-					MatToUse = &MeshToRender.Mat;
+					MatToUse = MeshToRender.Materials.at(0);
 
 				ShaderArgs Args(&ToDraw, MatToUse, Cam.Pos, Cam.LookDir, ObjectMatrix, Cam.ViewMatrix, Cam.ProjectionMatrix, SceneLights, LightCount, SHADER_TYPE);
 
@@ -1605,6 +1604,8 @@ namespace TerraPGE
 		}
 
 		Wnd.Destroy();
+
+		// call udcb here TODO
 
 		EngineCleanup();
 	}

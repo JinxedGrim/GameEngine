@@ -11,7 +11,7 @@ class Material
 
 	static inline std::vector<Material*> LoadedMaterials = {};
 
-	Material* FindMaterial(std::string Name)
+	static Material* FindMaterial(std::string Name)
 	{
 		for (Material* M : LoadedMaterials)
 		{
@@ -24,43 +24,24 @@ class Material
 		return nullptr;
 	}
 
-	Material()
+	static Material* LoadMaterial(std::string MtlFn, std::string MtlName)
 	{
-		Material* RetMat = FindMaterial("DefaultMat");
-		if (RetMat == nullptr)
+		Material* Mat = FindMaterial(MtlName);
+		
+		if (Mat != nullptr)
 		{
-			Material* m = new Material(Vec3(255.0f, 0, 0), Vec3(255.0f * 0.75f, 0.0f, 0.0f), Vec3(255.0f * 0.25f, 0.0f, 0.0f), 96.0f, "DefaultMat");
-			LoadedMaterials.push_back(m);
+			 return Mat;
 		}
 		else
 		{
-			*this = *RetMat;
-		}
-	}
-	Material(Vec3 AmbientColor, Vec3 DiffuseColor, Vec3 SpecularColor, float Shininess, std::string Name = "")
-	{
-		this->AmbientColor = AmbientColor;
-		this->DiffuseColor = DiffuseColor;
-		this->SpecularColor = SpecularColor;
-		this->Shininess = Shininess;
-		this->MaterialName = Name;
-	}
-
-	bool LoadMaterial(std::string MtlFn, std::string MtlName)
-	{
-		if (FindMaterial(MtlName) != nullptr)
-		{
-			*this = *FindMaterial(MtlName);
-			return true;
+			Mat = new Material();
 		}
 
 		std::ifstream mtlFile(MtlFn);
 		if (!mtlFile.is_open())
 		{
-			// Error handling for failed MTL file loading
-			// You can return a default material or throw an exception
-			*this = Material();
-			return false;
+			Mat = new Material();
+			return nullptr;
 		}
 
 		std::string line;
@@ -77,8 +58,8 @@ class Material
 
 				if (name == MtlName)
 				{
-					this->MaterialName = name;
-					// Parse the properties for the material
+					Mat->MaterialName = name;
+
 					while (std::getline(mtlFile, line))
 					{
 						std::stringstream ssProp(line);
@@ -87,22 +68,22 @@ class Material
 
 						if (propKeyword == "Ka")
 						{
-							ssProp >> this->AmbientColor.x >> this->AmbientColor.y >> this->AmbientColor.z;
-							this->AmbientColor *= 255.0f;
+							ssProp >> Mat->AmbientColor.x >> Mat->AmbientColor.y >> Mat->AmbientColor.z;
+							Mat->AmbientColor *= 255.0f;
 						}
 						else if (propKeyword == "Kd")
 						{
-							ssProp >> this->DiffuseColor.x >> this->DiffuseColor.y >> this->DiffuseColor.z;
-							this->DiffuseColor *= 255.0f;
+							ssProp >> Mat->DiffuseColor.x >> Mat->DiffuseColor.y >> Mat->DiffuseColor.z;
+							Mat->DiffuseColor *= 255.0f;
 						}
 						else if (propKeyword == "Ks")
 						{
-							ssProp >> this->SpecularColor.x >> this->SpecularColor.y >> this->SpecularColor.z;
-							this->SpecularColor *= 255.0f;
+							ssProp >> Mat->SpecularColor.x >> Mat->SpecularColor.y >> Mat->SpecularColor.z;
+							Mat->SpecularColor *= 255.0f;
 						}
 						else if (propKeyword == "Ns")
 						{
-							ssProp >> this->Shininess;
+							ssProp >> Mat->Shininess;
 						}
 						else if (propKeyword == "map_Ka")
 						{
@@ -110,7 +91,7 @@ class Material
 							ssProp >> textureFilePath;
 							if (textureFilePath != "")
 							{
-								this->TexA = Texture(textureFilePath);
+								Mat->Textures.push_back(new Texture(textureFilePath));
 							}
 						}
 						else if (propKeyword == "map_Kd")
@@ -119,24 +100,28 @@ class Material
 							ssProp >> textureFilePath;
 							if (textureFilePath != "")
 							{
-								//this->TexD = Texture(textureFilePath);
+								Mat->Textures.push_back(new Texture(textureFilePath));
 							}
 						}
-						// Add more properties as needed
 
-						// Check if the end of material is reached
 						if (line.find("newmtl") != std::string::npos)
 							break;
 					}
 
-					break; // Exit the loop once the material is found
+					break;
 				}
 			}
 		}
 
+		LoadedMaterials.push_back(Mat);
 		mtlFile.close();
 
-		return true;
+		return Mat;
+	}
+
+	int GetLoadedMatsSize()
+	{
+		return this->LoadedMaterials.size();
 	}
 
 	Vec3 AmbientColor = Vec3(255.0f * 0.15f, 0, 0);
@@ -144,8 +129,67 @@ class Material
 	Vec3 SpecularColor = Vec3(255.0f * 0.25f, 255.0f * 0.25f, 255.0f * 0.25f);
 	float Shininess = 32.0f;
 
-	Texture TexA = Texture();
-	Texture TexD = Texture();
+	std::vector<Texture*> Textures = {};
 
 	std::string MaterialName = "DefaultMat";
+
+
+	//TODO FIND A WAY TO NOT ALLOW ALLOCATION WITHOUT NEW 
+	Material()
+	{
+		Material* RetMat = FindMaterial("DefaultMat");
+		if (RetMat == nullptr)
+		{
+			Material* m = new Material(NULL_TEXTURE_COLOR_VEC3, NULL_TEXTURE_COLOR_VEC3, NULL_TEXTURE_COLOR_VEC3, 96.0f, "DefaultMat");
+			LoadedMaterials.push_back(m);
+		}
+		else
+		{
+			*this = *RetMat;
+		}
+	}
+
+	Material(Vec3 AmbientColor, Vec3 DiffuseColor, Vec3 SpecularColor, float Shininess, std::string Name = "")
+	{
+		this->AmbientColor = AmbientColor;
+		this->DiffuseColor = DiffuseColor;
+		this->SpecularColor = SpecularColor;
+		this->Shininess = Shininess;
+		this->MaterialName = Name;
+
+		LoadedMaterials.push_back(this);
+	}
+
+	void Delete()
+	{
+		auto it = std::find(LoadedMaterials.begin(), LoadedMaterials.end(), this);
+
+		if (it != LoadedMaterials.end())
+		{
+			this->LoadedMaterials.erase(it);
+		}
+
+		for (Texture* T : Textures)
+		{
+			T->Delete();
+		}
+
+		delete this;
+	}
+
+	bool HasUsableTexture()
+	{
+		if (this->Textures.size() > 0 && this->Textures.at(0)->Used)
+		{
+			return true;
+		}
+
+		return false;
+	}
+
+	protected:
+	~Material()
+	{
+
+	}
 };

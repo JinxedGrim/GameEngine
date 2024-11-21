@@ -7,6 +7,9 @@
 #include <fstream>
 #include <algorithm>
 
+#define NULL_TEXTURE_COLOR Color(144.0f, 3.0f, 252.0f)
+#define NULL_TEXTURE_COLOR_VEC3 Vec3(144.0f, 3.0f, 252.0f)
+
 class TextureCoords
 {
 	public:
@@ -71,14 +74,60 @@ class Texture
 
 	private:
 
+	static inline std::vector<Texture*> LoadedTextures = {};
+
 	int Width = 0;
 	int Height = 0;
 	std::vector<unsigned char> PixelData = {};
 	WrappingMode WrapMode;
 
-	// Function to load a BMP file and store pixel data
+	~Texture()
+	{
+		auto it = std::find(LoadedTextures.begin(), LoadedTextures.end(), this);
+
+		if (it != LoadedTextures.end())
+		{
+			this->LoadedTextures.erase(it);
+		}
+	}
+
+	public:
+
+	Texture()
+	{
+		this->Used = false;
+		this->Width = 0;
+		this->Height = 0;
+
+		this->WrapMode = WrappingMode::Clamp;
+	}
+
+	Texture(const std::string& Filename, WrappingMode Mode = WrappingMode::Clamp)
+	{
+		Width = 0;
+		Height = 0;
+		if (Filename.find(".bmp") != std::string::npos)
+		{
+			Used = LoadBMP(Filename);
+		}
+		else if (Filename.find(".spr") != std::string::npos)
+		{
+			Used = LoadSPR(Filename);
+		}
+
+		this->WrapMode = Mode;
+	}
+
 	bool LoadBMP(const std::string& filename)
 	{
+		if (this->FindTexture(filename) != nullptr)
+		{
+			*this = *FindTexture(filename);
+			return true;
+		}
+
+		this->Name = filename;
+
 		std::ifstream file(filename, std::ios::in | std::ios::binary);
 
 		if (!file || !file.is_open())
@@ -129,11 +178,21 @@ class Texture
 			PixelData = std::move(rawPixelData);
 		}
 
+		this->LoadedTextures.push_back(this);
+
 		return true;
 	}
 
 	bool LoadSPR(const std::string& filename)
 	{
+		if (this->FindTexture(filename) != nullptr)
+		{
+			*this = *FindTexture(filename);
+			return true;
+		}
+
+		this->Name = filename;
+
 		std::ifstream file(filename, std::ios::in | std::ios::binary);
 
 		if (!file) {
@@ -164,10 +223,9 @@ class Texture
 
 		file.close();
 
+		LoadedTextures.push_back(this);
 		return true;
 	}
-
-	public:
 
 	bool Used = false;
 
@@ -176,34 +234,26 @@ class Texture
 		this->WrapMode = WrapMode;
 	}
 
-	Texture()
-	{
-		this->Used = false;
-		this->Width = 0;
-		this->Height = 0;
-	}
+	std::string Name = "";
 
-	Texture(const std::string& Filename, WrappingMode Mode = WrappingMode::Clamp)
+	Texture* FindTexture(std::string Name)
 	{
-		Width = 0;
-		Height = 0;
-		if (Filename.find(".bmp") != std::string::npos)
+		for (Texture* T : LoadedTextures)
 		{
-			Used = LoadBMP(Filename);
-		}
-		else if (Filename.find(".spr") != std::string::npos)
-		{
-			Used = LoadSPR(Filename);
+			if (T->Name == Name)
+			{
+				return T;
+			}
 		}
 
-		this->WrapMode = Mode;
+		return nullptr;
 	}
 
 	Color GetPixelColor(float u, float v) const
 	{
-		if (this->PixelData.empty())
+		if (this->PixelData.empty() || this->PixelData.size() == 0)
 		{
-			return Color(255, 0, 0);
+			return NULL_TEXTURE_COLOR;
 		}
 
 		if (WrapMode == WrappingMode::Repeat)
@@ -236,5 +286,17 @@ class Texture
 		float r = static_cast<float>(this->PixelData[index + 2]);
 
 		return Color(r, g, b);
+	}
+
+	void Delete()
+	{
+		auto it = std::find(LoadedTextures.begin(), LoadedTextures.end(), this);
+
+		if (it != LoadedTextures.end())
+		{
+			this->LoadedTextures.erase(it);
+		}
+
+		delete this;
 	}
 };

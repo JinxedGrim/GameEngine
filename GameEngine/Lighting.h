@@ -22,9 +22,9 @@ class LightObject
 		this->SpecularCoeff = SpecularCoeff;
 
 		this->LightMesh = CubeMesh;
-		this->LightMesh.Mat.AmbientColor = LightColor;
-		this->LightMesh.Mat.DiffuseColor = LightColor;
-		this->LightMesh.Mat.SpecularColor = LightColor;
+		this->LightMesh.Materials.at(0)->AmbientColor = LightColor;
+		this->LightMesh.Materials.at(0)->DiffuseColor = LightColor;
+		this->LightMesh.Materials.at(0)->SpecularColor = LightColor;
 
 		this->Far = Far;
 		this->Near = Near;
@@ -51,8 +51,11 @@ class LightObject
 
 	virtual Matrix CalcVpMat() = 0;
 
+	LightTypes Type = LightTypes::DirectionalLight;
+
 	Vec3 LightDir = Vec3(0, 0, -1);
 	Vec3 LightPos = Vec3(0, 0, 0);
+	Vec3 UpVector = Vec3(0, 1, 0);
 	Vec3 Color = Vec3(253, 251, 211);
 	Mesh LightMesh = Mesh();
 	bool Render = false;
@@ -86,6 +89,8 @@ class DirectionalLight : public LightObject
 		this->Top = Bottom;
 		this->Bottom = Top;
 		this->CenterPoint = CenterPoint;
+		this->Type = LightTypes::DirectionalLight;
+
 	}
 	DirectionalLight(Vec3 Pos, Vec3 LightDir, Vec3 LightColor, float Left, float Right, float Bottom, float Top, float AmbientCoeff, float DiffuseCoeff, float SpecularCoeff, Mesh LightMesh, Vec3 CenterPoint = Vec3()) : LightObject(Pos, LightDir, LightColor, AmbientCoeff, DiffuseCoeff, SpecularCoeff, LightMesh)
 	{
@@ -94,6 +99,8 @@ class DirectionalLight : public LightObject
 		this->Top = Bottom;
 		this->Bottom = Top;
 		this->CenterPoint = CenterPoint;
+		this->Type = LightTypes::DirectionalLight;
+
 	}
 
 	DirectionalLight(Vec3 Pos, Vec3 LightDir, Vec3 LightColor, float AmbientCoeff, float DiffuseCoeff, float SpecularCoeff, Mesh LightMesh, Vec3 CenterPoint = Vec3()) : LightObject(Pos, LightDir, LightColor, AmbientCoeff, DiffuseCoeff, SpecularCoeff, LightMesh)
@@ -103,6 +110,8 @@ class DirectionalLight : public LightObject
 		this->Top = 40.0f;
 		this->Bottom = -40.0f;
 		this->CenterPoint = CenterPoint;
+		this->Type = LightTypes::DirectionalLight;
+
 	}
 
 	DirectionalLight(Vec3 Pos, Vec3 LightDir, Vec3 LightColor, float AmbientCoeff, float DiffuseCoeff, float SpecularCoeff, Vec3 CenterPoint = Vec3()) : LightObject(Pos, LightDir, LightColor, AmbientCoeff, DiffuseCoeff, SpecularCoeff)
@@ -112,6 +121,7 @@ class DirectionalLight : public LightObject
 		this->Top = 40.0f;
 		this->Bottom = -40.0f;
 		this->CenterPoint = CenterPoint;
+		this->Type = LightTypes::DirectionalLight;
 	}
 
 	__inline Matrix CalcVpMat() override
@@ -136,6 +146,7 @@ class SpotLight : public LightObject
 		this->ConstantAttenuation = ConstantAttenuation;
 		this->LinearAttenuation = LinearAttenuation;
 		this->QuadraticAttenuation = QuadraticAttenuation;
+		this->Type = LightTypes::SpotLight;
 	}
 
 	//SpotLight(Vec3 Pos, Vec3 LightDir, Vec3 LightColor, float AmbientCoeff, float DiffuseCoeff, float SpecularCoeff, float CutoffAngle, float ConstantAttenuation = 0.0f, float LinearAttenuation = 0.0f, float QuadraticAttenuation = 0.0f) : LightObject(Pos, LightDir, LightColor, AmbientCoeff, DiffuseCoeff, SpecularCoeff)

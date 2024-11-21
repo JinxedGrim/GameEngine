@@ -32,12 +32,12 @@ DWORD len = GetCurrentDirectoryA(MAX_PATH, cwd);
 
 std::string CWD = cwd;
 
-static Texture Txt = Texture("Test.bmp");
+static Texture* Txt = new Texture("Test.bmp");
 static Mesh RYNO = Mesh("RYNO.obj");
 static Mesh RCAMMO = Mesh("RC_AMMO.obj");
 static Mesh AK47 = Mesh("AK47.obj");
 static Mesh Plane = Mesh("FlatTerrain.obj");
-static Mesh CubeMsh = Cube(1, 1, 1, Material(), &Txt);
+static Mesh CubeMsh = Cube(1, 1, 1, new Material(), Txt);
 
 static Mesh Mountains = Mesh("Mountains.obj");
 //static Mesh TeaPot = Mesh(("TeaPot.obj"));
@@ -95,7 +95,11 @@ void Settings()
 		}
 		if (GetAsyncKeyState(VK_F6))
 		{
-			TerraPGE::DoCull = !TerraPGE::DoCull;
+			static bool ca = false;
+
+			if(!ca)
+				Txt->Delete();
+			ca = true;
 		}
 		if (GetAsyncKeyState(VK_F7))
 		{

@@ -280,9 +280,9 @@ namespace EngineShaders
 
 		Vec3 TexturCol = Vec3();
 
-		if (Args.Tri->Mat.TexA.Used)
+		if (Args.Tri->Material->HasUsableTexture())
 		{
-			TexturCol = Args.Tri->Mat.TexA.GetPixelColor(Args.UVW.u, 1.0f - Args.UVW.v).GetRGB();
+			TexturCol = Args.Tri->Material->Textures.at(0)->GetPixelColor(Args.UVW.u, 1.0f - Args.UVW.v).GetRGB();
 			Args.FragColor.R = std::clamp<float>(TexturCol.x, 0.0f, 255.0f);
 			Args.FragColor.G = std::clamp<float>(TexturCol.y, 0.0f, 255.0f);
 			Args.FragColor.B = std::clamp<float>(TexturCol.z, 0.0f, 255.0f);
@@ -317,9 +317,9 @@ namespace EngineShaders
 	{
 		Vec3 TexturCol = Vec3();
 
-		if (Args.Tri->Mat.TexA.Used)
+		if (Args.Tri->Material->HasUsableTexture())
 		{
-			TexturCol = Args.Tri->Mat.TexA.GetPixelColor(Args.UVW.u, 1.0f - Args.UVW.v).GetRGB();
+			TexturCol = Args.Tri->Material->Textures.at(0)->GetPixelColor(Args.UVW.u, 1.0f - Args.UVW.v).GetRGB();
 			Args.FragColor.R = std::clamp<float>(TexturCol.x, 0.0f, 255.0f);
 			Args.FragColor.G = std::clamp<float>(TexturCol.y, 0.0f, 255.0f);
 			Args.FragColor.B = std::clamp<float>(TexturCol.z, 0.0f, 255.0f);
@@ -327,7 +327,10 @@ namespace EngineShaders
 		}
 		else
 		{
-			Shader_Frag_Phong(Args);
+			Args.FragColor.R = 255.0f;
+			Args.FragColor.G = 255.0f;
+			Args.FragColor.B = 255.0f;
+			Args.FragColor.A = 255.0f;
 		}
 	};
 }
