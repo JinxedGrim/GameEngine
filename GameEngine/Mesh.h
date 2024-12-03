@@ -19,6 +19,11 @@ class Triangle
 		this->Points[2] = P3;
 	}
 
+	Triangle(const Triangle& B)
+	{
+		*this = B;
+	}
+
 	void Translate(const Vec3& Value)
 	{
 		this->Points[0] += Value;
@@ -455,9 +460,9 @@ class Mesh
 			this->CalculateNormals();
 
 #ifdef _DEBUG
-		std::cout << Vertices.size() << " Normals: ";
-		std::cout << Normals.size() << " TexturedCahce: " << TexCache.size();
-		std::cout << " Faces: " << Triangles.size() << "\n\n";
+		std::cout << Vertices.size() << "   Normals:   ";
+		std::cout << Normals.size() << "   TexturedCahce:   " << TexCache.size();
+		std::cout << "   Faces:   " << Triangles.size() << "\n\n";
 #endif
 
 		return true;
@@ -528,7 +533,7 @@ const Mesh CubeMesh = Mesh(
 class Cube : public Mesh
 {
 	public:
-	Cube(float Length, float Width, float Height, Material* Mat = new Material(), Texture* T = nullptr) : Mesh(CubeMesh, Mat)
+	Cube(float Length, float Width, float Height, Material* Mat = new  Material(), Texture* T = nullptr) : Mesh(CubeMesh, Mat)
 	{
 		for (int i = 0; i < CubeMesh.Triangles.size(); i++)
 		{

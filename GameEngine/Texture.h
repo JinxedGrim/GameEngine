@@ -296,7 +296,5 @@ class Texture
 		{
 			this->LoadedTextures.erase(it);
 		}
-
-		delete this;
 	}
 };

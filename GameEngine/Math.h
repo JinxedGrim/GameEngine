@@ -1194,3 +1194,13 @@ Vec3 CalculateFaceNormal(const Vec3& p1, const Vec3& p2, const Vec3& p3) {
 
 	return normal;
 }
+
+
+#define _CRTDBG_MAP_ALLOC
+#include <crtdbg.h>
+
+#ifdef _DEBUG
+#define DEBUG_NEW new (_NORMAL_BLOCK, __FILE__, __LINE__)
+#else
+#define DEBUG_NEW new
+#endif

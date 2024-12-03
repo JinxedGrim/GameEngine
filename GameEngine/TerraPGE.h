@@ -22,6 +22,7 @@
 #include "Intrinsics/VectorExHelper.h"
 #endif
 
+
 // The entire premise of this project is to build a game engine without using any libraries, but the std library and the WinAPI. 
 // GdiPP is more or less straight WinAPI, but you do have to link with a dll which is sort of cheating but it's about the only way to do graphics without any libs like DX or OpenGl
 // Direct2D and DirectWrite are justified the same way
@@ -53,7 +54,7 @@ class Renderable
 	public:
 	Renderable() = delete;
 
-	Renderable(const Mesh mesh, const Camera& Cam, const Vec3& Scalar, const Vec3& RotationRads, const Vec3& Pos, const std::function<void(ShaderArgs&)> Shader, const ShaderTypes SHADER_TYPE = ShaderTypes::SHADER_FRAGMENT)
+	Renderable(Mesh* mesh, Camera* Cam, const Vec3& Scalar, const Vec3& RotationRads, const Vec3& Pos, const std::function<void(ShaderArgs*)> Shader, const ShaderTypes SHADER_TYPE = ShaderTypes::SHADER_FRAGMENT)
 	{
 		this->Cam = Cam;
 		this->Pos = Pos;
@@ -64,17 +65,35 @@ class Renderable
 		this->SHADER_TYPE = SHADER_TYPE;
 	}
 
-	Mesh mesh = Mesh();
+	Mesh* mesh = nullptr;
 	Vec3 Pos = Vec3();
 	Vec3 Scalar = Vec3();
 	Vec3 RotationRads = Vec3();
-	Camera Cam;
+	Camera* Cam;
 
-	std::function<void(ShaderArgs&)> Shader = EngineShaders::Shader_Frag_Phong_Shadows;
+	std::function<void(ShaderArgs*)> Shader = EngineShaders::Shader_Frag_Phong_Shadows;
 	ShaderTypes SHADER_TYPE = ShaderTypes::SHADER_FRAGMENT;
 };
 
-typedef void(__fastcall* DoTick_T)(const GdiPP&, const WndCreator&, const float&, std::vector<Renderable>*, std::vector<LightObject*>*);
+
+typedef void(__fastcall* BeginScene_T)();
+typedef void(__fastcall* DoTick_T)(GdiPP&, WndCreator&, const float&, std::vector<Renderable*>*, std::vector<LightObject*>*);
+typedef void(__fastcall* EndScene_T)();
+
+class Scene
+{
+	public:
+
+	Scene()
+	{
+
+	}
+
+	virtual void BeginScene() = 0;
+	virtual void RunTick(GdiPP&, WndCreator&, const float&, std::vector<Renderable*>*, std::vector<LightObject*>*) = 0;
+	virtual void EndScene() = 0;
+};
+
 
 namespace TerraPGE
 {
@@ -104,8 +123,11 @@ namespace TerraPGE
 	bool UpdateMouseIn = true;
 	bool ShowNormals = false;
 	bool DebugDepthBuffer = false;
+	bool DebugShadows = false;
 	bool DebugShadowMap = false;
 	bool NormalMapping = false;
+
+	Scene* CurrScene = nullptr;
 
 	int CpuCores = 0;
 	int GPUDevCount = 0;
@@ -124,8 +146,8 @@ namespace TerraPGE
 	float Sensitivity = 0.1f;
 	int Fps = 0;
 
-	float* DepthBuffer = new float[sx * sy];
-	float* ShadowMap = new float[ShadowMapWidth * ShadowMapHeight];
+	float* DepthBuffer = DEBUG_NEW float[sx * sy];
+	float* ShadowMap = DEBUG_NEW float[ShadowMapWidth * ShadowMapHeight];
 
 	SIZE_T GetUsedMemory()
 	{
@@ -135,6 +157,13 @@ namespace TerraPGE
 			return Pmc.PrivateUsage / 1024 / 1024;
 
 		return 0;
+	}
+
+	SIZE_T GetUsedHeap()
+	{
+		_CrtMemState memState = {};
+		_CrtMemCheckpoint(&memState);
+		return memState.lTotalCount / 1024 / 1024;
 	}
 
 	void UpdateSystemInfo()
@@ -176,7 +205,7 @@ namespace TerraPGE
 
 		// Update DepthBuffer
 		delete[] DepthBuffer;
-		DepthBuffer = new float[sx * sy];
+		DepthBuffer = DEBUG_NEW float[sx * sy];
 	}
 
 	// Delete buffers
@@ -189,13 +218,19 @@ namespace TerraPGE
 
 	// Adapted from: https://www.avrfreaks.net/sites/default/files/triangles.c
 	template<typename T>
-	void __fastcall RenderTriangleThreaded(float* DepthBuffer, GdiPP& Gdi, T&& Shader, ShaderArgs Args)
+	void __fastcall RenderTriangleThreaded(float* DepthBuffer, GdiPP& Gdi, T&& Shader, ShaderArgs* Args)
 	{
+		// TODO Maybe take in shader args as a base then create copies and only distribute the dependent vars as free on delete
 		// Setup variables
-		Triangle* Tri = Args.Tri;
+		Triangle* Tri = Args->FindShaderResourcePtr<Triangle*>(TPGE_SHDR_TRI);
 		float FarSubNear = TerraPGE::FFAR - TerraPGE::FNEAR;
 		float FarNear = TerraPGE::FFAR * TerraPGE::FNEAR;
-		Matrix Vp = (Args.ViewMat * Args.ProjectionMat);
+		Matrix Vp = Args->FindShaderResourceValue<Matrix>(TPGE_SHDR_CAMERA_VIEW_MATRIX) * Args->FindShaderResourceValue<Matrix>(TPGE_SHDR_CAMERA_PROJ_MATRIX);
+		Args->AddShaderDataByValue<Vec3>(TPGE_SHDR_FRAG_COLOR, Vec3(), 0);
+		LightObject** Lights = Args->FindShaderResourcePtr<LightObject**>(TPGE_SHDR_LIGHT_OBJECTS);
+		ShaderTypes ShaderType = Args->FindShaderResourceValue<ShaderTypes>(TPGE_SHDR_TYPE);
+
+		Lights[0]->CalcVpMat();
 
 		int x1 = PixelRound(Tri->Points[0].x);
 		int y1 = PixelRound(Tri->Points[0].y);
@@ -351,7 +386,7 @@ namespace TerraPGE
 						if (DoShadows)
 						{
 							// Make this better TODO
-							Vec4 ShadowNdcPos = InterpolatedPos * Args.Lights[0]->CalcVpMat();
+							Vec4 ShadowNdcPos = InterpolatedPos * Lights[0]->VpMat;
 
 							ShadowNdcPos.CorrectPerspective();
 
@@ -365,11 +400,11 @@ namespace TerraPGE
 
 							if (ShadowDepth > ShadowValue)
 							{
-								Args.IsInShadow = true;
+								Args->EditShaderDataValue(TPGE_SHDR_IS_IN_SHADOW, true);
 							}
 							else
 							{
-								Args.IsInShadow = false;
+								Args->EditShaderDataValue(TPGE_SHDR_IS_IN_SHADOW, false);
 							}
 						}
 
@@ -390,31 +425,24 @@ namespace TerraPGE
 								}
 							}
 
-							Args.FragColor.R = 255.0f * Val;
-							Args.FragColor.G = 255.0f * Val;
-							Args.FragColor.B = 255.0f * Val;
+							Args->EditShaderDataValue<Color>(TPGE_SHDR_FRAG_COLOR, Color(255.0f * Val, 255.0f * Val, 255.0f * Val));
 						}
-						else if (Args.ShaderType != ShaderTypes::SHADER_FRAGMENT || Tri->OverrideTextureColor || !TerraPGE::DoLighting)
+						else if (ShaderType != ShaderTypes::SHADER_FRAGMENT || Tri->OverrideTextureColor || !TerraPGE::DoLighting)
 						{
 							// This entire else if is mainly for debugging clipping
 							if (Tri->OverrideTextureColor)
 							{
-								Args.FragColor.R = Tri->Col.x;
-								Args.FragColor.G = Tri->Col.y;
-								Args.FragColor.B = Tri->Col.z;
+								Args->EditShaderDataValue<Color>(TPGE_SHDR_FRAG_COLOR, Color(Tri->Col.x, Tri->Col.y, Tri->Col.z));
 							}
 							else if (Tri->Material->HasUsableTexture())
 							{
-								Vec3 TexturCol = Args.Tri->Material->Textures.at(0)->GetPixelColor(tex_u, 1.0f - tex_v).GetRGB();
-								Args.FragColor.R = TexturCol.x;
-								Args.FragColor.G = TexturCol.y;
-								Args.FragColor.B = TexturCol.z;
+								Vec3 TexturCol = Tri->Material->Textures.at(0)->GetPixelColor(tex_u, 1.0f - tex_v).GetRGB();
+
+								Args->EditShaderDataValue<Color>(TPGE_SHDR_FRAG_COLOR, Color(TexturCol.x, TexturCol.y, TexturCol.z));
 							}
 							else
 							{
-								Args.FragColor.R = Tri->Material->AmbientColor.x;
-								Args.FragColor.G = Tri->Material->AmbientColor.y;
-								Args.FragColor.B = Tri->Material->AmbientColor.z;
+								Args->EditShaderDataValue<Color>(TPGE_SHDR_FRAG_COLOR, Color(Tri->Material->AmbientColor.x, Tri->Material->AmbientColor.y, Tri->Material->AmbientColor.z));
 							}
 						}
 						else
@@ -422,17 +450,18 @@ namespace TerraPGE
 							Vec3 InterpolatedNormal = ((Tri->FaceNormal * BaryCoords.x) + (Tri->FaceNormal * BaryCoords.y) + (Tri->FaceNormal * BaryCoords.z)).Normalized();
 
 							// Set up some shader args and call fragment shader=
-							Args.FragPos = InterpolatedPos;
-							Args.FragNormal = InterpolatedNormal;
-							Args.UVW = { tex_u / tex_w, tex_v / tex_w, tex_w };
-							Args.BaryCoords = BaryCoords;
-							Args.PixelCoords = Vec2((float)j, (float)i);
+							Args->AddShaderDataByValue<Vec3>(TPGE_SHDR_FRAG_POS, InterpolatedPos, sizeof(void*));
+							Args->AddShaderDataByValue<Vec3>(TPGE_SHDR_FRAG_NORMAL, InterpolatedNormal, sizeof(void*));
+							Args->AddShaderDataByValue<TextureCoords>(TPGE_SHDR_TEX_UVW, { tex_u / tex_w, tex_v / tex_w, tex_w }, sizeof(void*));
+							Args->AddShaderDataByValue<Vec3>(TPGE_SHDR_FRAG_BARY_COORDS, BaryCoords, sizeof(void*));
+							Args->AddShaderDataByValue<Vec2>(TPGE_SHDR_PIXEL_COORDS, Vec2((float)j, (float)i), sizeof(void*));
 							Shader(Args);
 						}
 
 						// Set pixel in pixel buffer
-						COLORREF PixelClr = RGB(PixelRoundFloor(Args.FragColor.R), PixelRoundFloor(Args.FragColor.G), PixelRoundFloor(Args.FragColor.B));
+						COLORREF PixelClr = RGB(PixelRoundFloor(Args->FindShaderResourcePtr<Color*>(TPGE_SHDR_FRAG_COLOR)->R), PixelRoundFloor(Args->FindShaderResourcePtr<Color*>(TPGE_SHDR_FRAG_COLOR)->G), PixelRoundFloor(Args->FindShaderResourcePtr<Color*>(TPGE_SHDR_FRAG_COLOR)->B));
 						Gdi.QuickSetPixel(j, i, PixelClr);
+						// TODO Maybe delete new version of shader args here (if i make copies and they only delete selected vars we're fine?)
 					}
 				};
 				TerraPGE::ThreadPool.EnqueueTask(Func);
@@ -520,7 +549,7 @@ namespace TerraPGE
 
 						if (DoShadows)
 						{
-							Vec4 ShadowNdcPos = InterpolatedPos * Args.Lights[0]->CalcVpMat();
+							Vec4 ShadowNdcPos = InterpolatedPos * Lights[0]->VpMat;
 							ShadowNdcPos.CorrectPerspective();
 
 							ShadowNdcPos *= (Vec3((float)(TerraPGE::ShadowMapWidth * 0.5f), (float)(TerraPGE::ShadowMapHeight * 0.5f), 1.0f));
@@ -533,11 +562,11 @@ namespace TerraPGE
 
 							if (ShadowDepth > ShadowValue)
 							{
-								Args.IsInShadow = true;
+								Args->EditShaderDataValue(TPGE_SHDR_IS_IN_SHADOW, true);
 							}
 							else
 							{
-								Args.IsInShadow = false;
+								Args->EditShaderDataValue(TPGE_SHDR_IS_IN_SHADOW, false);
 							}
 						}
 
@@ -558,31 +587,23 @@ namespace TerraPGE
 								}
 							}
 
-							Args.FragColor.R = 255.0f * Val;
-							Args.FragColor.G = 255.0f * Val;
-							Args.FragColor.B = 255.0f * Val;
+							Args->EditShaderDataValue<Color>(TPGE_SHDR_FRAG_COLOR, Color(255.0f * Val, 255.0f * Val, 255.0f * Val));
 						}
-						else if (Args.ShaderType != ShaderTypes::SHADER_FRAGMENT || Tri->OverrideTextureColor || !TerraPGE::DoLighting)
+						else if (ShaderType != ShaderTypes::SHADER_FRAGMENT || Tri->OverrideTextureColor || !TerraPGE::DoLighting)
 						{
 							// This entire else if is mainly for debugging clipping
 							if (Tri->OverrideTextureColor)
 							{
-								Args.FragColor.R = Tri->Col.x;
-								Args.FragColor.G = Tri->Col.y;
-								Args.FragColor.B = Tri->Col.z;
+								Args->EditShaderDataValue<Color>(TPGE_SHDR_FRAG_COLOR, Color(Tri->Col.x, Tri->Col.y, Tri->Col.z));
 							}
 							else if (Tri->Material->HasUsableTexture())
 							{
 								Vec3 TexturCol = Tri->Material->Textures.at(0)->GetPixelColor(tex_u, 1.0f - tex_v).GetRGB();
-								Args.FragColor.R = TexturCol.x;
-								Args.FragColor.G = TexturCol.y;
-								Args.FragColor.B = TexturCol.z;
+								Args->EditShaderDataValue<Color>(TPGE_SHDR_FRAG_COLOR, Color(TexturCol.x, TexturCol.y, TexturCol.z));
 							}
 							else
 							{
-								Args.FragColor.R = Tri->Material->AmbientColor.x;
-								Args.FragColor.G = Tri->Material->AmbientColor.y;
-								Args.FragColor.B = Tri->Material->AmbientColor.z;
+								Args->EditShaderDataValue<Color>(TPGE_SHDR_FRAG_COLOR, Color(Tri->Material->AmbientColor.x, Tri->Material->AmbientColor.y, Tri->Material->AmbientColor.z));
 							}
 						}
 						else
@@ -590,20 +611,22 @@ namespace TerraPGE
 							Vec3 InterpolatedNormal = ((Tri->FaceNormal * BaryCoords.x) + (Tri->FaceNormal * BaryCoords.y) + (Tri->FaceNormal * BaryCoords.z)).Normalized();
 
 							// Set up some shader args and call fragment shader=
-							Args.FragPos = InterpolatedPos;
-							Args.FragNormal = InterpolatedNormal;
-							Args.UVW = { tex_u / tex_w, tex_v / tex_w, tex_w };
-							Args.BaryCoords = BaryCoords;
-							Args.PixelCoords = Vec2((float)j, (float)i);
+
+							Args->AddShaderDataByValue<Vec3>(TPGE_SHDR_FRAG_POS, InterpolatedPos, sizeof(void*));
+							Args->AddShaderDataByValue<Vec3>(TPGE_SHDR_FRAG_NORMAL, InterpolatedNormal, sizeof(void*));
+							Args->AddShaderDataByValue<TextureCoords>(TPGE_SHDR_TEX_UVW, { tex_u / tex_w, tex_v / tex_w, tex_w }, sizeof(void*));
+							Args->AddShaderDataByValue<Vec3>(TPGE_SHDR_FRAG_BARY_COORDS, BaryCoords, sizeof(void*));
+							Args->AddShaderDataByValue<Vec2>(TPGE_SHDR_PIXEL_COORDS, Vec2((float)j, (float)i), sizeof(void*));
 							Shader(Args);
 						}
 
 						// Set pixel in pixel buffer
-						COLORREF PixelClr = RGB(PixelRound(Args.FragColor.R), PixelRound(Args.FragColor.G), PixelRound(Args.FragColor.B));
+						COLORREF PixelClr = RGB(PixelRoundFloor(Args->FindShaderResourcePtr<Color*>(TPGE_SHDR_FRAG_COLOR)->R), PixelRoundFloor(Args->FindShaderResourcePtr<Color*>(TPGE_SHDR_FRAG_COLOR)->G), PixelRoundFloor(Args->FindShaderResourcePtr<Color*>(TPGE_SHDR_FRAG_COLOR)->B));
 						Gdi.QuickSetPixel(j, i, PixelClr);
 					}
 				};
 
+				TerraPGE::ThreadPool.EnqueueTask(Func);
 				TerraPGE::ThreadPool.EnqueueTask(Func);
 			}
 		}
@@ -613,20 +636,35 @@ namespace TerraPGE
 
 	// Adapted from: https://www.avrfreaks.net/sites/default/files/triangles.c
 	template<typename T>
-	void __fastcall RenderTriangle(float* DepthBuffer, GdiPP& Gdi, T&& Shader, ShaderArgs Args)
+	void __fastcall RenderTriangle(float* DepthBuffer, GdiPP& Gdi, T&& Shader, ShaderArgs* BaseArgs1)
 	{
+		// TODO Maybe take in shader args as a base then create copies and only distribute the dependent vars as free on delete
 		// Setup variables
-		Triangle& Tri = *Args.Tri;
+
+		ShaderArgs* BaseArgs = DEBUG_NEW ShaderArgs(BaseArgs1);
+
+		Triangle* Tri = BaseArgs->FindShaderResourcePtr<Triangle*>(TPGE_SHDR_TRI);
 		float FarSubNear = TerraPGE::FFAR - TerraPGE::FNEAR;
 		float FarNear = TerraPGE::FFAR * TerraPGE::FNEAR;
-		Matrix Vp = (Args.ViewMat * Args.ProjectionMat);
+		Matrix Vp = BaseArgs->FindShaderResourceValue<Matrix>(TPGE_SHDR_CAMERA_VIEW_MATRIX) * BaseArgs->FindShaderResourceValue<Matrix>(TPGE_SHDR_CAMERA_PROJ_MATRIX);
+		LightObject** Lights = BaseArgs->FindShaderResourcePtr<LightObject**>(TPGE_SHDR_LIGHT_OBJECTS);
+		ShaderTypes* ShaderType = BaseArgs->FindShaderResourcePtr<ShaderTypes*>(TPGE_SHDR_TYPE);
 
-		int x1 = PixelRound(Tri.Points[0].x);
-		int y1 = PixelRound(Tri.Points[0].y);
-		int x2 = PixelRound(Tri.Points[1].x);
-		int y2 = PixelRound(Tri.Points[1].y);
-		int x3 = PixelRound(Tri.Points[2].x);
-		int y3 = PixelRound(Tri.Points[2].y);
+
+		// Allocating now reduces copying
+		BaseArgs->AddShaderDataByValue<Color>(TPGE_SHDR_FRAG_COLOR, Color(0, 0, 0), 0);
+		BaseArgs->AddShaderDataByValue<Vec3>(TPGE_SHDR_FRAG_POS, Vec3(), sizeof(void*));
+		BaseArgs->AddShaderDataByValue<Vec3>(TPGE_SHDR_FRAG_NORMAL, Vec3(), sizeof(void*));
+		BaseArgs->AddShaderDataByValue<TextureCoords>(TPGE_SHDR_TEX_UVW, TextureCoords(), sizeof(void*));
+		BaseArgs->AddShaderDataByValue<Vec3>(TPGE_SHDR_FRAG_BARY_COORDS, Vec3(), sizeof(void*));
+		BaseArgs->AddShaderDataByValue<Vec2>(TPGE_SHDR_PIXEL_COORDS, Vec2(), sizeof(void*));
+
+		int x1 = PixelRound(Tri->Points[0].x);
+		int y1 = PixelRound(Tri->Points[0].y);
+		int x2 = PixelRound(Tri->Points[1].x);
+		int y2 = PixelRound(Tri->Points[1].y);
+		int x3 = PixelRound(Tri->Points[2].x);
+		int y3 = PixelRound(Tri->Points[2].y);
 		float u1 = 0.0f;
 		float u2 = 0.0f;
 		float u3 = 0.0f;
@@ -637,17 +675,17 @@ namespace TerraPGE
 		float w2 = 0.0f;
 		float w3 = 0.0f;
 
-		if (Tri.Material->HasUsableTexture())
+		if (Tri->Material->HasUsableTexture())
 		{
-			u1 = Tri.TexCoords[0].u;
-			u2 = Tri.TexCoords[1].u;
-			u3 = Tri.TexCoords[2].u;
-			v1 = Tri.TexCoords[0].v;
-			v2 = Tri.TexCoords[1].v;
-			v3 = Tri.TexCoords[2].v;
-			w1 = Tri.TexCoords[0].w;
-			w2 = Tri.TexCoords[1].w;
-			w3 = Tri.TexCoords[2].w;
+			u1 = Tri->TexCoords[0].u;
+			u2 = Tri->TexCoords[1].u;
+			u3 = Tri->TexCoords[2].u;
+			v1 = Tri->TexCoords[0].v;
+			v2 = Tri->TexCoords[1].v;
+			v3 = Tri->TexCoords[2].v;
+			w1 = Tri->TexCoords[0].w;
+			w2 = Tri->TexCoords[1].w;
+			w3 = Tri->TexCoords[2].w;
 		}
 
 		if (y2 < y1)
@@ -747,9 +785,9 @@ namespace TerraPGE
 					int idx = ContIdx(j, i, TerraPGE::sx);
 
 					// Calculate the barycentric coordinates which we use for interpolation
-					Vec3 BaryCoords = CalculateBarycentricCoordinatesScreenSpace(Vec2((float)j, (float)i), Vec2((float)Tri.Points[0].x, (float)Tri.Points[0].y), Vec2((float)Tri.Points[1].x, (float)Tri.Points[1].y), Vec2((float)Tri.Points[2].x, (float)Tri.Points[2].y));
+					Vec3 BaryCoords = CalculateBarycentricCoordinatesScreenSpace(Vec2((float)j, (float)i), Vec2((float)Tri->Points[0].x, (float)Tri->Points[0].y), Vec2((float)Tri->Points[1].x, (float)Tri->Points[1].y), Vec2((float)Tri->Points[2].x, (float)Tri->Points[2].y));
 					// Use Barycentric coords to interpolate our world position
-					Vec4 InterpolatedPos = Vec4((Tri.WorldSpaceVerts[0] * BaryCoords.x) + (Tri.WorldSpaceVerts[1] * BaryCoords.y) + (Tri.WorldSpaceVerts[2] * BaryCoords.z), 1.0f);
+					Vec4 InterpolatedPos = Vec4((Tri->WorldSpaceVerts[0] * BaryCoords.x) + (Tri->WorldSpaceVerts[1] * BaryCoords.y) + (Tri->WorldSpaceVerts[2] * BaryCoords.z), 1.0f);
 
 					// World Pos -> Clipped Space
 					Vec4 NdcPos = InterpolatedPos * Vp;
@@ -772,7 +810,7 @@ namespace TerraPGE
 
 					if (DoShadows)
 					{
-						Vec4 ShadowNdcPos = InterpolatedPos * Args.Lights[0]->CalcVpMat();
+						Vec4 ShadowNdcPos = InterpolatedPos * Lights[0]->VpMat;
 						ShadowNdcPos.CorrectPerspective();
 
 						ShadowNdcPos *= (Vec3((float)(TerraPGE::ShadowMapWidth * 0.5f), (float)(TerraPGE::ShadowMapHeight * 0.5f), 1.0f));
@@ -785,11 +823,11 @@ namespace TerraPGE
 
 						if (ShadowDepth > ShadowValue)
 						{
-							Args.IsInShadow = true;
+							BaseArgs->EditShaderDataValue(TPGE_SHDR_IS_IN_SHADOW, true);
 						}
 						else
 						{
-							Args.IsInShadow = false;
+							BaseArgs->EditShaderDataValue(TPGE_SHDR_IS_IN_SHADOW, false);
 						}
 					}
 
@@ -810,48 +848,41 @@ namespace TerraPGE
 							}
 						}
 
-						Args.FragColor.R = 255.0f * Val;
-						Args.FragColor.G = 255.0f * Val;
-						Args.FragColor.B = 255.0f * Val;
+						BaseArgs->EditShaderDataValue<Color>(TPGE_SHDR_FRAG_COLOR, Color(255.0f * Val, 255.0f * Val, 255.0f * Val));
 					}
-					else if (Args.ShaderType != ShaderTypes::SHADER_FRAGMENT || Tri.OverrideTextureColor || !TerraPGE::DoLighting)
+					else if (*ShaderType != ShaderTypes::SHADER_FRAGMENT || Tri->OverrideTextureColor || !TerraPGE::DoLighting)
 					{
 						// This entire else if is mainly for debugging clipping
-						if (Tri.OverrideTextureColor)
+						if (Tri->OverrideTextureColor)
 						{
-							Args.FragColor.R = Tri.Col.x;
-							Args.FragColor.G = Tri.Col.y;
-							Args.FragColor.B = Tri.Col.z;
+							BaseArgs->EditShaderDataValue<Color>(TPGE_SHDR_FRAG_COLOR, Color(Tri->Col.x, Tri->Col.y, Tri->Col.z));
 						}
-						else if (Tri.Material->HasUsableTexture())
+						else if (Tri->Material->HasUsableTexture())
 						{
-							Vec3 TexturCol = Args.Tri->Material->Textures.at(0)->GetPixelColor(tex_u, 1.0f - tex_v).GetRGB();
-							Args.FragColor.R = TexturCol.x;
-							Args.FragColor.G = TexturCol.y;
-							Args.FragColor.B = TexturCol.z;
+							Vec3 TexturCol = Tri->Material->Textures.at(0)->GetPixelColor(tex_u, 1.0f - tex_v).GetRGB();
+							BaseArgs->EditShaderDataValue<Color>(TPGE_SHDR_FRAG_COLOR, Color(TexturCol.x, TexturCol.y, TexturCol.z));
 						}
 						else
 						{
-							Args.FragColor.R = Tri.Material->AmbientColor.x;
-							Args.FragColor.G = Tri.Material->AmbientColor.y;
-							Args.FragColor.B = Tri.Material->AmbientColor.z;
+							BaseArgs->EditShaderDataValue<Color>(TPGE_SHDR_FRAG_COLOR, Color(Tri->Material->AmbientColor.x, Tri->Material->AmbientColor.y, Tri->Material->AmbientColor.z));
 						}
 					}
 					else
 					{
-						Vec3 InterpolatedNormal = ((Tri.FaceNormal * BaryCoords.x) + (Tri.FaceNormal * BaryCoords.y) + (Tri.FaceNormal * BaryCoords.z)).Normalized();
+						Vec3 InterpolatedNormal = ((Tri->FaceNormal * BaryCoords.x) + (Tri->FaceNormal * BaryCoords.y) + (Tri->FaceNormal * BaryCoords.z)).Normalized();
 
 						// Set up some shader args and call fragment shader=
-						Args.FragPos = InterpolatedPos;
-						Args.FragNormal = InterpolatedNormal;
-						Args.UVW = { tex_u / tex_w, tex_v / tex_w, tex_w };
-						Args.BaryCoords = BaryCoords;
-						Args.PixelCoords = Vec2((float)j, (float)i);
-						Shader(Args);
+						BaseArgs->EditShaderDataValue<Vec3>(TPGE_SHDR_FRAG_POS, InterpolatedPos);
+						BaseArgs->EditShaderDataValue<Vec3>(TPGE_SHDR_FRAG_NORMAL, InterpolatedNormal);
+						BaseArgs->EditShaderDataValue<TextureCoords>(TPGE_SHDR_TEX_UVW, { tex_u / tex_w, tex_v / tex_w, tex_w });
+						BaseArgs->EditShaderDataValue<Vec3>(TPGE_SHDR_FRAG_BARY_COORDS, BaryCoords);
+						BaseArgs->EditShaderDataValue<Vec2>(TPGE_SHDR_PIXEL_COORDS, Vec2((float)j, (float)i));
+						Shader(BaseArgs);
 					}
 
+					Color* FragmentColor = BaseArgs->FindShaderResourcePtr<Color*>(TPGE_SHDR_FRAG_COLOR);
 					// Set pixel in pixel buffer
-					COLORREF PixelClr = RGB(PixelRound(Args.FragColor.R), PixelRound(Args.FragColor.G), PixelRound(Args.FragColor.B));
+					COLORREF PixelClr = RGB(PixelRoundFloor(FragmentColor->R), PixelRoundFloor(FragmentColor->G), PixelRoundFloor(FragmentColor->B));
 					Gdi.QuickSetPixel(j, i, PixelClr);
 				}
 			}
@@ -911,9 +942,9 @@ namespace TerraPGE
 					int idx = ContIdx(j, i, TerraPGE::sx);
 
 					// Calculate the barycentric coordinates which we use for interpolation
-					Vec3 BaryCoords = CalculateBarycentricCoordinatesScreenSpace(Vec2((float)j, (float)i), Vec2((float)Tri.Points[0].x, (float)Tri.Points[0].y), Vec2((float)Tri.Points[1].x, (float)Tri.Points[1].y), Vec2((float)Tri.Points[2].x, (float)Tri.Points[2].y));
+					Vec3 BaryCoords = CalculateBarycentricCoordinatesScreenSpace(Vec2((float)j, (float)i), Vec2((float)Tri->Points[0].x, (float)Tri->Points[0].y), Vec2((float)Tri->Points[1].x, (float)Tri->Points[1].y), Vec2((float)Tri->Points[2].x, (float)Tri->Points[2].y));
 					// Use Barycentric coords to interpolate our world position
-					Vec4 InterpolatedPos = Vec4((Tri.WorldSpaceVerts[0] * BaryCoords.x) + (Tri.WorldSpaceVerts[1] * BaryCoords.y) + (Tri.WorldSpaceVerts[2] * BaryCoords.z), 1.0f);
+					Vec4 InterpolatedPos = Vec4((Tri->WorldSpaceVerts[0] * BaryCoords.x) + (Tri->WorldSpaceVerts[1] * BaryCoords.y) + (Tri->WorldSpaceVerts[2] * BaryCoords.z), 1.0f);
 
 					// World Pos -> Clipped Space
 					Vec4 NdcPos = InterpolatedPos * Vp;
@@ -936,7 +967,7 @@ namespace TerraPGE
 
 					if (DoShadows)
 					{
-						Vec4 ShadowNdcPos = InterpolatedPos * Args.Lights[0]->CalcVpMat();
+						Vec4 ShadowNdcPos = InterpolatedPos * Lights[0]->VpMat;
 						ShadowNdcPos.CorrectPerspective();
 
 						ShadowNdcPos *= (Vec3((float)(TerraPGE::ShadowMapWidth * 0.5f), (float)(TerraPGE::ShadowMapHeight * 0.5f), 1.0f));
@@ -949,11 +980,11 @@ namespace TerraPGE
 
 						if (ShadowDepth > ShadowValue)
 						{
-							Args.IsInShadow = true;
+							BaseArgs->EditShaderDataValue(TPGE_SHDR_IS_IN_SHADOW, true);
 						}
 						else
 						{
-							Args.IsInShadow = false;
+							BaseArgs->EditShaderDataValue(TPGE_SHDR_IS_IN_SHADOW, false);
 						}
 					}
 
@@ -974,52 +1005,49 @@ namespace TerraPGE
 							}
 						}
 
-						Args.FragColor.R = 255.0f * Val;
-						Args.FragColor.G = 255.0f * Val;
-						Args.FragColor.B = 255.0f * Val;
+						BaseArgs->EditShaderDataValue<Color>(TPGE_SHDR_FRAG_COLOR, Color(255.0f * Val, 255.0f * Val, 255.0f * Val));
 					}
-					else if (Args.ShaderType != ShaderTypes::SHADER_FRAGMENT || Tri.OverrideTextureColor || !TerraPGE::DoLighting)
+					else if (*ShaderType != ShaderTypes::SHADER_FRAGMENT || Tri->OverrideTextureColor || !TerraPGE::DoLighting)
 					{
 						// This entire else if is mainly for debugging clipping
-						if (Tri.OverrideTextureColor)
+						if (Tri->OverrideTextureColor)
 						{
-							Args.FragColor.R = Tri.Col.x;
-							Args.FragColor.G = Tri.Col.y;
-							Args.FragColor.B = Tri.Col.z;
+							BaseArgs->EditShaderDataValue<Color>(TPGE_SHDR_FRAG_COLOR, Color(Tri->Col.x, Tri->Col.y, Tri->Col.z));
 						}
-						else if (Tri.Material->HasUsableTexture())
+						else if (Tri->Material->HasUsableTexture())
 						{
-							Vec3 TexturCol = Args.Tri->Material->Textures.at(0)->GetPixelColor(tex_u, 1.0f - tex_v).GetRGB();
-							Args.FragColor.R = TexturCol.x;
-							Args.FragColor.G = TexturCol.y;
-							Args.FragColor.B = TexturCol.z;
+							Vec3 TexturCol = Tri->Material->Textures.at(0)->GetPixelColor(tex_u, 1.0f - tex_v).GetRGB();
+							BaseArgs->EditShaderDataValue<Color>(TPGE_SHDR_FRAG_COLOR, Color(TexturCol.x, TexturCol.y, TexturCol.z));
 						}
 						else
 						{
-							Args.FragColor.R = Tri.Material->AmbientColor.x;
-							Args.FragColor.G = Tri.Material->AmbientColor.y;
-							Args.FragColor.B = Tri.Material->AmbientColor.z;
+							BaseArgs->EditShaderDataValue<Color>(TPGE_SHDR_FRAG_COLOR, Color(Tri->Material->AmbientColor.x, Tri->Material->AmbientColor.y, Tri->Material->AmbientColor.z));
 						}
 					}
 					else
 					{
-						Vec3 InterpolatedNormal = ((Tri.FaceNormal * BaryCoords.x) + (Tri.FaceNormal * BaryCoords.y) + (Tri.FaceNormal * BaryCoords.z)).Normalized();
+						Vec3 InterpolatedNormal = ((Tri->FaceNormal * BaryCoords.x) + (Tri->FaceNormal * BaryCoords.y) + (Tri->FaceNormal * BaryCoords.z)).Normalized();
 
 						// Set up some shader args and call fragment shader
-						Args.FragPos = InterpolatedPos;
-						Args.FragNormal = InterpolatedNormal;
-						Args.UVW = { tex_u / tex_w, tex_v / tex_w, tex_w };
-						Args.BaryCoords = BaryCoords;
-						Args.PixelCoords = Vec2((float)j, (float)i);
-						Shader(Args);
+
+						BaseArgs->EditShaderDataValue<Vec3>(TPGE_SHDR_FRAG_POS, InterpolatedPos);
+
+						BaseArgs->EditShaderDataValue<Vec3>(TPGE_SHDR_FRAG_NORMAL, InterpolatedNormal);
+						BaseArgs->EditShaderDataValue<TextureCoords>(TPGE_SHDR_TEX_UVW, { tex_u / tex_w, tex_v / tex_w, tex_w });
+						BaseArgs->EditShaderDataValue<Vec3>(TPGE_SHDR_FRAG_BARY_COORDS, BaryCoords);
+						BaseArgs->EditShaderDataValue<Vec2>(TPGE_SHDR_PIXEL_COORDS, Vec2((float)j, (float)i));
+						Shader(BaseArgs);
 					}
 
 					// Set pixel in pixel buffer
-					COLORREF PixelClr = RGB(PixelRound(Args.FragColor.R), PixelRound(Args.FragColor.G), PixelRound(Args.FragColor.B));
+					Color* FragmentColor = BaseArgs->FindShaderResourcePtr<Color*>(TPGE_SHDR_FRAG_COLOR);
+					COLORREF PixelClr = RGB(PixelRoundFloor(FragmentColor->R), PixelRoundFloor(FragmentColor->G), PixelRoundFloor(FragmentColor->B));
 					Gdi.QuickSetPixel(j, i, PixelClr);
 				}
 			}
 		}
+
+		BaseArgs->Delete();
 	}
 
 	// Render process but writes to buffer only
@@ -1158,7 +1186,7 @@ namespace TerraPGE
 	//Rendering Pipeline: Recieve call with mesh info including positions & lights sources -> Calc and apply matrices + normals -> backface culling	
 	// -> Clipping + Frustum culling -> Call Draw Triangle from graphics API with shader supplied -> Shader called from triangle routine with pixel info + normals -> SetPixel
 	template<typename T>
-	void RenderMesh(GdiPP& Gdi, Camera& Cam, const Mesh& MeshToRender, const Vec3& Scalar, const Vec3& RotationRads, const Vec3& Pos, LightObject** SceneLights, size_t LightCount, T&& Shader, const ShaderTypes SHADER_TYPE = ShaderTypes::SHADER_FRAGMENT)
+	void RenderMesh(GdiPP& Gdi, Camera* Cam, const Mesh* MeshToRender, const Vec3& Scalar, const Vec3& RotationRads, const Vec3& Pos, LightObject** SceneLights, size_t LightCount, T&& Shader, const ShaderTypes SHADER_TYPE = ShaderTypes::SHADER_FRAGMENT)
 	{
 		Matrix ObjectMatrix = Matrix::CreateScalarMatrix(Scalar); // Scalar Matrix
 		const Matrix RotM = Matrix::CreateRotationMatrix(RotationRads); // Rotation Matrix
@@ -1170,7 +1198,7 @@ namespace TerraPGE
 		NormalMat.Transpose3x3();
 
 		std::vector<Triangle> TrisToRender = {};
-		TrisToRender.reserve(MeshToRender.Triangles.size());
+		TrisToRender.reserve(MeshToRender->Triangles.size());
 
 		Triangle Clipped[2];
 
@@ -1188,7 +1216,7 @@ namespace TerraPGE
 		//TODO MultiThread??
 		// TODO Allow vertex shaders (:
 		// Project and translate object 
-		for (const auto& Tri : MeshToRender.Triangles)
+		for (const auto& Tri : MeshToRender->Triangles)
 		{
 			// 3D Space / World Space
 			Triangle WorldSpaceTri = Tri;
@@ -1201,7 +1229,7 @@ namespace TerraPGE
 
 			//TODO Fix this whole damn thing calc normals at mesh gen or at vertex shade time fuck the rest
 			Vec3 TriNormal = Tri.FaceNormal;
-			if (MeshToRender.Normals.size() == 0)
+			if (MeshToRender->Normals.size() == 0)
 			{
 				NormPos = ((Tri.Points[0] + Tri.Points[1] + Tri.Points[2]) / 3.0f);
 				NormDir = (Tri.Points[1] - Tri.Points[0]).GetVec3().CrossNormalized((Tri.Points[2] - Tri.Points[0])).Normalized();
@@ -1233,10 +1261,10 @@ namespace TerraPGE
 
 			WorldSpaceTri.FaceNormal = TriNormal;
 
-			if ((TriNormal.Dot(WorldSpaceTri.Points[0] - Cam.Pos) < 0.0f) || !TerraPGE::DoCull || !MeshToRender.BackfaceCulling) // backface culling
+			if ((TriNormal.Dot(WorldSpaceTri.Points[0] - Cam->Pos) < 0.0f) || !TerraPGE::DoCull || !MeshToRender->BackfaceCulling) // backface culling
 			{
 				// 3d Space -> Viewed Space
-				WorldSpaceTri.ApplyMatrix(Cam.ViewMatrix);
+				WorldSpaceTri.ApplyMatrix(Cam->ViewMatrix);
 
 				for (int i = 0; i < 3; i++)
 				{
@@ -1244,7 +1272,7 @@ namespace TerraPGE
 				}
 
 				Vec3 PlaneNormal = { 0.0f, 0.0f, 1.0f };
-				int Count = WorldSpaceTri.ClipAgainstPlane(Cam.NearPlane, PlaneNormal, Clipped[0], Clipped[1], DebugClip);
+				int Count = WorldSpaceTri.ClipAgainstPlane(Cam->NearPlane, PlaneNormal, Clipped[0], Clipped[1], DebugClip);
 
 				if (Count == 0)
 					continue;
@@ -1254,7 +1282,7 @@ namespace TerraPGE
 					Triangle Projected = Clipped[i];
 
 					// Viewed Space -> clip space
-					Projected = Cam.ProjectTriangle(&Projected);
+					Projected = Cam->ProjectTriangle(&Projected);
 
 					// Clip Space -> NDC Space
 					Projected.ApplyPerspectiveDivide();
@@ -1326,18 +1354,26 @@ namespace TerraPGE
 				NewTris = (int)ListTris.size();
 			}
 
+			ShaderArgs* Args = DEBUG_NEW ShaderArgs();
+			Args->AddShaderDataByValue(TPGE_SHDR_TYPE, SHADER_TYPE, 0);
+			Args->AddShaderDataPtr(TPGE_SHDR_CAMERA_POS, &Cam->Pos, 0);
+			Args->AddShaderDataPtr(TPGE_SHDR_CAMERA_LDIR, &Cam->LookDir, 0);
+			Args->AddShaderDataPtr(TPGE_SHDR_CAMERA_VIEW_MATRIX, &Cam->ViewMatrix, 0);
+			Args->AddShaderDataPtr(TPGE_SHDR_CAMERA_PROJ_MATRIX, &Cam->ProjectionMatrix, 0);
+			Args->AddShaderDataPtr(TPGE_SHDR_OBJ_MATRIX, &ObjectMatrix, 0);
+			Args->AddShaderDataPtr(TPGE_SHDR_LIGHT_OBJECTS, SceneLights, 0);
+			Args->AddShaderDataByValue<size_t>(TPGE_SHDR_LIGHT_COUNT, LightCount, 0);
+			Args->AddShaderDataByValue<bool>(TPGE_SHDR_DEBUG_SHADOWS, TerraPGE::DebugShadows);
+			Args->AddShaderDataByValue<bool>(TPGE_SHDR_IS_IN_SHADOW, false);
+			Args->AddShaderDataPtr(TPGE_SHDR_TRI, nullptr, 0);
+
 			// draw
 			for (auto& ToDraw : ListTris)
 			{
-				const Material* MatToUse = nullptr;
-				const Texture* TexToUse = nullptr;
+				//SceneLights, LightCount
+				Args->EditShaderData(TPGE_SHDR_TRI, &ToDraw, 0);
 
-				if (!MeshToRender.UseSingleMat)
-					MatToUse = ToDraw.Material;
-				else
-					MatToUse = MeshToRender.Materials.at(0);
 
-				ShaderArgs Args(&ToDraw, MatToUse, Cam.Pos, Cam.LookDir, ObjectMatrix, Cam.ViewMatrix, Cam.ProjectionMatrix, SceneLights, LightCount, SHADER_TYPE);
 
 				// Calc lighting (only if lighting is applied at a tri level)
 				if ((DoLighting) && SHADER_TYPE == ShaderTypes::SHADER_TRIANGLE)
@@ -1356,7 +1392,7 @@ namespace TerraPGE
 					}
 					else
 					{
-						if (MeshToRender.MeshName != "Ray")
+						if (MeshToRender->MeshName != "Ray")
 						{
 							Gdi.DrawFilledTriangle(PixelRound(ToDraw.Points[0].x), PixelRound(ToDraw.Points[0].y), PixelRound(ToDraw.Points[1].x), PixelRound(ToDraw.Points[1].y), PixelRound(ToDraw.Points[2].x), PixelRound(ToDraw.Points[2].y), BrushPP(RGB(ToDraw.Col.x, ToDraw.Col.y, ToDraw.Col.z)), PenPP(PS_SOLID, 1, RGB(1, 1, 1)));
 
@@ -1399,10 +1435,12 @@ namespace TerraPGE
 					Gdi.DrawTriangle(PixelRound(ToDraw.Points[0].x), PixelRound(ToDraw.Points[0].y), PixelRound(ToDraw.Points[1].x), PixelRound(ToDraw.Points[1].y), PixelRound(ToDraw.Points[2].x), PixelRound(ToDraw.Points[2].y), PenPP(PS_SOLID, 1, RGB(ToDraw.Col.x, ToDraw.Col.y, ToDraw.Col.z)));
 				}
 			}
+			Args->Delete();
+
 		}
 	}
 
-	void RenderMeshDepth(GdiPP& Gdi, const Mesh& MeshToRender, const Vec3& Scalar, const Vec3& RotationRads, const Vec3& Pos, const Vec3& LightPos, float* Buffer)
+	void RenderMeshDepth(GdiPP& Gdi, const Mesh* MeshToRender, const Vec3& Scalar, const Vec3& RotationRads, const Vec3& Pos, const Vec3& LightPos, float* Buffer)
 	{
 		Matrix ObjectMatrix = Matrix::CreateScalarMatrix(Scalar); // Scalar Matrix
 		const Matrix RotM = Matrix::CreateRotationMatrix(RotationRads); // Rotation Matrix
@@ -1417,7 +1455,7 @@ namespace TerraPGE
 
 		//TODO MultiThread??
 		// Project and translate object 
-		for (const auto& Tri : MeshToRender.Triangles)
+		for (const auto& Tri : MeshToRender->Triangles)
 		{
 			// 3D Space / World Space
 			Triangle Proj = Tri;
@@ -1453,7 +1491,7 @@ namespace TerraPGE
 	//TerraGL (Proposed name for GdiPP)
 	//TerraPGE (Proposed name for this engine)
 	//Engine Pipeline (In a Loop): Check Window State -> Check Inputs -> Clear Screen -> Make Draw Calls (Rendering Pipeline) -> Draw Double Buffer
-	void Run(WndCreator& Wnd, BrushPP& ClearBrush, DoTick_T DrawCallBack)
+	void Run(WndCreator& Wnd, BrushPP& ClearBrush, Scene* FirstScene)
 	{
 		// Init Variables and grab screen dimensions
 		GdiPP EngineGdi = GdiPP(Wnd.Wnd, true);
@@ -1465,7 +1503,7 @@ namespace TerraPGE
 		delete[] TerraPGE::DepthBuffer;
 
 		// Create depth buffer
-		TerraPGE::DepthBuffer = new float[(SIZE_T)(sx * sy)];
+		TerraPGE::DepthBuffer = DEBUG_NEW float[(SIZE_T)(sx * sy)];
 
 		// Initial Client Region
 		EngineGdi.UpdateClientRgn();
@@ -1483,8 +1521,11 @@ namespace TerraPGE
 		GetCursorPos(&Tmp);
 		PrevMousePos = { (float)Tmp.x, (float)Tmp.y };
 
-		std::vector<Renderable> ToRender;
+		std::vector<Renderable*> ToRender;
 		std::vector<LightObject*> Lights;
+
+		CurrScene = FirstScene;
+		CurrScene->BeginScene();
 
 		while (!GetAsyncKeyState(VK_RETURN))
 		{
@@ -1543,9 +1584,9 @@ namespace TerraPGE
 			Lights.clear();
 
 			// call draw code
-			DrawCallBack(EngineGdi, Wnd, (float)ElapsedTime, &ToRender, &Lights);
+			CurrScene->RunTick(EngineGdi, Wnd, (float)ElapsedTime, &ToRender, &Lights);
 
-			LightObject** LightsToRender = new LightObject * [Lights.size()];
+			LightObject** LightsToRender = DEBUG_NEW LightObject * [Lights.size()];
 
 			for (int idx = 0; idx < Lights.size(); idx++)
 			{
@@ -1555,19 +1596,19 @@ namespace TerraPGE
 			// Depth Pass
 			for (const auto& Rend : ToRender)
 			{
-				RenderMeshDepth(EngineGdi, Rend.mesh, Rend.Scalar, Rend.RotationRads, Rend.Pos, LightsToRender[0]->LightPos, ShadowMap);
+				RenderMeshDepth(EngineGdi, Rend->mesh, Rend->Scalar, Rend->RotationRads, Rend->Pos, LightsToRender[0]->LightPos, ShadowMap);
 			}
 
 			for (auto& Rend : ToRender)
 			{
-				TerraPGE::RenderMesh(EngineGdi, Rend.Cam, Rend.mesh, Rend.Scalar, Rend.RotationRads, Rend.Pos, LightsToRender, Lights.size(), Rend.Shader, Rend.SHADER_TYPE);
+				TerraPGE::RenderMesh(EngineGdi, Rend->Cam, Rend->mesh, Rend->Scalar, Rend->RotationRads, Rend->Pos, LightsToRender, Lights.size(), Rend->Shader, Rend->SHADER_TYPE);
 			}
 
 			if (FpsEngineCounter)
 			{
 #ifdef UNICODE
 				// Draw FPS and some debug info
-				std::wstring Str = FpsWStr + std::to_wstring(Fps) + L" Memory Usage: " + std::to_wstring(CurrMB) + L"/" + std::to_wstring(TerraPGE::MaxMemoryMB) + L" MB " + (DoMultiThreading ? L"(MultiThreaded)" : L"");
+				std::wstring Str = FpsWStr + std::to_wstring(Fps) + L" Memory Usage: " + std::to_wstring(CurrMB) + L"/" + std::to_wstring(TerraPGE::MaxMemoryMB) + L" MB " + std::to_wstring(GetUsedHeap()) + L"MB (Heap)" + (DoMultiThreading ? L"(MultiThreaded)" : L"");
 				Wnd.SetWndTitle(Str);
 				EngineGdi.DrawStringW(20, 20, Str, RGB(255, 0, 0), TRANSPARENT);
 #endif
@@ -1580,6 +1621,8 @@ namespace TerraPGE
 
 			// Draw to screen
 			EngineGdi.DrawDoubleBuffer();
+
+			delete[] LightsToRender;
 
 			// Calc elapsed time
 			ElapsedTime = std::chrono::duration<double>(std::chrono::system_clock::now() - Start).count();
@@ -1602,6 +1645,8 @@ namespace TerraPGE
 				CurrMB = GetUsedMemory();
 			}
 		}
+
+		CurrScene->EndScene();
 
 		Wnd.Destroy();
 

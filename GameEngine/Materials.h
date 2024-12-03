@@ -34,13 +34,13 @@ class Material
 		}
 		else
 		{
-			Mat = new Material();
+			Mat = DEBUG_NEW Material();
 		}
 
 		std::ifstream mtlFile(MtlFn);
 		if (!mtlFile.is_open())
 		{
-			Mat = new Material();
+			Mat = DEBUG_NEW Material();
 			return nullptr;
 		}
 
@@ -91,7 +91,7 @@ class Material
 							ssProp >> textureFilePath;
 							if (textureFilePath != "")
 							{
-								Mat->Textures.push_back(new Texture(textureFilePath));
+								Mat->Textures.push_back(DEBUG_NEW Texture(textureFilePath));
 							}
 						}
 						else if (propKeyword == "map_Kd")
@@ -100,7 +100,7 @@ class Material
 							ssProp >> textureFilePath;
 							if (textureFilePath != "")
 							{
-								Mat->Textures.push_back(new Texture(textureFilePath));
+								Mat->Textures.push_back(DEBUG_NEW Texture(textureFilePath));
 							}
 						}
 
@@ -140,7 +140,7 @@ class Material
 		Material* RetMat = FindMaterial("DefaultMat");
 		if (RetMat == nullptr)
 		{
-			Material* m = new Material(NULL_TEXTURE_COLOR_VEC3, NULL_TEXTURE_COLOR_VEC3, NULL_TEXTURE_COLOR_VEC3, 96.0f, "DefaultMat");
+			Material* m = DEBUG_NEW Material(NULL_TEXTURE_COLOR_VEC3, NULL_TEXTURE_COLOR_VEC3, NULL_TEXTURE_COLOR_VEC3, 96.0f, "DefaultMat");
 			LoadedMaterials.push_back(m);
 		}
 		else
