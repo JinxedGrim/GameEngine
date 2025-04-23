@@ -207,11 +207,13 @@ class ExampleScene : public Scene
 	Mesh* Plane = nullptr;
 	Mesh* CubeMsh = nullptr;
 	Vec3 LightSrcPos = Vec3();
-	DirectionalLight sl;
+	PointLight sl;
 	Renderable* CubeRender;
 	Renderable* PlaneRender;
 	Renderable* RCAMMO_Render;
 	bool LockCamera = false;
+	bool EndSettings = false;
+	std::thread SettingsTh;
 
 	public:
 	Camera Cam;
@@ -237,12 +239,15 @@ class ExampleScene : public Scene
 		//static Mesh Spyro = Mesh("Spyro.obj");
 		//static Mesh DragStat = Mesh("DragonStatue.obj");
 		//static std::vector<Mesh> Meshes = {};//{Cube(1, 1, 1, Material(), &Txt), RYNO, Sphere(1, 20, 20, TeaPot.Mat), TeaPot, Axis, AK47, Spyro, Mountains, DragStat };
-		this->LightSrcPos = { 0, 30, -34 };
-		sl = DirectionalLight(LightSrcPos, { 0, 10, 0 }, Vec3(253, 251, 211), 0.35f, 0.15f, 0.5f);
+		this->LightSrcPos = { 0, 1, 0 };
+		sl = PointLight(LightSrcPos, { 0, -1, 0 }, Vec3(253, 251, 211), 1.0f, 0.09f, 0.002f, 0.5f, 0.15f, 0.5f);
+		sl.Render = true;
 		Cam = Camera(Vec3(0, 1, 0), (float)((float)TerraPGE::sy / (float)TerraPGE::sx), TerraPGE::FOV, TerraPGE::FNEAR, TerraPGE::FFAR);
 		CubeRender = DEBUG_NEW Renderable(CubeMsh, &Cam, Vec3(1.0f, 1.0f, 1.0f), Vec3(0.0f, 0.0f, 0.0f), Vec3(0.0f, 5.f, -4.0f), EngineShaders::Shader_Texture_Only);
 		PlaneRender = DEBUG_NEW Renderable(Plane, &Cam, Vec3(1.0f, 1.0f, 1.0f), Vec3(0.0f, 0.0f, 0.0f), Vec3(0.0f, 0.0f, 0.0f), EngineShaders::Shader_Frag_Phong_Shadows);
 		//RCAMMO_Render = DEBUG_NEW Renderable(RCAMMO, &Cam, Vec3(1.0f, 1.0f, 1.0f), Vec3(0.0f, 0.0f, 0.0f), Vec3(0.0f, 0.0f, 0.0f), EngineShaders::Shader_Frag_Phong_Shadows);
+
+		SettingsTh = std::thread(ExampleScene::Settings, this);
 
 		LockCamera = false;
 	}
@@ -365,7 +370,10 @@ class ExampleScene : public Scene
 	//		TerraPGE::RenderMesh(Gdi, Cam, Meshes.at(CurrMesh), Vec3(1.0f, 1.0f, 1.0f), Vec3(FTheta * RotSpeedX, FTheta * RotSpeedY, FTheta * RotSpeedZ), Vec3(10, 0, 10), sl.LightPos, sl.Color, sl.AmbientCoeff, sl.DiffuseCoeff, sl.SpecularCoeff, EngineShaders::Shader_Gradient_Centroid, SHADER_FRAGMENT);
 
 		//TerraPGE::RenderMesh(Gdi, Cam, sl.LightMesh, Vec3(1.0f, 1.0f, 1.0f), Vec3(0, 0, 0), Vec3(0, 0, 0), Lights->data(), Lights->size(), EngineShaders::Shader_Material, ShaderTypes::SHADER_TRIANGLE);
+	}
 
+	void DrawGUI(GdiPP& Gdi)
+	{
 		if (TerraPGE::FpsEngineCounter && ShowStrs)
 		{
 			static std::string FovStr = "(F2)  Fov: ";
@@ -410,11 +418,6 @@ class ExampleScene : public Scene
 		}
 	}
 
-	void DrawGUI()
-	{
-
-	}
-
 	void EndScene() override
 	{
 		delete this->Ryno;
@@ -426,9 +429,9 @@ class ExampleScene : public Scene
 		this->Txt->Delete();
 	}
 
-	void Settings()
+	static void Settings(ExampleScene* Scene)
 	{
-		while (true)
+		while (!Scene->EndSettings)
 		{
 			if (GetAsyncKeyState(VK_F1))
 			{
@@ -436,11 +439,11 @@ class ExampleScene : public Scene
 			}
 			if (GetAsyncKeyState(VK_F2))
 			{
-				Cam.Fov += 30;
+				Scene->Cam.Fov += 30;
 				TerraPGE::FOV += 30;
 				if (TerraPGE::FOV > 120)
 				{
-					Cam.Fov = 60;
+					Scene->Cam.Fov = 60;
 					TerraPGE::FOV = 60;
 				}
 			}
@@ -469,7 +472,7 @@ class ExampleScene : public Scene
 				static bool ca = false;
 
 				if (!ca)
-					Txt->Delete();
+					Scene->Txt->Delete();
 				ca = true;
 			}
 			if (GetAsyncKeyState(VK_F7))

@@ -275,6 +275,22 @@ class Matrix
 		this->fMatrix[3][3] = 1.0f;
 	}
 
+	static Matrix CalcPerspectiveMatrix(float Fov, float AspectRatio, float Near, float Far)
+	{
+		float FovRads = abs(1.0f / tanf((ToRad(Fov * 0.5f))));
+
+		Matrix Out;
+
+		Out.fMatrix[0][0] = AspectRatio / FovRads;
+		Out.fMatrix[1][1] = -FovRads; // THIS NEGATIVE IS FOR TERRAGL
+		Out.fMatrix[2][2] = Far / (Far - Near);
+		Out.fMatrix[3][2] = (-Far * Near) / (Far - Near);
+		Out.fMatrix[2][3] = 1.0f;
+		Out.fMatrix[3][3] = 0.0f;
+
+		return Out;
+	}
+
 	public:
 	union
 	{
@@ -346,6 +362,7 @@ class Vec3
 		this->z = 0.0f;
 	}
 
+
 	Vec3(float _x, float _y, float _z)
 	{
 		this->x = _x;
@@ -353,7 +370,9 @@ class Vec3
 		this->z = _z;
 	}
 
+
 	Vec4 MakeVec4();
+
 
 	// Clamps an angle
 	Vec3 AngleNormalized()
@@ -369,6 +388,7 @@ class Vec3
 		return { this->x, this->y, this->z };
 	}
 
+
 	// clamps angles to keep them in between 2 values
 	Vec3 Clamped(float MinPitch = -89, float MaxPitch = 89, float MinYaw = -180, float MaxYaw = 180) const
 	{
@@ -380,17 +400,20 @@ class Vec3
 		return NewAngles;
 	}
 
+
 	// Distance from one vec3 to another
 	float Distance(Vec3& b) const
 	{
 		return (float)sqrt(pow(b.x - this->x, 2) + pow(b.y - this->y, 2) + pow(b.z - this->z, 2));
 	}
 
+
 	// Magnitude / Length of the vector3
 	float __inline Magnitude() const
 	{
 		return sqrt(this->x * this->x + this->y * this->y + this->z * this->z);
 	}
+
 
 	// Returns the unit vector aka a vector of magnitude 1 with a persisting direction
 	Vec3 Normalized() const
@@ -403,6 +426,41 @@ class Vec3
 		}
 		return Vec3();
 	}
+	
+
+	__inline Vec3 GetAbs() const
+	{
+		return Vec3(fabsf(this->x), fabsf(this->y), fabsf(this->z));
+	}
+
+
+	__inline void Abs()
+	{
+		this->x = fabsf(this->x);
+		this->y = fabsf(this->y);
+		this->z = fabsf(this->z);
+	}
+
+
+	// assumes an abs val vec3
+	__inline int GetDominantAxis() const
+	{
+		return (this->y > this->x ? (this->x > this->y ? 2 : 1) : (this->x > this->x ? 2 : 0));
+	}
+
+
+	Vec3 __inline GetSignedCardinalDirection(const Vec3 B) const
+	{
+		Vec3 Tmp = this->GetDirectionToVector(B);
+
+		int idx = Tmp.GetAbs().GetDominantAxis();
+
+		Vec3 Out = Vec3(0, 0, 0);
+		Out.data[idx] = Tmp.data[idx];
+
+		return Out;
+	}
+
 
 	void __inline __fastcall Normalize()
 	{
@@ -416,11 +474,13 @@ class Vec3
 		}
 	}
 
+
 	// Calculates Dot Product (How similar two vecs are)
 	const float Dot(const Vec3& Rhs) const
 	{
 		return { this->x * Rhs.x + this->y * Rhs.y + this->z * Rhs.z };
 	}
+
 
 	// Calculates Cross Product
 	void Cross(const Vec3* Rhs, Vec3* Out) const
@@ -428,15 +488,18 @@ class Vec3
 		*Out = Vec3((this->y * Rhs->z - this->z * Rhs->y), (this->z * Rhs->x - this->x * Rhs->z), (this->x * Rhs->y - this->y * Rhs->x));
 	}
 
+
 	Vec3 Cross(const Vec3* Rhs) const
 	{
 		return Vec3((this->y * Rhs->z - this->z * Rhs->y), (this->z * Rhs->x - this->x * Rhs->z), (this->x * Rhs->y - this->y * Rhs->x));
 	}
 
+
 	Vec3 Cross(const Vec3& Rhs) const
 	{
 		return Vec3((this->y * Rhs.z - this->z * Rhs.y), (this->z * Rhs.x - this->x * Rhs.z), (this->x * Rhs.y - this->y * Rhs.x));
 	}
+
 
 	// Calculates Cross Product Then Normalizes Result
 	void CrossNormalized(Vec3* Rhs, Vec3* Out)
@@ -445,12 +508,14 @@ class Vec3
 		Out->Normalize();
 	}
 
+
 	Vec3 CrossNormalized(const Vec3& Rhs) const
 	{
 		Vec3 Out = this->Cross(Rhs);
 		Out.Normalize();
 		return Out;
 	}
+
 
 	Vec3 CalculateIntersectionPoint(const Vec3& LineEnd, const Vec3& PointOnPlane, const Vec3& PlaneNormalized, float* OutT = nullptr) const
 	{
@@ -468,21 +533,25 @@ class Vec3
 		return LineStart + LineToIntersect;
 	}
 
+
 	// Angle to a point
 	float Angle(const Vec3 To) const
 	{
 		return (float)ToDegree(acos(Clamp(-1.f, 1.f, this->Dot(To))));
 	}
 
+
 	const Vec3 GetReflectection(const Vec3& SurfaceNormal) const
 	{
 		return *this - (SurfaceNormal * (2.0f * this->Dot(SurfaceNormal)));
 	}
 
+
 	const void Reflected(const Vec3& SurfaceNormal)
 	{
 		*this = *this - (SurfaceNormal * (2.0f * this->Dot(SurfaceNormal)));
 	}
+
 
 	// returns euler angles needed to look at a point specified by B
 	Vec3 CalcAngle(const Vec3 b, const bool Degree = true)
@@ -510,15 +579,18 @@ class Vec3
 		return Angles;
 	}
 
+
 	Vec3 LerpedTo(const Vec3& B, float t)
 	{
 		return Vec3(this->x + (B.x - this->x) * t, this->y + (B.y - this->y) * t, this->z + (B.z - this->z) * t);
 	}
 
+
 	static Vec3 Lerp(const Vec3& A, const Vec3& B, float t)
 	{
 		return Vec3(A.x + (B.x - A.x) * t, A.y + (B.y - A.y) * t, A.z + (B.z - A.z) * t);
 	}
+
 
 	void Lerped(const Vec3& B, float t)
 	{
@@ -527,13 +599,14 @@ class Vec3
 		this->z = this->z + (B.z - this->z) * t;
 	}
 
+
 	Vec3 __inline __fastcall GetDirectionToVector(const Vec3 b) const
 	{
 		return (*this - b).Normalized();
 	}
 
-	// operators
 
+	// operators
 	Vec3 operator + (const Vec3& b) const
 	{
 		return
@@ -543,6 +616,7 @@ class Vec3
 			this->z + b.z,
 		};
 	}
+
 
 	Vec3 operator + (const float b) const
 	{
@@ -554,6 +628,7 @@ class Vec3
 		};
 	}
 
+
 	Vec3 operator - (const Vec3& b) const
 	{
 		return
@@ -563,6 +638,7 @@ class Vec3
 			this->z - b.z,
 		};
 	}
+
 
 	Vec3 operator * (const float& b) const
 	{
@@ -574,6 +650,7 @@ class Vec3
 		};
 	}
 
+
 	Vec3 operator * (const Vec3& b) const
 	{
 		return
@@ -584,6 +661,7 @@ class Vec3
 		};
 	}
 
+
 	Vec3 operator * (const int b) const
 	{
 		return
@@ -593,6 +671,7 @@ class Vec3
 			this->z * b,
 		};
 	}
+
 
 	Vec3 operator * (const Matrix& b) const
 	{
@@ -612,6 +691,7 @@ class Vec3
 		return Out;
 	}
 
+
 	Vec3 operator / (const Vec3& b) const
 	{
 		return
@@ -622,6 +702,7 @@ class Vec3
 		};
 	}
 
+
 	Vec3 operator / (const int b) const
 	{
 		return
@@ -631,6 +712,8 @@ class Vec3
 			this->z / b,
 		};
 	}
+	
+	
 	Vec3 operator / (const float& b) const
 	{
 		return
@@ -641,12 +724,14 @@ class Vec3
 		};
 	}
 
+
 	void operator += (const Vec3& b)
 	{
 		this->x += b.x;
 		this->y += b.y;
 		this->z += b.z;
 	}
+
 
 	void operator -= (const Vec3& b)
 	{
@@ -655,6 +740,7 @@ class Vec3
 		this->z -= b.z;
 	}
 
+
 	void operator *= (const Vec3& b)
 	{
 		this->x *= b.x;
@@ -662,12 +748,14 @@ class Vec3
 		this->z *= b.z;
 	}
 
+
 	void operator *= (const float& b)
 	{
 		this->x *= b;
 		this->y *= b;
 		this->z *= b;
 	}
+
 
 	void operator *= (const Matrix& b)
 	{
@@ -688,6 +776,7 @@ class Vec3
 		}
 	}
 
+
 	Vec3 operator-()
 	{
 		return
@@ -697,6 +786,7 @@ class Vec3
 			-this->z
 		};
 	}
+
 
 	bool operator != (const Vec3& b)
 	{
@@ -714,11 +804,16 @@ class Vec3
 		}
 	}
 
+
 	friend std::ostream& operator<<(std::ostream& os, const Vec3& v);
-	public:
-	float x;
-	float y;
-	float z;
+	
+public:
+	union {
+		struct {
+			float x, y, z;
+		};
+		float data[3];
+	};
 };
 
 #define COLOR_NORMAL 0
@@ -1195,11 +1290,10 @@ Vec3 CalculateFaceNormal(const Vec3& p1, const Vec3& p2, const Vec3& p3) {
 	return normal;
 }
 
-
+#ifdef _DEBUG
 #define _CRTDBG_MAP_ALLOC
 #include <crtdbg.h>
 
-#ifdef _DEBUG
 #define DEBUG_NEW new (_NORMAL_BLOCK, __FILE__, __LINE__)
 #else
 #define DEBUG_NEW new

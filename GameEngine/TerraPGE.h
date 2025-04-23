@@ -10,9 +10,9 @@
 #include <unordered_map>
 #include <filesystem>
 
-#include "Graphics/GdiPP.hpp"
-#include "Graphics/WndCreator.hpp"
-#include "Graphics/TerraGL.h"
+#include "GdiPP.hpp"
+#include "WndCreator.hpp"
+//#include "TerraGL.h"
 #include "ParrallelPP.h"
 #include "Shading.h"
 
@@ -91,6 +91,7 @@ class Scene
 
 	virtual void BeginScene() = 0;
 	virtual void RunTick(GdiPP&, WndCreator&, const float&, std::vector<Renderable*>*, std::vector<LightObject*>*) = 0;
+	virtual void DrawGUI(GdiPP& Gdi) = 0;
 	virtual void EndScene() = 0;
 };
 
@@ -229,8 +230,6 @@ namespace TerraPGE
 		Args->AddShaderDataByValue<Vec3>(TPGE_SHDR_FRAG_COLOR, Vec3(), 0);
 		LightObject** Lights = Args->FindShaderResourcePtr<LightObject**>(TPGE_SHDR_LIGHT_OBJECTS);
 		ShaderTypes ShaderType = Args->FindShaderResourceValue<ShaderTypes>(TPGE_SHDR_TYPE);
-
-		Lights[0]->CalcVpMat();
 
 		int x1 = PixelRound(Tri->Points[0].x);
 		int y1 = PixelRound(Tri->Points[0].y);
@@ -386,7 +385,7 @@ namespace TerraPGE
 						if (DoShadows)
 						{
 							// Make this better TODO
-							Vec4 ShadowNdcPos = InterpolatedPos * Lights[0]->VpMat;
+							Vec4 ShadowNdcPos = InterpolatedPos * Lights[0]->VpMatrices[0];
 
 							ShadowNdcPos.CorrectPerspective();
 
@@ -549,7 +548,7 @@ namespace TerraPGE
 
 						if (DoShadows)
 						{
-							Vec4 ShadowNdcPos = InterpolatedPos * Lights[0]->VpMat;
+							Vec4 ShadowNdcPos = Lights[0]->CalcNdc(InterpolatedPos);
 							ShadowNdcPos.CorrectPerspective();
 
 							ShadowNdcPos *= (Vec3((float)(TerraPGE::ShadowMapWidth * 0.5f), (float)(TerraPGE::ShadowMapHeight * 0.5f), 1.0f));
@@ -786,11 +785,13 @@ namespace TerraPGE
 
 					// Calculate the barycentric coordinates which we use for interpolation
 					Vec3 BaryCoords = CalculateBarycentricCoordinatesScreenSpace(Vec2((float)j, (float)i), Vec2((float)Tri->Points[0].x, (float)Tri->Points[0].y), Vec2((float)Tri->Points[1].x, (float)Tri->Points[1].y), Vec2((float)Tri->Points[2].x, (float)Tri->Points[2].y));
+					
 					// Use Barycentric coords to interpolate our world position
 					Vec4 InterpolatedPos = Vec4((Tri->WorldSpaceVerts[0] * BaryCoords.x) + (Tri->WorldSpaceVerts[1] * BaryCoords.y) + (Tri->WorldSpaceVerts[2] * BaryCoords.z), 1.0f);
 
 					// World Pos -> Clipped Space
 					Vec4 NdcPos = InterpolatedPos * Vp;
+					
 					// Clipped -> Ndc
 					NdcPos.CorrectPerspective();
 
@@ -810,7 +811,7 @@ namespace TerraPGE
 
 					if (DoShadows)
 					{
-						Vec4 ShadowNdcPos = InterpolatedPos * Lights[0]->VpMat;
+						Vec4 ShadowNdcPos = Lights[0]->CalcNdc(InterpolatedPos);
 						ShadowNdcPos.CorrectPerspective();
 
 						ShadowNdcPos *= (Vec3((float)(TerraPGE::ShadowMapWidth * 0.5f), (float)(TerraPGE::ShadowMapHeight * 0.5f), 1.0f));
@@ -967,7 +968,7 @@ namespace TerraPGE
 
 					if (DoShadows)
 					{
-						Vec4 ShadowNdcPos = InterpolatedPos * Lights[0]->VpMat;
+						Vec4 ShadowNdcPos = Lights[0]->CalcNdc(InterpolatedPos);
 						ShadowNdcPos.CorrectPerspective();
 
 						ShadowNdcPos *= (Vec3((float)(TerraPGE::ShadowMapWidth * 0.5f), (float)(TerraPGE::ShadowMapHeight * 0.5f), 1.0f));
@@ -1205,12 +1206,12 @@ namespace TerraPGE
 		Vec3 NormPos = Vec3(0, 0, 0);
 		Vec3 NormDir = Vec3(0, 0, 0);
 
-
+		// already do this? TODO
 		for (int i = 0; i < LightCount; i++)
 		{
 			LightObject* Light = SceneLights[i];
 
-			Light->CalcVpMat();
+			Light->CalcVpMats();
 		}
 
 		//TODO MultiThread??
@@ -1618,9 +1619,12 @@ namespace TerraPGE
 				EngineGdi.DrawStringA(20, 20, Str, RGB(255, 0, 0), TRANSPARENT);
 #endif
 			}
+			
+			CurrScene->DrawGUI(EngineGdi);
 
 			// Draw to screen
-			EngineGdi.DrawDoubleBuffer();
+			EngineGdi.DrawDoubleBufferPO();
+			//EngineGdi.DrawDoubleBuffer();
 
 			delete[] LightsToRender;
 

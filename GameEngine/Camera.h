@@ -57,14 +57,7 @@ class Camera
 	//Calculate projection matrix of this camera
 	void CalcProjectionMat()
 	{
-		float FovRads = abs(1.0f / tanf((ToRad(Fov * 0.5f))));
-
-		this->ProjectionMatrix.fMatrix[0][0] = this->AspectRatio / FovRads;
-		this->ProjectionMatrix.fMatrix[1][1] = -FovRads; // THIS NEGATIVE IS FOR TERRAGL
-		this->ProjectionMatrix.fMatrix[2][2] = this->Far / (this->Far - this->Near);
-		this->ProjectionMatrix.fMatrix[3][2] = (-this->Far * this->Near) / (this->Far - this->Near);
-		this->ProjectionMatrix.fMatrix[2][3] = 1.0f;
-		this->ProjectionMatrix.fMatrix[3][3] = 0.0f;
+		this->ProjectionMatrix = Matrix::CalcPerspectiveMatrix(this->Fov, this->AspectRatio, this->Near, this->Far);
 	}
 
 	Triangle ProjectTriangle(const Triangle* InTriangle, Matrix& Mat)

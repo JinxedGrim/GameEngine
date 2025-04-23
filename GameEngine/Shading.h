@@ -334,6 +334,75 @@ class ShaderArgs
 	}
 };
 
+//struct BaseShaderArgs
+//{
+//	ShaderTypes ShaderType = ShaderTypes::SHADER_TRIANGLE;
+//	LightTypes LightType = LightTypes::DirectionalLight;
+//
+//	// Triangle Info (ALL SHADERS)
+//	Triangle* Tri = nullptr;
+//	const Material* Mat = nullptr;
+//
+//	//Camera Info (ALL SHADERS)
+//	Matrix ModelMat;00
+//	Matrix ViewMat;
+//	Matrix ProjectionMat;
+//	Vec3 CamPos = Vec3(0, 0, 0);
+//	Vec3 CamLookDir = Vec3(0, 0, 0);
+//
+//	// Light Info (ALL SHADERS)
+//	LightObject** Lights;
+//	size_t LightCount;
+//
+//	// Fragment Info (SHADER_TYPE == SHADER_FRAGMENT)
+//	Vec3* FragPos = nullptr;
+//	Vec3 FragNormal = Vec3(0.0f, 0.0f, 0.0f);
+//	Vec3 BaryCoords = Vec3(0, 0, 0);
+//	Color FragColor = Color(0.0f, 0.0f, 0.0f);
+//	Vec2 PixelCoords = Vec2(0, 0);
+//	TextureCoords UVW = { 0.0f, 0.0f, 0.0f };
+//
+//	// ShadowInfo
+//	Vec3 LightSpacePos;
+//	bool IsInShadow = false;
+//	bool DebugShadows = false;
+//	bool DebugShadowmap = false;
+//
+//	BaseShaderArgs()
+//	{
+//
+//	}
+//
+//	BaseShaderArgs(Triangle* Tri, const Material* Mat, const Vec3& CamPos, const Vec3& CamLookDir, const Matrix& ModelMatrix, const Matrix& ViewMatrix, const Matrix& ProjMatrix, LightObject** Lights, const size_t LightCount, const ShaderTypes SHADER_TYPE)
+//	{
+//		this->Tri = Tri;
+//		this->Mat = Mat;
+//		this->CamPos = CamPos;
+//		this->CamLookDir = CamLookDir;
+//		this->Lights = Lights;
+//		this->LightCount = LightCount;
+//		this->ShaderType = SHADER_TYPE;
+//		this->ModelMat = ModelMatrix;
+//		this->ViewMat = ViewMatrix;
+//		this->ProjectionMat = ProjMatrix;
+//	}
+//};
+//};
+//
+//template<typename ArgsT>
+//struct Shader
+//{
+//	inline void operator()(ArgsT* args) const
+//	{
+//
+//	}
+//};
+//
+//
+//
+
+
+
 namespace EngineShaders
 {
 	//const auto DefaultVertexShader = [](ShaderArgs* Args)
@@ -499,9 +568,16 @@ namespace EngineShaders
 		// Calculate the specular intensity
 		float SpecularIntensity = pow(std::max<float>(0.0f, (-RDir).Dot(*CamLookDir)), Mat->Shininess);
 
-		Vec3 AmbientCol = (Mat->AmbientColor) * Light->AmbientCoeff;
-		Vec3 DiffuseCol = ((Light->Color * Intensity) + (Mat->DiffuseColor * Intensity)) * Light->DiffuseCoeff;
-		Vec3 SpecularClr = ((Light->Color * Light->SpecularCoeff) + (Mat->SpecularColor * Light->SpecularCoeff)) * SpecularIntensity;
+		float Atten = 1.0;
+
+		if (Light->Type == LightTypes::PointLight)
+		{
+			Atten = ((PointLight*)Light)->Attenuate(Light->LightPos.Distance(*FragPos));
+		}
+
+		Vec3 AmbientCol = (Mat->AmbientColor) * Light->AmbientCoeff * Atten;
+		Vec3 DiffuseCol = ((Light->Color * Intensity) + (Mat->DiffuseColor * Intensity)) * Light->DiffuseCoeff * Atten;
+		Vec3 SpecularClr = ((Light->Color * Light->SpecularCoeff) + (Mat->SpecularColor * Light->SpecularCoeff)) * SpecularIntensity * Atten;
 
 		float ShadowMult = 1.0f;
 
