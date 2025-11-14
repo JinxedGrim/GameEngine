@@ -5,17 +5,58 @@
 #include <string>
 #include <sstream>
 
+#define _NULL_MATERIAL_VALUES 255.0f, 0.0f, 255.0f
+#define NULL_MATERIAL_COLOR Color(_NULL_MATERIAL_VALUES)
+#define NULL_MATERIAL_COLOR_VEC3 Vec3(_NULL_MATERIAL_VALUES)
+
+#define SoftUnlitMatAmbient Vec3(0.15f * 255.0f, 0.15f * 255.0f, 0.15f * 255.0f)
+#define SoftUnlitMatDiffuse Vec3(0.2f * 255.0f, 0.2f * 255.0f, 0.2f * 255.0f)
+#define SoftUnlitMatSpecular Vec3(0.2f * 255.0f, 0.2f * 255.0f, 0.2f * 255.0f)
+
 class Material
 {
-	public:
+public:
+	Vec3 AmbientColor = Vec3(255.0f * 0.15f, 0, 0);
+	Vec3 DiffuseColor = Vec3(255.0f * 0.25f, 255.0f * 0.25f, 255.0f * 0.25f);
+	Vec3 SpecularColor = Vec3(255.0f * 0.25f, 255.0f * 0.25f, 255.0f * 0.25f);
+	Vec3 EmissiveColor = Vec3(0.0f, 0.0f, 0.0f);
+
+	//Core Blinn Phong
+	float Shininess = 32.0f;
+	float EmissiveStrength = 0.0f;
+	float Reflectivity = 0.0f;     // For mirror/reflection intensity
+	float Opacity = 1.0f;          // For transparency or alpha blending
+	float RefractiveIndex = 1.0f;  // For refraction (if you add that later)
+
+	// Core PBR params
+	float Metallic = 0.0f;          // 0 = dielectric, 1 = metal
+	float Roughness = 0.5f;         // Microfacet roughness
+	float AO = 1.0f;                // Ambient occlusion multiplier
+
+	Texture* DiffuseMap = nullptr;
+	Texture* SpecularMap = nullptr;
+	Texture* NormalMap = nullptr;
+	Texture* EmissiveMap = nullptr;
+	Texture* RoughnessMap = nullptr;
+	Texture* MetallicMap = nullptr;
+	Texture* AOMap = nullptr;
+	Texture* HeightMap = nullptr; // (for parallax/displacement)
+
+	// add more properties TODO
+	// ALSO TEXTURE MAPS (::
+
+
+	std::vector<Texture*> Textures = {};
+	std::string MaterialName = "NullMat";
 
 	static inline std::vector<Material*> LoadedMaterials = {};
 
-	static Material* FindMaterial(std::string Name)
+
+	static Material* FindMaterial(std::string MtlName)
 	{
 		for (Material* M : LoadedMaterials)
 		{
-			if (M->MaterialName == Name)
+			if (M->MaterialName == MtlName)
 			{
 				return M;
 			}
@@ -23,6 +64,7 @@ class Material
 
 		return nullptr;
 	}
+
 
 	static Material* LoadMaterial(std::string MtlFn, std::string MtlName)
 	{
@@ -59,6 +101,8 @@ class Material
 				if (name == MtlName)
 				{
 					Mat->MaterialName = name;
+
+					Mat->EmissiveStrength = 0.0f;
 
 					while (std::getline(mtlFile, line))
 					{
@@ -119,46 +163,67 @@ class Material
 		return Mat;
 	}
 
+
+	static Material* CreateMaterial(Vec3 AmbientColor, Vec3 DiffuseColor, Vec3 SpecularColor, float Shininess, std::string MtlName="")
+	{
+		Material* Mat = FindMaterial(MtlName);
+
+		if (Mat != nullptr)
+		{
+			return Mat;
+		}
+		else
+		{
+			Mat = DEBUG_NEW Material();
+		}
+
+		Mat->AmbientColor = AmbientColor;
+		Mat->DiffuseColor = DiffuseColor;
+		Mat->SpecularColor = SpecularColor;
+		Mat->Shininess = Shininess;
+
+		LoadedMaterials.push_back(Mat);
+
+		return Mat;
+	}
+
+
+	static Material* GetNullMaterial()
+	{
+		Material* RetMat = FindMaterial("NullMat");
+		if (RetMat == nullptr)
+		{
+			RetMat = Material::CreateMaterial(NULL_MATERIAL_COLOR_VEC3, NULL_MATERIAL_COLOR_VEC3, NULL_MATERIAL_COLOR_VEC3, 96.0f, "NullMat");
+
+			if (RetMat == nullptr)
+			{
+				throw;
+			}
+
+			RetMat->EmissiveColor = NULL_MATERIAL_COLOR_VEC3;
+			RetMat->EmissiveStrength = 1.0f;
+		}
+
+		return RetMat;
+	}
+
+
 	int GetLoadedMatsSize()
 	{
 		return this->LoadedMaterials.size();
 	}
 
-	Vec3 AmbientColor = Vec3(255.0f * 0.15f, 0, 0);
-	Vec3 DiffuseColor = Vec3(255.0f * 0.25f, 255.0f * 0.25f, 255.0f * 0.25f);
-	Vec3 SpecularColor = Vec3(255.0f * 0.25f, 255.0f * 0.25f, 255.0f * 0.25f);
-	float Shininess = 32.0f;
 
-	std::vector<Texture*> Textures = {};
-
-	std::string MaterialName = "DefaultMat";
-
-
-	//TODO FIND A WAY TO NOT ALLOW ALLOCATION WITHOUT NEW 
-	Material()
+	bool HasUsableTexture()
 	{
-		Material* RetMat = FindMaterial("DefaultMat");
-		if (RetMat == nullptr)
+		if (this->Textures.size() > 0 && this->Textures.at(0)->Used)
 		{
-			Material* m = DEBUG_NEW Material(NULL_TEXTURE_COLOR_VEC3, NULL_TEXTURE_COLOR_VEC3, NULL_TEXTURE_COLOR_VEC3, 96.0f, "DefaultMat");
-			LoadedMaterials.push_back(m);
+			return true;
 		}
-		else
-		{
-			*this = *RetMat;
-		}
+
+		return false;
 	}
 
-	Material(Vec3 AmbientColor, Vec3 DiffuseColor, Vec3 SpecularColor, float Shininess, std::string Name = "")
-	{
-		this->AmbientColor = AmbientColor;
-		this->DiffuseColor = DiffuseColor;
-		this->SpecularColor = SpecularColor;
-		this->Shininess = Shininess;
-		this->MaterialName = Name;
-
-		LoadedMaterials.push_back(this);
-	}
 
 	void Delete()
 	{
@@ -177,19 +242,40 @@ class Material
 		delete this;
 	}
 
-	bool HasUsableTexture()
-	{
-		if (this->Textures.size() > 0 && this->Textures.at(0)->Used)
-		{
-			return true;
-		}
+protected:
 
-		return false;
+	Material()
+	{
+		this->AmbientColor = Vec3(255.0f * 0.15f, 0, 0);
+		this->DiffuseColor = Vec3(255.0f * 0.25f, 255.0f * 0.25f, 255.0f * 0.25f);
+		this->SpecularColor = Vec3(255.0f * 0.25f, 255.0f * 0.25f, 255.0f * 0.25f);
+		this->EmissiveColor = Vec3(0.0f, 0.0f, 0.0f);
+
+		//Core Blinn Phong
+		this->Shininess = 32.0f;
+		this->EmissiveStrength = 0.0f;
+		this->Reflectivity = 0.0f;     // For mirror/reflection intensity
+		this->Opacity = 1.0f;          // For transparency or alpha blending
+		this->RefractiveIndex = 1.0f;  // For refraction (if you add that later)
+
+		// Core PBR params
+		this->Metallic = 0.0f;          // 0 = dielectric, 1 = metal
+		this->Roughness = 0.5f;         // Microfacet roughness
+		this->AO = 1.0f;                // Ambient occlusion multiplier
+
+		this->DiffuseMap = nullptr;
+		this->SpecularMap = nullptr;
+		this->NormalMap = nullptr;
+		this->EmissiveMap = nullptr;
+		this->RoughnessMap = nullptr;
+		this->MetallicMap = nullptr;
+		this->AOMap = nullptr;
+		this->HeightMap = nullptr; // (for parallax/displacement)
 	}
 
-	protected:
 	~Material()
 	{
 
 	}
 };
+

@@ -2,6 +2,7 @@
 #include <iostream>
 #include <string>
 #include <vector>
+#include <array>
 #include <memory>
 #include <functional>
 #include <commctrl.h>
@@ -51,6 +52,7 @@ enum class WndExModes : DWORD
     NoTaskBarAndSmallBorder = WS_EX_TOOLWINDOW,
 
 };
+
 
 inline WndExModes operator | (WndExModes lhs, DWORD rhs)
 {
@@ -118,6 +120,7 @@ inline ButtonStyles operator | (ButtonStyles lhs, ButtonStyles rhs)
     return (ButtonStyles)((DWORD)lhs | (DWORD)rhs);
 }
 
+
 enum class RadioButtonStyles : DWORD
 {
     AutoRadio = BS_AUTORADIOBUTTON,
@@ -138,6 +141,7 @@ inline RadioButtonStyles operator | (RadioButtonStyles lhs, RadioButtonStyles rh
 {
     return (RadioButtonStyles)((DWORD)lhs | (DWORD)rhs);
 }
+
 
 enum class CheckboxStyles : DWORD
 {
@@ -243,10 +247,12 @@ enum class LabelStyles : DWORD
     UserItem = SS_USERITEM
 };
 
+
 inline LabelStyles operator|(LabelStyles lhs, DWORD rhs)
 {
     return static_cast<LabelStyles>(static_cast<DWORD>(lhs) | rhs);
 }
+
 
 inline LabelStyles operator|(LabelStyles lhs, LabelStyles rhs)
 {
@@ -257,6 +263,122 @@ inline LabelStyles operator|(LabelStyles lhs, LabelStyles rhs)
 struct ScreenDimensions
 {
     LONG Width, Height;
+};
+
+
+struct InputData
+{
+    std::array<uint8_t, 256> KeyDown{};
+    std::array<uint8_t, 256> KeyPressed{};
+    std::array<uint8_t, 256> KeyReleased{};
+
+    int32_t MouseX = 0;
+    int32_t MouseY = 0;
+    int32_t DeltaX = 0;
+    int32_t DeltaY = 0;
+    uint8_t MouseButtons = 0; // bits: 0=LMB,1=RMB,2=MMB
+
+    double DeltaTime = 0.0;
+    uint64_t FrameNumber = 0;
+};
+
+class InputState
+{
+public:
+    InputData Current{};
+    InputData Previous{};
+
+    void ProcessWindowInputMessage(HRAWINPUT lParam, HWND hwnd)
+    {
+        UINT size = 0;
+        if (GetRawInputData(lParam, RID_INPUT, nullptr, &size, sizeof(RAWINPUTHEADER)) != 0)
+            return;
+
+        std::vector<BYTE> buffer(size);
+        if (GetRawInputData(lParam, RID_INPUT, buffer.data(), &size, sizeof(RAWINPUTHEADER)) != size)
+            return;
+
+        RAWINPUT* ri = reinterpret_cast<RAWINPUT*>(buffer.data());
+
+        if (ri->header.dwType == RIM_TYPEKEYBOARD)
+        {
+            const RAWKEYBOARD& kb = ri->data.keyboard;
+            const bool isDown = !(kb.Flags & RI_KEY_BREAK);
+            const uint8_t key = static_cast<uint8_t>(kb.VKey);
+            OnKeyEvent(key, isDown);
+        }
+        else if (ri->header.dwType == RIM_TYPEMOUSE)
+        {
+            const RAWMOUSE& m = ri->data.mouse;
+            OnMouseMove(m.lLastX, m.lLastY);
+            OnMouseButtons(m.usButtonFlags);
+
+            // Optional: update absolute mouse position (client-relative)
+            POINT p;
+            if (GetCursorPos(&p))
+            {
+                ScreenToClient(hwnd, &p);
+                Current.MouseX = p.x;
+                Current.MouseY = p.y;
+            }
+        }
+    }
+
+    void BeginFrame()
+    {
+        Previous = Current;
+        Current.KeyPressed.fill(0);
+        Current.KeyReleased.fill(0);
+        Current.DeltaX = 0;
+        Current.DeltaY = 0;
+    }
+
+    void OnKeyEvent(uint8_t key, bool down)
+    {
+        if (Current.KeyDown[key] != down)
+        {
+            if (down) Current.KeyPressed[key] = 1;
+            else Current.KeyReleased[key] = 1;
+            Current.KeyDown[key] = down;
+        }
+    }
+
+    void OnMouseMove(int dx, int dy)
+    {
+        // Optional smoothing factor if you want less snappy raw input:
+        constexpr float smoothFactor = 1.0f;
+        Current.DeltaX += static_cast<int>(dx * smoothFactor);
+        Current.DeltaY += static_cast<int>(dy * smoothFactor);
+    }
+
+    void OnMouseButtons(USHORT flags)
+    {
+        if (flags & RI_MOUSE_LEFT_BUTTON_DOWN)  Current.MouseButtons |= (1 << 0);
+        if (flags & RI_MOUSE_LEFT_BUTTON_UP)    Current.MouseButtons &= ~(1 << 0);
+        if (flags & RI_MOUSE_RIGHT_BUTTON_DOWN) Current.MouseButtons |= (1 << 1);
+        if (flags & RI_MOUSE_RIGHT_BUTTON_UP)   Current.MouseButtons &= ~(1 << 1);
+        if (flags & RI_MOUSE_MIDDLE_BUTTON_DOWN) Current.MouseButtons |= (1 << 2);
+        if (flags & RI_MOUSE_MIDDLE_BUTTON_UP)   Current.MouseButtons &= ~(1 << 2);
+    }
+
+    bool IsLeftMouseDown()
+    {
+        return (Current.MouseButtons & (1 << 0)) != 0;
+    }
+
+    bool IsRightMouseDown()
+    {
+        return (Current.MouseButtons & (1 << 1)) != 0;
+    }
+
+    bool IsMiddleMouseDown()
+    {
+        return (Current.MouseButtons & (1 << 2)) != 0;
+    }
+
+    bool IsKeyDown(int key) const { return Current.KeyDown[key]; }
+    bool IsKeyPressed(int key) const { return Current.KeyPressed[key]; }
+    bool IsKeyReleased(int key) const { return Current.KeyReleased[key]; }
 };
 
 class WndIconW
@@ -309,6 +431,7 @@ public:
     }
 };
 
+
 class WndIconA
 {
     private:
@@ -358,6 +481,7 @@ class WndIconA
         return this->Ico;
     }
 };
+
 
 class WndCreatorA
 {
@@ -451,7 +575,7 @@ class WndCreatorA
     {
         this->Wnd = Wnd;
 
-        this->SetWndLong(GWLP_USERDATA, (long)this);
+        this->SetWndLong(GWLP_USERDATA, (LONG_PTR)this);
 
         this->DidCreate = false;
     }
@@ -840,6 +964,7 @@ class WndCreatorA
     }
 };
 
+
 class WndCreatorW
 {
     private:
@@ -862,6 +987,25 @@ class WndCreatorW
 
     LONG_PTR OriginalProc = NULL;
 
+    InputState Input;
+
+    BOOL RegisterRawInput()
+    {
+        RAWINPUTDEVICE rid[2];
+
+        rid[0].usUsagePage = 0x01; // Generic desktop controls
+        rid[0].usUsage = 0x06;     // Keyboard
+        rid[0].dwFlags = RIDEV_INPUTSINK; // receive input even when not focused
+        rid[0].hwndTarget = this->Wnd;
+
+        rid[1].usUsagePage = 0x01;
+        rid[1].usUsage = 0x02;     // Mouse
+        rid[1].dwFlags = RIDEV_INPUTSINK;
+        rid[1].hwndTarget = this->Wnd;
+
+        return RegisterRawInputDevices(rid, 2, sizeof(rid[0]));
+    }
+
     WndCreatorW()
     {
         if (!DidCreate)
@@ -881,6 +1025,7 @@ class WndCreatorW
     {
         WndCreatorW* Instance = (WndCreatorW*)GetWindowLongPtrW(hwnd, GWLP_USERDATA);
 
+
         switch (uMsg)
         {
             case WM_COMMAND:
@@ -895,13 +1040,19 @@ class WndCreatorW
 
                 break;
             }
+            case WM_INPUT:
+            {
+                Instance->Input.ProcessWindowInputMessage((HRAWINPUT)lParam, hwnd);
+                break;
+            }
+
             case WM_PAINT:
             {
                 if (Instance != nullptr && Instance->PaintCb != nullptr)
                 {
                     if (Instance->PaintCb(hwnd, wParam, lParam))
                     {
-                        return 0;
+                        break;
                     }
                 }
 
@@ -949,6 +1100,8 @@ class WndCreatorW
 
                 break;
             }
+            case WM_CLEAR:
+                break;
             case WM_DESTROY: // called when DestroyWindow is called
             {
                 PostQuitMessage(0);
@@ -985,6 +1138,7 @@ class WndCreatorW
         }
     }
 
+
     WndCreatorW(const UINT ClassStyle, const std::wstring_view ClassName, const std::wstring_view WindowName, const HCURSOR Curs, const HICON Ico, const HBRUSH BackGround, const DWORD ExFlags, const DWORD WStyle, const int x, const int y, const int Width, const int Height, HWND HwndParent = 0, const HINSTANCE hInstance = GetModuleHandleW(NULL))
     {
         SecureZeroMemory(&wc, sizeof(WNDCLASSEXW));
@@ -1015,6 +1169,7 @@ class WndCreatorW
         this->DidCreate = true;
     }
 
+
     WndCreatorW(const HWND Wnd)
     {
         this->Wnd = Wnd;
@@ -1022,16 +1177,19 @@ class WndCreatorW
         this->DidCreate = false;
     }
 
+
     void OverrideWndProc()
     {
         this->OriginalProc = this->SetWndLong(GWLP_WNDPROC, (LONG_PTR)this->WindowProcW);
         this->SetWndLong(GWLP_USERDATA, (LONG_PTR)this);
     }
 
+
     void SubclassProc(std::function<bool(HWND, UINT, WPARAM, LPARAM)> newProc)
     {
         this->OriginalProc = this->SetWndLong(GWLP_WNDPROC, (LONG_PTR)&newProc);
     }
+
 
     ~WndCreatorW()
     {
@@ -1042,15 +1200,18 @@ class WndCreatorW
             UnregisterClassW(wc.lpszClassName, wc.hInstance);
         }
     }
+    
 
     static void LogError(std::string ErrorMsg)
     {
         MessageBoxA(NULL, ErrorMsg.c_str(), "", MB_OK);
     }
 
+
     // Copying is not allowed
     WndCreatorW(const WndCreatorW&) = default;
     WndCreatorW& operator=(const WndCreatorW&) = default;
+
 
     // Moving is allowed
     WndCreatorW(WndCreatorW&& Rhs) noexcept
@@ -1063,6 +1224,7 @@ class WndCreatorW
 
         Rhs.Wnd = NULL;
     }
+
 
     WndCreatorW& operator=(WndCreatorW&& Rhs) noexcept
     {

@@ -33,6 +33,9 @@
 #define ToRadD(Rad) (double)((Rad) * (PI / 180.0))
 #endif
 
+#define ContIdx(x, y, Width) (SIZE_T)(x + (Width * y))
+
+
 float Clamp(float Min, float Max, float Val)
 {
 	if (Val < Min)
@@ -139,6 +142,16 @@ class Matrix
 	static Matrix CalcViewMatrix(const Vec3& Pos, const Vec3& Target, const Vec3& Up);
 
 	void MakeViewMatrix(const Vec3& Pos, const Vec3& Target, const Vec3& Up);
+
+	Matrix ExtractRotationScale() const
+	{
+		Matrix r = *this;
+		// Zero translation (depends on your layout!)
+		r.fMatrix[3][0] = 0.0f;
+		r.fMatrix[3][1] = 0.0f;
+		r.fMatrix[3][2] = 0.0f;
+		return r;
+	}
 
 	Matrix operator*(const Matrix& b) const
 	{
@@ -482,6 +495,12 @@ class Vec3
 	}
 
 
+	float __inline LengthSquared()
+	{
+		return this->Dot(*this);
+	}
+
+
 	// Calculates Cross Product
 	void Cross(const Vec3* Rhs, Vec3* Out) const
 	{
@@ -651,6 +670,17 @@ class Vec3
 	}
 
 
+	Vec3 operator * (const double& b) const
+	{
+		return
+		{
+			this->x * (float)b,
+			this->y * (float)b,
+			this->z * (float)b,
+		};
+	}
+
+
 	Vec3 operator * (const Vec3& b) const
 	{
 		return
@@ -804,6 +834,10 @@ class Vec3
 		}
 	}
 
+	float operator[](int i) const
+	{
+		return this->data[i];
+	}
 
 	friend std::ostream& operator<<(std::ostream& os, const Vec3& v);
 	
@@ -815,6 +849,101 @@ public:
 		float data[3];
 	};
 };
+
+
+class Matrix3x3
+{
+public:
+	union
+	{
+		struct
+		{
+			float _11, _12, _13;
+			float _21, _22, _23;
+			float _31, _32, _33;
+		};
+		float m[3][3];
+	};
+
+public:
+	Matrix3x3()
+	{
+		memset(m, 0, sizeof(m));
+	}
+
+	Matrix3x3(float v[3][3])
+	{
+		memcpy(m, v, sizeof(m));
+	}
+
+	static Matrix3x3 Identity()
+	{
+		Matrix3x3 R;
+		R._11 = 1; R._22 = 1; R._33 = 1;
+		return R;
+	}
+
+	Vec3 Row(int i) const
+	{
+		return Vec3(m[i][0], m[i][1], m[i][2]);
+	}
+
+	Vec3 Col(int i) const
+	{
+		return Vec3(m[0][i], m[1][i], m[2][i]);
+	}
+
+	Vec3 operator*(const Vec3& v) const
+	{
+		return Vec3(
+			_11 * v.x + _12 * v.y + _13 * v.z,
+			_21 * v.x + _22 * v.y + _23 * v.z,
+			_31 * v.x + _32 * v.y + _33 * v.z
+		);
+	}
+
+	Matrix3x3 operator*(const Matrix3x3& B) const
+	{
+		Matrix3x3 R;
+		for (int r = 0; r < 3; r++)
+		{
+			for (int c = 0; c < 3; c++)
+			{
+				R.m[r][c] =
+					m[r][0] * B.m[0][c]
+					+ m[r][1] * B.m[1][c]
+					+ m[r][2] * B.m[2][c];
+			}
+		}
+		return R;
+	}
+
+	Matrix3x3 Transposed() const
+	{
+		Matrix3x3 R;
+		for (int r = 0; r < 3; r++)
+			for (int c = 0; c < 3; c++)
+				R.m[c][r] = m[r][c];
+		return R;
+	}
+
+	Vec3 operator[](int i) const
+	{
+		return Row(i);
+	}
+
+};
+
+inline Matrix3x3 ExtractRotation3x3(const Matrix& M)
+{
+	Matrix3x3 R;
+
+	R._11 = M._11; R._12 = M._12; R._13 = M._13;
+	R._21 = M._21; R._22 = M._22; R._23 = M._23;
+	R._31 = M._31; R._32 = M._32; R._33 = M._33;
+
+	return R;
+}
 
 #define COLOR_NORMAL 0
 #define COLOR_255 1
@@ -1265,7 +1394,25 @@ Vec3 CalculateBarycentricCoordinatesScreenSpace(const Vec2& PixelCoord, const Ve
 	return Vec3(alpha, beta, gamma);
 }
 
-#define ContIdx(x, y, Width) (SIZE_T)(x + (Width * y))
+__inline Vec3 BarycentricPerspectiveCorrection(Vec3 bc, float w0, float w1, float w2)
+{
+	// perspective-correct them
+	float invW0 = 1.0f / w0;
+	float invW1 = 1.0f / w1;
+	float invW2 = 1.0f / w2;
+
+	float denom = bc.x * invW0 + bc.y * invW1 + bc.z * invW2;
+	bc.x = (bc.x * invW0) / denom;
+	bc.y = (bc.y * invW1) / denom;
+	bc.z = (bc.z * invW2) / denom;
+
+	return bc;
+}
+
+__inline Vec4 BarycentricInterpolation(const Vec3& BaryCoords, const Vec3& A, const Vec3& B, const Vec3& C, float ClipSapceW)
+{
+	return Vec4((A * BaryCoords.x) + (B * BaryCoords.y) + (C * BaryCoords.z), 1.0f);
+}
 
 Vec3 CalculateFaceNormal(const Vec3& p1, const Vec3& p2, const Vec3& p3) {
 	// Calculate two vectors in the plane of the face
@@ -1289,6 +1436,7 @@ Vec3 CalculateFaceNormal(const Vec3& p1, const Vec3& p2, const Vec3& p3) {
 
 	return normal;
 }
+
 
 #ifdef _DEBUG
 #define _CRTDBG_MAP_ALLOC

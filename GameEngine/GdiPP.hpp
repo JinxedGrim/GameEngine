@@ -559,7 +559,6 @@ public:
                 ErrorHandler("[GdiPP]  Failed to set text color");
                 return false;
             }
-
             return TextOutA(ScreenDC, X, Y, Text.data(), (int)Text.length());
         }
         else
@@ -577,7 +576,6 @@ public:
                 ErrorHandler("[GdiPP]  Failed to set text color");
                 return false;
             }
-
             return TextOutA(MemDC, X, Y, Text.data(), (int)Text.length());
         }
     }
@@ -805,6 +803,7 @@ public:
             return SetPixelV(ScreenDC, X, Y, Clr);
         }
     }
+
 
     void __inline __fastcall QuickSetPixel(const int& X, const int& Y, COLORREF Clr)
     {

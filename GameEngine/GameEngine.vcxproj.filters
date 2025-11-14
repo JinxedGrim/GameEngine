@@ -19,6 +19,18 @@
     <Filter Include="Header Files\Core">
       <UniqueIdentifier>{8c1c05cb-fe74-414c-979a-ece6e8c46533}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Header Files\Core\Libs">
+      <UniqueIdentifier>{7cfd7528-bcbe-41f9-9323-d0fccf810526}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\Core\Libs\Graphics">
+      <UniqueIdentifier>{66499fbe-8c85-40dc-8173-18d0a29ffb9c}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\Core\Engine">
+      <UniqueIdentifier>{7e220bf5-6641-488e-a76d-84875ad7cea0}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\EngineAPI">
+      <UniqueIdentifier>{e9a2c468-0bf7-46ca-a077-1fcf3868c944}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="GameEngine.cpp">
@@ -26,47 +38,77 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="TerraPGE.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\..\..\Desktop\My Stuff\My Librarys\Graphics\GdiPP.hpp">
-      <Filter>Header Files\Core</Filter>
-    </ClInclude>
-    <ClInclude Include="Math.h">
-      <Filter>Header Files\Core</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\..\..\Desktop\My Stuff\My Librarys\Graphics\WndCreator.hpp">
-      <Filter>Header Files\Core</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\..\..\Desktop\My Stuff\My Librarys\Graphics\TerraGL.h">
-      <Filter>Header Files\Core</Filter>
-    </ClInclude>
-    <ClInclude Include="Texture.h">
-      <Filter>Header Files\Core</Filter>
+    <ClInclude Include="ResourceManagement.h">
+      <Filter>Header Files\EngineAPI</Filter>
     </ClInclude>
     <ClInclude Include="Shading.h">
-      <Filter>Header Files\Core</Filter>
-    </ClInclude>
-    <ClInclude Include="Lighting.h">
-      <Filter>Header Files\Core</Filter>
-    </ClInclude>
-    <ClInclude Include="Mesh.h">
-      <Filter>Header Files\Core</Filter>
-    </ClInclude>
-    <ClInclude Include="Materials.h">
-      <Filter>Header Files\Core</Filter>
-    </ClInclude>
-    <ClInclude Include="Camera.h">
-      <Filter>Header Files\Core</Filter>
-    </ClInclude>
-    <ClInclude Include="UIPP.h">
-      <Filter>Header Files\Core</Filter>
+      <Filter>Header Files\Core\Engine</Filter>
     </ClInclude>
     <ClInclude Include="TerraAL.h">
-      <Filter>Header Files\Core</Filter>
+      <Filter>Header Files\Core\Libs</Filter>
     </ClInclude>
     <ClInclude Include="..\..\..\..\Desktop\My Stuff\My Librarys\Intrinsics\ParrallelPP.h">
-      <Filter>Header Files\Core</Filter>
+      <Filter>Header Files\Core\Libs</Filter>
+    </ClInclude>
+    <ClInclude Include="EngineCore.h">
+      <Filter>Header Files\Core\Engine</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\..\Desktop\My Stuff\My Librarys\Graphics\GdiPP.hpp">
+      <Filter>Header Files\Core\Libs\Graphics</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\GlLoader\GlLoader\GlLoader.h">
+      <Filter>Header Files\Core\Libs\Graphics</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\..\Desktop\My Stuff\My Librarys\Graphics\TerraGL.h">
+      <Filter>Header Files\Core\Libs\Graphics</Filter>
+    </ClInclude>
+    <ClInclude Include="UIPP.h">
+      <Filter>Header Files\Core\Libs\Graphics</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\..\Desktop\My Stuff\My Librarys\Graphics\WndCreator.hpp">
+      <Filter>Header Files\Core\Libs\Graphics</Filter>
+    </ClInclude>
+    <ClInclude Include="Math.h">
+      <Filter>Header Files\Core\Libs</Filter>
+    </ClInclude>
+    <ClInclude Include="Mesh.h">
+      <Filter>Header Files\Core\Engine</Filter>
+    </ClInclude>
+    <ClInclude Include="Materials.h">
+      <Filter>Header Files\Core\Engine</Filter>
+    </ClInclude>
+    <ClInclude Include="Lighting.h">
+      <Filter>Header Files\Core\Engine</Filter>
+    </ClInclude>
+    <ClInclude Include="Camera.h">
+      <Filter>Header Files\Core\Engine</Filter>
+    </ClInclude>
+    <ClInclude Include="Texture.h">
+      <Filter>Header Files\Core\Engine</Filter>
+    </ClInclude>
+    <ClInclude Include="TerraPGE.h">
+      <Filter>Header Files\EngineAPI</Filter>
+    </ClInclude>
+    <ClInclude Include="Physics.h">
+      <Filter>Header Files\EngineAPI</Filter>
+    </ClInclude>
+    <ClInclude Include="Scene.h">
+      <Filter>Header Files\EngineAPI</Filter>
+    </ClInclude>
+    <ClInclude Include="Renderer.h">
+      <Filter>Header Files\EngineAPI</Filter>
+    </ClInclude>
+    <ClInclude Include="Renderable.h">
+      <Filter>Header Files\EngineAPI</Filter>
+    </ClInclude>
+    <ClInclude Include="Collider.h">
+      <Filter>Header Files\EngineAPI</Filter>
+    </ClInclude>
+    <ClInclude Include="Rasterizer.h">
+      <Filter>Header Files\EngineAPI</Filter>
+    </ClInclude>
+    <ClInclude Include="RayCaster.h">
+      <Filter>Header Files\Core\Engine</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

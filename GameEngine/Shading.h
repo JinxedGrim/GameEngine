@@ -6,6 +6,10 @@
 #include <functional>
 #include <cassert>
 
+// TODO 
+// this shading system is cool but performs too slow.
+// move to 'functor'?
+
 enum class ShaderTypes
 {
 	SHADER_TRIANGLE = 0,
@@ -299,6 +303,17 @@ class ShaderArgs
 	}
 
 
+	void __inline PrepareFragmentShader()
+	{
+		this->AddShaderDataByValue<Color>(TPGE_SHDR_FRAG_COLOR, Color(0, 0, 0), 0);
+		this->AddShaderDataByValue<Vec3>(TPGE_SHDR_FRAG_POS, Vec3(), sizeof(void*));
+		this->AddShaderDataByValue<Vec3>(TPGE_SHDR_FRAG_NORMAL, Vec3(), sizeof(void*));
+		this->AddShaderDataByValue<TextureCoords>(TPGE_SHDR_TEX_UVW, TextureCoords(), sizeof(void*));
+		this->AddShaderDataByValue<Vec3>(TPGE_SHDR_FRAG_BARY_COORDS, Vec3(), sizeof(void*));
+		this->AddShaderDataByValue<Vec2>(TPGE_SHDR_PIXEL_COORDS, Vec2(), sizeof(void*));
+	}
+
+
 	void Delete()
 	{
 		delete this;
@@ -547,45 +562,66 @@ namespace EngineShaders
 		Vec3* FragNormal = Args->FindShaderResourcePtr<Vec3*>(TPGE_SHDR_FRAG_NORMAL);
 		Color* FragColor = Args->FindShaderResourcePtr<Color*>(TPGE_SHDR_FRAG_COLOR);
 		bool IsInShadow = Args->FindShaderResourceValue<bool>(TPGE_SHDR_IS_IN_SHADOW);
+		LightObject** Lights = Args->FindShaderResourcePtr<LightObject**>(TPGE_SHDR_LIGHT_OBJECTS);
 		//bool DebugShadows = Args->FindShaderResourceValue<bool>(TPGE_SHDR_DEBUG_SHADOWS);
 
-		LightObject* Light = nullptr;
-		if (LightCount <= 0)
+		// Shadow intensity multiplier
+		float ShadowMult = 1.0f - (0.5f * (int)IsInShadow);
+
+		// === Base lighting ===
+		Vec3 AmbientSum(0.0f, 0.0f, 0.0f); // base scene ambient
+		Vec3 DiffuseSum(0.0f, 0.0f, 0.0f);
+		Vec3 SpecularSum(0.0f, 0.0f, 0.0f);
+
+		if (Lights && LightCount > 0)
 		{
-			return;
+			for (size_t i = 0; i < LightCount; ++i)
+			{
+				LightObject* Light = Lights[i];
+				if (!Light) continue;
+
+				Vec3 LDir;
+				float Atten = 1.0f;
+
+				if (Light->Type == LightTypes::DirectionalLight)
+				{
+					// For directional light, direction is constant (points *toward* surface)
+					LDir = (-Light->LightDir).Normalized();
+				}
+				else if (Light->Type == LightTypes::PointLight)
+				{
+					// Point light direction is from fragment to light
+					LDir = Light->LightPos.GetDirectionToVector(*FragPos);
+					Atten = static_cast<PointLight*>(Light)->Attenuate(Light->LightPos.Distance(*FragPos));
+				}
+				else
+				{
+					continue; // Unsupported light type
+				}
+
+				// Light direction and attenuation
+				float NdotL = std::max(0.0f, FragNormal->Dot(LDir));
+				float Li = FragNormal->Dot(LDir);
+
+				// Reflection direction for specular
+				Vec3 RDir = (-LDir).GetReflectection(FragNormal->Normalized());
+				float SpecularIntensity = pow(std::max(0.0f, (-RDir).Dot(*CamLookDir)), Mat->Shininess);
+
+				// Accumulate each component
+				AmbientSum += (((Mat->AmbientColor) * (Light->Color / 255.0f)) * Light->AmbientCoeff) * Atten;
+				DiffuseSum += ((Mat->DiffuseColor) * (Light->Color / 255.0f)) * Light->DiffuseCoeff * NdotL * Atten;
+				SpecularSum += ((Mat->SpecularColor) * (Light->Color / 255.0f)) * Light->SpecularCoeff * SpecularIntensity * Atten;
+			}
 		}
 
-		Light = *Args->FindShaderResourcePtr<LightObject**>(TPGE_SHDR_LIGHT_OBJECTS);
+		float glow = Mat->EmissiveStrength * pow(1.0 - FragNormal->Dot(*CamLookDir), 4.0f);
+		Vec3 EmissiveCol = Mat->EmissiveColor * glow;
 
-		Vec3 LDir = Light->LightPos.GetDirectionToVector(*FragPos);
-		float Li = FragNormal->Dot(LDir);
+		Vec3 FinalColor = ((AmbientSum + DiffuseSum + SpecularSum) * ShadowMult) + EmissiveCol;
 
-		// Calculate the reflection direction using the formula: R = I - 2 * (I dot N) * N
-		float Intensity = std::max<float>(0.0f, Li);
-		//Vec3 RDir = (LDir - Args->FragNormal * 2.0f * Li).Normalized();
-		Vec3 RDir = (-LDir).GetReflectection(*FragNormal);
-
-		// Calculate the specular intensity
-		float SpecularIntensity = pow(std::max<float>(0.0f, (-RDir).Dot(*CamLookDir)), Mat->Shininess);
-
-		float Atten = 1.0;
-
-		if (Light->Type == LightTypes::PointLight)
-		{
-			Atten = ((PointLight*)Light)->Attenuate(Light->LightPos.Distance(*FragPos));
-		}
-
-		Vec3 AmbientCol = (Mat->AmbientColor) * Light->AmbientCoeff * Atten;
-		Vec3 DiffuseCol = ((Light->Color * Intensity) + (Mat->DiffuseColor * Intensity)) * Light->DiffuseCoeff * Atten;
-		Vec3 SpecularClr = ((Light->Color * Light->SpecularCoeff) + (Mat->SpecularColor * Light->SpecularCoeff)) * SpecularIntensity * Atten;
-
-		float ShadowMult = 1.0f;
-
-		ShadowMult = 1.0f - (0.5f * (int)IsInShadow);
-
-		FragColor->R = std::clamp<float>((AmbientCol.x + DiffuseCol.x + SpecularClr.x) * ShadowMult, 0.0f, 255.0f);
-		FragColor->G = std::clamp<float>(((AmbientCol.y + DiffuseCol.y + SpecularClr.y) * ShadowMult) /*((255.0f * (int)DebugShadows) * (int)IsInShadow)*/, 0.0f, 255.0f);
-		FragColor->B = std::clamp<float>(((AmbientCol.z + DiffuseCol.z + SpecularClr.z) * ShadowMult) /*((255.0f * (int)DebugShadows) * (int)IsInShadow)*/, 0.0f, 255.0f);
+		FragColor->R = std::clamp(FinalColor.x, 0.0f, 255.0f);
+		FragColor->G = std::clamp(FinalColor.y, 0.0f, 255.0f);
+		FragColor->B = std::clamp(FinalColor.z, 0.0f, 255.0f);
 		FragColor->A = 255.0f;
 	};
 

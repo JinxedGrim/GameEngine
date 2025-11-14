@@ -25,7 +25,7 @@ class LightObject
 	LightObject(Vec3 Pos, Vec3 LightDir, Vec3 LightColor, float AmbientCoeff, float DiffuseCoeff, float SpecularCoeff, float Far = 0.1f, float Near = 150.0f)
 	{
 		this->LightPos = Pos;
-		this->LightDir = LightDir;
+		this->LightDir = LightDir.Normalized();
 		this->Color = LightColor;
 
 		this->AmbientCoeff = AmbientCoeff;
@@ -47,7 +47,7 @@ class LightObject
 	LightObject(Vec3 Pos, Vec3 LightDir, Vec3 LightColor, float AmbientCoeff, float DiffuseCoeff, float SpecularCoeff, Mesh LightMesh, float Far = 0.1f, float Near = 150.0f)
 	{
 		this->LightPos = Pos;
-		this->LightDir = LightDir;
+		this->LightDir = LightDir.Normalized();
 		this->Color = LightColor;
 
 		this->AmbientCoeff = AmbientCoeff;
@@ -79,7 +79,8 @@ class LightObject
 	Mesh LightMesh = Mesh();
 
 	bool Render = false;
-
+	bool CastsShadows = false;
+	
 	float AmbientCoeff = 0.1f;  // Lowest level of light possible (only the objects mat ambient color)
 	float SpecularCoeff = 0.5f; // How much the lights color will combine with the objects specular color
 	float DiffuseCoeff = 0.25f; // How much the light will combine with the objects diffuse mat color
@@ -221,6 +222,7 @@ public:
 		this->ConstantAttenuation = 0.0f;
 		this->LinearAttenuation = 0.0f;
 		this->QuadraticAttenuation = 0.0f;
+		this->LightMesh = Sphere(0.5f, 20, 20);
 		this->Type = LightTypes::PointLight;
 	}
 
@@ -229,6 +231,7 @@ public:
 		this->ConstantAttenuation = ConstantAttenuation;
 		this->LinearAttenuation = LinearAttenuation;
 		this->QuadraticAttenuation = QuadraticAttenuation;
+		this->LightMesh = Sphere(0.5f, 20, 20);
 		this->Type = LightTypes::PointLight;
 	}
 
@@ -263,8 +266,6 @@ public:
 		else
 			return axis * 2 + 0; // +X/Y/Z
 	}
-
-
 
 	Vec4 CalcNdc(Vec4 InterpolatedPos) override
 	{

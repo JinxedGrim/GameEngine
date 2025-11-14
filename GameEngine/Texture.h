@@ -7,8 +7,9 @@
 #include <fstream>
 #include <algorithm>
 
-#define NULL_TEXTURE_COLOR Color(144.0f, 3.0f, 252.0f)
-#define NULL_TEXTURE_COLOR_VEC3 Vec3(144.0f, 3.0f, 252.0f)
+#define _NULL_TEXTURE_VALUES 255.0f, 0.0f, 255.0f
+#define NULL_TEXTURE_COLOR Color(_NULL_TEXTURE_VALUES)
+#define NULL_TEXTURE_COLOR_VEC3 Vec3(_NULL_TEXTURE_VALUES)
 
 class TextureCoords
 {
@@ -51,6 +52,16 @@ class TextureCoords
 		result.w = this->w + (end.w - this->w) * t;
 
 		return result;
+	}
+
+	__inline Vec3 AsVec3()
+	{
+		return
+		{
+			this->u,
+			this->v,
+			this->w,
+		};
 	}
 
 	void Lerped(const TextureCoords& end, float t)
@@ -268,7 +279,7 @@ class Texture
 			if (static_cast<int>(std::floor(v)) % 2) { v = 1.0f - (v - std::floor(v)); }
 			else { v = v - std::floor(v); }
 		}
-
+		
 		// Calculate pixel coordinates
 		int x = PixelRound(u * (float)(this->Width - 1.0f));
 		int y = PixelRound(v * (float)(this->Height - 1.0f));

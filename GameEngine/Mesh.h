@@ -201,8 +201,13 @@ class Triangle
 	}
 
 	Vec4 Points[3] = {};
+	size_t Points_[3] = {};
+
+
 	Vec3 WorldSpaceVerts[3] = {};
 	Vec4 ViewSpaceVerts[3] = {};
+	Vec4 ClipSpaceVerts[3] = {};
+
 
 	Vec3 FaceNormal = Vec3();
 	Vec3 VertexNormals[3] = {};
@@ -210,6 +215,7 @@ class Triangle
 	Vec3 NormDirections[4] = {};
 
 	TextureCoords TexCoords[3] = {};
+	size_t TexCoords_[3] = {};
 
 	Vec3 Col = Vec3(255, 0, 0);
 	Material* Material;
@@ -218,6 +224,7 @@ class Triangle
 	bool HasTexture = false;
 	bool OverrideTextureColor = false;
 };
+
 
 class Mesh
 {
@@ -235,7 +242,7 @@ class Mesh
 		this->TriangleCount = (int)Triangles.size();
 		this->NormalCount = 0;
 		this->VertexCount = 0;
-		this->ChangeMatInfo(new Material());
+		this->ChangeMatInfo(Material::GetNullMaterial());
 		this->CalculateNormals();
 	}
 
@@ -437,7 +444,7 @@ class Mesh
 			}
 
 #ifdef _DEBUG
-			std::cout << Vertices.size() << " Normals: ";
+			std::cout << VertexCache.size() << " Normals: ";
 			std::cout << Normals.size() << " TexturedCahce: " << TexCache.size();
 			std::cout << " Faces: " << Triangles.size() << "\r";
 #endif
@@ -448,7 +455,7 @@ class Mesh
 		FnPath = FnPath.substr(0, FnPath.find_last_of(".obj") - 3);
 
 		this->MeshName = FnPath;
-		this->Vertices = VertCache;
+		this->VertexCache = VertCache;
 		this->Normals = NormalCache;
 		this->NormalCount = (int)NormalCache.size();
 		this->TexCoords = TexCache;
@@ -460,7 +467,7 @@ class Mesh
 			this->CalculateNormals();
 
 #ifdef _DEBUG
-		std::cout << Vertices.size() << "   Normals:   ";
+		std::cout << VertexCache.size() << "   Normals:   ";
 		std::cout << Normals.size() << "   TexturedCahce:   " << TexCache.size();
 		std::cout << "   Faces:   " << Triangles.size() << "\n\n";
 #endif
@@ -485,9 +492,12 @@ class Mesh
 		this->NormalCount = (int)this->Normals.size();
 	}
 
-	std::string MeshName = "";
-	std::vector<Vec3> Vertices = {};
+	// Make this obsolete
 	std::vector<Triangle> Triangles = {};
+
+	std::string MeshName = "";
+	std::vector<Vec3> VertexCache = {};
+	std::vector<Vec3> NormalCache = {};
 	std::vector<TextureCoords> TexCoords = {};
 	std::vector<Material*> Materials = {};
 	std::vector<Vec3> Normals = {};
@@ -501,6 +511,7 @@ class Mesh
 	bool UseSingleMat = true;
 	bool BackfaceCulling = true;
 };
+
 
 const Mesh CubeMesh = Mesh(
 	{
@@ -530,47 +541,47 @@ const Mesh CubeMesh = Mesh(
 	},
 	"Cube");
 
+
 class Cube : public Mesh
 {
 	public:
-	Cube(float Length, float Width, float Height, Material* Mat = new  Material(), Texture* T = nullptr) : Mesh(CubeMesh, Mat)
+	Cube(float Length, float Width, float Height, Material* Mat = Material::GetNullMaterial()) : Mesh(CubeMesh, Mat)
 	{
+
 		for (int i = 0; i < CubeMesh.Triangles.size(); i++)
 		{
 			this->Triangles[i].Points[0] *= Vec3(Length, Width, Height);
 			this->Triangles[i].Points[1] *= Vec3(Length, Width, Height);
 			this->Triangles[i].Points[2] *= Vec3(Length, Width, Height);
 
-			if (T != nullptr)
+			this->Triangles[i].HasTexture = true;
+			this->Triangles[i].Material = Mat;
+
+			if ((i + 1) % 2 == 0)
 			{
-				this->Triangles[i].HasTexture = true;
-				this->Triangles[i].Material = Mat;
-				Mat->Textures.push_back(T);
+				this->Triangles[i].TexCoords[0] = { 0.0f, 1.0f };
+				this->Triangles[i].TexCoords[1] = { 1.0f, 0.0f };
+				this->Triangles[i].TexCoords[2] = { 1.0f, 1.0f };
 
-				if ((i + 1) % 2 == 0)
-				{
-					this->Triangles[i].TexCoords[0] = { 0.0f, 1.0f };
-					this->Triangles[i].TexCoords[1] = { 1.0f, 0.0f };
-					this->Triangles[i].TexCoords[2] = { 1.0f, 1.0f };
+			}
+			else
+			{
+				this->Triangles[i].TexCoords[0] = { 0.0f, 1.0f };
+				this->Triangles[i].TexCoords[1] = { 0.0f, 0.0f };
+				this->Triangles[i].TexCoords[2] = { 1.0f, 0.0f };
 
-				}
-				else
-				{
-					this->Triangles[i].TexCoords[0] = { 0.0f, 1.0f };
-					this->Triangles[i].TexCoords[1] = { 0.0f, 0.0f };
-					this->Triangles[i].TexCoords[2] = { 1.0f, 0.0f };
-
-				}
 			}
 		}
-	}
 
+		this->MeshName = "Cube";
+	}
 };
+
 
 class Sphere : public Mesh
 {
 	public:
-	Sphere(float Radius, int LatitudeSegments, int LongitudeSegments, Material* Mat = new Material()) : Mesh()
+	Sphere(float Radius, int LatitudeSegments, int LongitudeSegments, Material* Mat = Material::GetNullMaterial()) : Mesh()
 	{
 		this->Triangles = {};
 		// whole function is a pasted parameterized equation
@@ -591,9 +602,10 @@ class Sphere : public Mesh
 				float y = Radius * cosTheta;
 				float z = Radius * sinTheta * sinPhi;
 
-				this->Vertices.push_back(Vec3(x, y, z));
+				this->VertexCache.push_back(Vec3(x, y, z));
 			}
 		}
+
 		for (int lat = 0; lat < LatitudeSegments; ++lat)
 		{
 			for (int lon = 0; lon < LongitudeSegments; ++lon)
@@ -603,14 +615,16 @@ class Sphere : public Mesh
 				int topVertex = currentVertex + LongitudeSegments + 1;
 				int topNextVertex = topVertex + 1;
 
-				this->Triangles.push_back(Triangle(this->Vertices[currentVertex], this->Vertices[topVertex], this->Vertices[nextVertex]));
+				this->Triangles.push_back(Triangle(this->VertexCache[currentVertex], this->VertexCache[topVertex], this->VertexCache[nextVertex]));
 
-				this->Triangles.push_back(Triangle(this->Vertices[nextVertex], this->Vertices[topVertex], this->Vertices[topNextVertex]));
+				this->Triangles.push_back(Triangle(this->VertexCache[nextVertex], this->VertexCache[topVertex], this->VertexCache[topNextVertex]));
 
-				this->VertexCount = (int)Vertices.size();
+				this->VertexCount = (int)VertexCache.size();
 				this->TriangleCount = (int)Triangles.size();
 			}
 		}
+
+		this->MeshName = "Sphere";
 		this->CalculateNormals();
 		this->ChangeMatInfo(Mat);
 	}
