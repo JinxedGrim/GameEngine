@@ -2,11 +2,6 @@
 #include "EngineCore.h"
 #include "Collider.h"
 
-struct ObjectTransform
-{
-	Matrix Model;
-	Matrix Normal;
-};
 
 namespace TerraPGE
 {
@@ -15,28 +10,13 @@ namespace TerraPGE
 	public:
 		Renderable() = delete;
 
-		Renderable(Mesh* mesh, Camera* Cam, const Vec3& Scalar, const Vec3& RotationRads, const Vec3& Pos, const std::function<void(ShaderArgs*)> Shader, const ShaderTypes SHADER_TYPE = ShaderTypes::SHADER_FRAGMENT)
+		Renderable(Mesh* mesh, Camera* Cam, const Vec3& Scalar, const Vec3& EulerRotatiom, const Vec3& Pos, const std::function<void(ShaderArgs*)> Shader, const ShaderTypes SHADER_TYPE = ShaderTypes::SHADER_FRAGMENT)
 		{
-			this->Cam = Cam;
-			this->Pos = Pos;
+			this->Transform = ObjectTransform(Pos, Scalar, EulerRotatiom);
 			this->mesh = mesh;
-			this->Scalar = Scalar;
-			this->RotationRads = RotationRads;
 			this->Shader = Shader;
 			this->SHADER_TYPE = SHADER_TYPE;
 			this->collider.PhysicsEnabled = false;
-			UpdateTransform();
-		}
-
-
-		void UpdateTransform()
-		{
-			const Matrix ObjectMatrix = Matrix::CreateScalarMatrix(Scalar); // Scalar Matrix
-			const Matrix RotM = Matrix::CreateRotationMatrix(RotationRads); // Rotation Matrix
-			const Matrix TransMat = Matrix::CreateTranslationMatrix(Pos); // Translation Matrix
-			this->Transform.Model = ((ObjectMatrix * RotM) * TransMat); // Matrices are applied in SRT order 
-
-			this->collider.UpdatedRigidBody(this->Pos);
 		}
 
 
@@ -53,7 +33,7 @@ namespace TerraPGE
 		{
 			this->collider.PhysicsEnabled = true;
 			this->collider.type = ColliderType::AABB;
-			collider = Collider(RigidBody(MassInKg, Restitution, InitialVelocity), ColliderType::AABB, (void*)&Params);
+			collider = Collider(RigidBody(MassInKg, Restitution, InitialVelocity), ColliderType::AABB, &this->Transform, (void*)&Params);
 			this->collider.AddRigidBody(MassInKg, Restitution, InitialVelocity);
 		}
 
@@ -64,14 +44,15 @@ namespace TerraPGE
 			SphereColliderParams sphereParams;
 			sphereParams.Offset = Offset;
 			sphereParams.radius = Radius;
-			collider = Collider(RigidBody(MassInKg, Restitution, InitialVelocity), ColliderType::Sphere, (void*)&sphereParams);
+			collider = Collider(RigidBody(MassInKg, Restitution, InitialVelocity), ColliderType::Sphere, &this->Transform, (void*)&sphereParams);
 			this->collider.AddRigidBody(MassInKg, Restitution, InitialVelocity);
 		}
+
 
 		void AddSphereCollider(const SphereColliderParams& Params, float MassInKg, float Restitution, Vec3 InitialVelocity = Vec3(0.0f, 0.0f, 0.0f))
 		{
 			this->collider.PhysicsEnabled = true;
-			collider = Collider(RigidBody(MassInKg, Restitution, InitialVelocity), ColliderType::Sphere, (void*)&Params);
+			collider = Collider(RigidBody(MassInKg, Restitution, InitialVelocity), ColliderType::Sphere, &this->Transform, (void*)&Params);
 			this->collider.AddRigidBody(MassInKg, Restitution, InitialVelocity);
 		}
 
@@ -89,7 +70,7 @@ namespace TerraPGE
 		void AddOBBCollider(const OBBColliderParams& Params, float MassInKg, float Restitution, Vec3 InitialVelocity = Vec3(0.0f, 0.0f, 0.0f))
 		{
 			this->collider.PhysicsEnabled = true;
-			collider = Collider(RigidBody(MassInKg, Restitution, InitialVelocity), ColliderType::OBB, (void*)&Params);
+			collider = Collider(RigidBody(MassInKg, Restitution, InitialVelocity), ColliderType::OBB, &this->Transform, (void*)&Params);
 			this->collider.AddRigidBody(MassInKg, Restitution, InitialVelocity);
 		}
 
@@ -107,7 +88,7 @@ namespace TerraPGE
 		void AddCapsuleCollider(const CapsuleColliderParams& Params, float MassInKg, float Restitution, Vec3 InitialVelocity = Vec3(0.0f, 0.0f, 0.0f))
 		{
 			this->collider.PhysicsEnabled = true;
-			collider = Collider(RigidBody(MassInKg, Restitution, InitialVelocity), ColliderType::Capsule, (void*)&Params);
+			collider = Collider(RigidBody(MassInKg, Restitution, InitialVelocity), ColliderType::Capsule, &this->Transform, (void*)&Params);
 			this->collider.AddRigidBody(MassInKg, Restitution, InitialVelocity);
 		}
 
@@ -115,23 +96,13 @@ namespace TerraPGE
 		void AddBodyWithoutCollider(float MassInKg, float Restitution, Vec3 InitialVelocity = Vec3(0.0f, 0.0f, 0.0f))
 		{
 			this->collider.PhysicsEnabled = true;
-			collider = Collider(RigidBody(MassInKg, Restitution, InitialVelocity), ColliderType::None, nullptr);
+			collider = Collider(RigidBody(MassInKg, Restitution, InitialVelocity), ColliderType::None, &this->Transform, nullptr);
 			this->collider.AddRigidBody(MassInKg, Restitution, InitialVelocity);
 		}
 
 
-		void UpdatePostPhysics()
-		{
-			this->Pos = this->collider.body.Position;
-		}
-
-
 		Mesh* mesh = nullptr;
-		ObjectTransform Transform;
-		Vec3 Pos = Vec3();
-		Vec3 Scalar = Vec3();
-		Vec3 RotationRads = Vec3();
-		Camera* Cam;
+		ObjectTransform Transform = ObjectTransform(Vec3(0.0f, 0.0f, 0.0f), Vec3(1.0f, 1.0f, 1.0f), Vec3(0.0f, 0.0f, 0.0f));
 		Collider collider;
 
 		std::function<void(ShaderArgs*)> Shader = EngineShaders::Shader_Frag_Phong_Shadows;

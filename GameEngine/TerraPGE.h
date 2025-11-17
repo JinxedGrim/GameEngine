@@ -12,12 +12,12 @@
 //     TO DO 
 // 1. Fix the shadows
 // 2. Fix Lighting
+// 3. Add skyboxes 
 // 3. Caclulate Vertex norms for all 3 vertices and store them
-// Better reosource management
+// 4. Better reosource management
 // X. Audio system 
 // X. Voice 
 // X. SpotLights
-// X. Transform stacking
 // X. Ambient occlusion 
 // X. Global illumination
 // X. FXAA, TSAA, Etc
@@ -37,6 +37,8 @@ namespace TerraPGE
 	float Sensitivity = 0.1f;
 	Vec2 PrevMousePos;
 	double PhysicsTick = 1 / 30.0f;
+	bool DoPhysics = false;
+	bool ApplyGravity = true;
 
 	//template<typename T>
 	/*void RenderRenderable(GdiPP& Gdi, Camera& Cam, Renderable& R, LightObject LightSrc, T&& Shader, const int SHADER_TYPE = ShaderTypes::SHADER_FRAGMENT)
@@ -77,8 +79,6 @@ namespace TerraPGE
 		// Counters
 		MSG msg = { 0 };
 		double ElapsedTime = 0.0f;
-		auto FrameStart = std::chrono::system_clock::now();
-		auto LastPhysicsTime = std::chrono::system_clock::now();
 		double physicsAccumulator = 0.0;
 		std::vector<Renderable*> ToRender;
 		std::vector<LightObject*> Lights;
@@ -89,6 +89,9 @@ namespace TerraPGE
 		Core::UpdateWindow(Wnd, &msg);
 		UpdateLoadingScreen();
 		CurrScene->BeginScene(Wnd);
+		
+		auto FrameStart = std::chrono::system_clock::now();
+		auto LastPhysicsTime = std::chrono::system_clock::now();
 
 		while (!Wnd.Input.IsKeyPressed(VK_RETURN))
 		{
@@ -114,39 +117,59 @@ namespace TerraPGE
 				LightsToRender[idx]->CalcVpMats();
 			}
 
+			std::vector<Renderable*> Roots;
+
 			for (size_t idx = 0; idx < ToRender.size(); idx++)
 			{
 				ObjectsToRender[idx] = ToRender.at(idx);
-				ObjectsToRender[idx]->UpdateTransform();
+				if (ObjectsToRender[idx]->Transform.Parent == nullptr)
+				{
+					Roots.push_back(ObjectsToRender[idx]);
+				}
 			}
 
 			auto now = std::chrono::system_clock::now();
 			double framePhysicsDelta = std::chrono::duration<double>(now - LastPhysicsTime).count();
 			LastPhysicsTime = now;
 
-			physicsAccumulator += framePhysicsDelta;
+			if (DoPhysics)
+			{
+				physicsAccumulator += framePhysicsDelta;
+			}
 
 			// Run fixed update as many times as needed
 			while (physicsAccumulator >= PhysicsTick)
 			{
 				for (size_t idx = 0; idx < ToRender.size(); idx++)
 				{
-					for (size_t idx2 = 0; idx2 < ToRender.size(); idx2++)
-					{
-						Ray down(ObjectsToRender[idx]->collider.body.Position, Vec3(0, -1, 0));
-						RaycastHit Out;
-						if (RaycastMesh(down, ObjectsToRender[idx]->mesh->Triangles, &Out))
+					if(ApplyGravity)
+						for (size_t idx2 = 0; idx2 < ToRender.size(); idx2++)
 						{
-							Floor = ObjectsToRender[idx];
-							FloorHit = Out;
+							Ray down(ObjectsToRender[idx]->Transform.GetWorldPosition(), Vec3(0, -1, 0));
+							RaycastHit Out;
+							if (RaycastMesh(down, ObjectsToRender[idx]->mesh->Triangles, &Out))
+							{
+								Floor = ObjectsToRender[idx];
+								FloorHit = Out;
+							}
 						}
+
+					if (ObjectsToRender[idx]->collider.PhysicsEnabled)
+					{
+						Physics::Integrate(&((ObjectsToRender[idx])->collider), PhysicsTick, Floor, &FloorHit);
 					}
-					Physics::Integrate(&((ObjectsToRender[idx])->collider), PhysicsTick, Floor, &FloorHit);
-					ObjectsToRender[idx]->UpdatePostPhysics();
 				}
 
 				physicsAccumulator -= PhysicsTick;
 			}
+
+			for (Renderable* Obj : Roots)
+			{
+				Obj->Transform.WalkTransformChain();
+			}
+
+			CurrScene->MainCamera->Transform.WalkTransformChain();
+			CurrScene->MainCamera->CalcCamViewMatrix();
 
 			Renderer::RenderShadowMaps(ObjectsToRender, LightsToRender, ToRender.size(), Lights.size(), Core::ShadowMap);
 			//Renderer::RenderDepthMap(ObjectsToRender, ToRender.size(), Core::DepthBuffer, CurrScene->MainCamera->ViewMatrix);

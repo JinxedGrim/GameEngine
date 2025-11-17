@@ -288,6 +288,8 @@ class Matrix
 		this->fMatrix[3][3] = 1.0f;
 	}
 
+	__inline Matrix InverseSRT() const;
+
 	static Matrix CalcPerspectiveMatrix(float Fov, float AspectRatio, float Near, float Far)
 	{
 		float FovRads = abs(1.0f / tanf((ToRad(Fov * 0.5f))));
@@ -303,6 +305,11 @@ class Matrix
 
 		return Out;
 	}
+
+
+	__inline void Decompose(Vec3& outScale, Vec3& outEuler, Vec3& outPos) const;
+
+	__inline Vec3 ToEulerAnglesXYZ();
 
 	public:
 	union
@@ -1041,6 +1048,37 @@ Matrix Matrix::CreateRotationMatrix(const Vec3& RotationDeg) // pitch yaw roll
 	return A;
 }
 
+__inline Vec3 Matrix::ToEulerAnglesXYZ()
+{
+	// Extract the 3x3 rotation part
+	float r00 = this->fMatrix[0][0], r01 = this->fMatrix[0][1], r02 = this->fMatrix[0][2];
+	float r10 = this->fMatrix[1][0], r11 = this->fMatrix[1][1], r12 = this->fMatrix[1][2];
+	float r20 = this->fMatrix[2][0], r21 = this->fMatrix[2][1], r22 = this->fMatrix[2][2];
+
+	Vec3 out;
+
+	// --- Y (yaw) ---
+	out.y = std::asin(std::clamp(r20, -1.0f, 1.0f));
+
+	// Check for gimbal lock
+	if (std::fabs(r20) < 0.999999f)
+	{
+		// --- X (pitch) ---
+		out.x = std::atan2(-r21, r22);
+
+		// --- Z (roll) ---
+		out.z = std::atan2(-r10, r00);
+	}
+	else
+	{
+		// Gimbal lock: Y is ±90°, X+Z are coupled
+		out.x = 0.0f;  // arbitrary
+		out.z = std::atan2(r01, r11);
+	}
+
+	return out;
+}
+
 void Matrix::CalcScalarMatrix(const Vec3& Scalar)
 {
 	this->fMatrix[0][0] = 1.f * Scalar.x;
@@ -1149,6 +1187,88 @@ Matrix Matrix::CalcOrthoMatrix(const float& Left, const float& Right, const floa
 	return OrthoMat;
 }
 
+__inline Matrix Matrix::InverseSRT() const
+{
+	Matrix out;
+
+	// Extract scale
+	float sx = Vec3(fMatrix[0][0], fMatrix[0][1], fMatrix[0][2]).Magnitude();
+	float sy = Vec3(fMatrix[1][0], fMatrix[1][1], fMatrix[1][2]).Magnitude();
+	float sz = Vec3(fMatrix[2][0], fMatrix[2][1], fMatrix[2][2]).Magnitude();
+
+	// Rotation = normalize basis
+	Vec3 X = Vec3(fMatrix[0][0], fMatrix[0][1], fMatrix[0][2]) / sx;
+	Vec3 Y = Vec3(fMatrix[1][0], fMatrix[1][1], fMatrix[1][2]) / sy;
+	Vec3 Z = Vec3(fMatrix[2][0], fMatrix[2][1], fMatrix[2][2]) / sz;
+
+	// Build rotation inverse (transpose)
+	out.fMatrix[0][0] = X.x; out.fMatrix[0][1] = Y.x; out.fMatrix[0][2] = Z.x;
+	out.fMatrix[1][0] = X.y; out.fMatrix[1][1] = Y.y; out.fMatrix[1][2] = Z.y;
+	out.fMatrix[2][0] = X.z; out.fMatrix[2][1] = Y.z; out.fMatrix[2][2] = Z.z;
+
+	// Apply inverse scale
+	out.fMatrix[0][0] /= sx;
+	out.fMatrix[1][1] /= sy;
+	out.fMatrix[2][2] /= sz;
+
+	// Invert translation
+	Vec3 t(fMatrix[3][0], fMatrix[3][1], fMatrix[3][2]);
+	Vec3 invT = -(t);
+
+	// Compute transformed translation
+	Vec3 newT;
+	newT.x = invT.Dot(Vec3(out.fMatrix[0][0], out.fMatrix[1][0], out.fMatrix[2][0]));
+	newT.y = invT.Dot(Vec3(out.fMatrix[0][1], out.fMatrix[1][1], out.fMatrix[2][1]));
+	newT.z = invT.Dot(Vec3(out.fMatrix[0][2], out.fMatrix[1][2], out.fMatrix[2][2]));
+
+	out.fMatrix[3][0] = newT.x;
+	out.fMatrix[3][1] = newT.y;
+	out.fMatrix[3][2] = newT.z;
+	out.fMatrix[3][3] = 1.0f;
+
+	return out;
+}
+
+
+__inline void Matrix::Decompose(Vec3& outScale, Vec3& outEuler, Vec3& outPos) const
+{
+	// 1. Extract translation (T)
+	outPos = Vec3(
+		fMatrix[3][0],
+		fMatrix[3][1],
+		fMatrix[3][2]
+	);
+
+	// 2. Remove translation
+	Matrix M = *this;
+	M.fMatrix[3][0] = M.fMatrix[3][1] = M.fMatrix[3][2] = 0.0f;
+
+	// 3. Extract scale from the basis vectors (since M = S*R)
+	Vec3 X(M.fMatrix[0][0], M.fMatrix[0][1], M.fMatrix[0][2]);
+	Vec3 Y(M.fMatrix[1][0], M.fMatrix[1][1], M.fMatrix[1][2]);
+	Vec3 Z(M.fMatrix[2][0], M.fMatrix[2][1], M.fMatrix[2][2]);
+
+	outScale = Vec3(
+		X.Magnitude(),
+		Y.Magnitude(),
+		Z.Magnitude()
+	);
+
+	// 4. Normalize basis vectors to get the pure rotation matrix R
+	if (outScale.x != 0) X = X / outScale.x;
+	if (outScale.y != 0) Y = Y / outScale.y;
+	if (outScale.z != 0) Z = Z / outScale.z;
+
+	Matrix R = Matrix::CreateIdentity();
+	R.fMatrix[0][0] = X.x; R.fMatrix[0][1] = X.y; R.fMatrix[0][2] = X.z;
+	R.fMatrix[1][0] = Y.x; R.fMatrix[1][1] = Y.y; R.fMatrix[1][2] = Y.z;
+	R.fMatrix[2][0] = Z.x; R.fMatrix[2][1] = Z.y; R.fMatrix[2][2] = Z.z;
+
+	// 5. Convert R to Euler
+	outEuler = R.ToEulerAnglesXYZ(); // You must implement this
+}
+
+
 Vec3 CalculateBarycentricCoordinates(const Vec3& A, const Vec3& B, const Vec3& C, const Vec3& P)
 {
 	// Calculate vectors from vertex A to points B and C
@@ -1207,24 +1327,47 @@ class Vec4
 		this->w = _w;
 	}
 
-	__inline Vec3 xyz()
+	__inline Vec3 xyz() const
 	{
 		return Vec3(this->x, this->y, this->z);
 	}
 
-	__inline Vec3 GetVec3()
+	__inline Vec3 GetVec3() const
 	{
 		return Vec3(this->x, this->y, this->z);
 	}
 
 	void __inline CorrectPerspective()
 	{
+
 		if (this->w != 0)
 		{
-			this->x /= w;
-			this->y /= w;
-			this->z /= w;
+			float invW = 1.0f / this->w;
+			x *= invW;
+			y *= invW;
+			z *= invW;
+			this->w = w;
 		}
+	}
+
+	Vec4 CalculateIntersectionPoint(const Vec4& LineEnd, const Vec3& PointOnPlane, const Vec3& PlaneNormal, float* OutT = nullptr) const
+	{
+		const Vec4& LineStart = *this;
+
+		// Distance from plane origin
+		float Dist = -PlaneNormal.Dot(PointOnPlane);
+
+		// Signed distances of each endpoint
+		float ad = PlaneNormal.Dot(LineStart.GetVec3());
+		float bd = PlaneNormal.Dot(LineEnd.GetVec3());
+
+		// Solve intersection parameter
+		float t = (-Dist - ad) / (bd - ad);
+
+		if (OutT) *OutT = t;
+
+		// Interpolate FULL 4D vector (x,y,z,w)
+		return LineStart + (LineEnd - LineStart) * t;
 	}
 
 	Vec4 operator * (const Matrix& b) const

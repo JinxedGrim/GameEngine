@@ -81,23 +81,6 @@ namespace TerraPGE::Renderer
 	}
 
 
-	__inline ObjectTransform PrepareObjectTransform(const Vec3& Scalar, const Vec3& RotationRads, const Vec3& Pos)
-	{
-		ObjectTransform Transform;
-
-		Transform.Model = Matrix::CreateScalarMatrix(Scalar); // Scalar Matrix
-		const Matrix RotM = Matrix::CreateRotationMatrix(RotationRads); // Rotation Matrix
-		const Matrix TransMat = Matrix::CreateTranslationMatrix(Pos); // Translation Matrix
-		Transform.Model = ((Transform.Model * RotM) * TransMat); // Matrices are applied in SRT order 
-
-		// Normal Matrix (it's weird)
-		Transform.Normal = Transform.Model.QuickInversed();
-		Transform.Normal.Transpose3x3();
-
-		return Transform;
-	}
-
-
 	__inline Triangle TransformToWorld(const Triangle& Tri, const Matrix& Model)
 	{
 		Triangle out = Tri;
@@ -128,28 +111,26 @@ namespace TerraPGE::Renderer
 		if (!Core::DoCull)
 			return false;
 		Vec3 normal = tri.FaceNormal;
-		float facing = normal.Dot(tri.Points[0] - Cam->Pos);
+		float facing = normal.Dot(tri.Points[0] - Cam->Transform.GetLocalPosition());
 		return facing >= 0.0f;
 	}
 
 
 	std::vector<Triangle> VertexShader(Camera* Cam, Renderable* Object)
 	{
-		std::vector<Triangle> TrisToRender = {};
-		TrisToRender.reserve(Object->mesh->Triangles.size());
+		std::vector<Triangle> ClipSpaceTris = {};
+		ClipSpaceTris.reserve(Object->mesh->Triangles.size());
 
 		Triangle Clipped[2];
 		Vec3 NormPos = Vec3(0, 0, 0);
 		Vec3 NormDir = Vec3(0, 0, 0);
 		Vec3 TriNormal;
 
-		Object->Transform = PrepareObjectTransform(Object->Scalar, Object->RotationRads, Object->Pos);
-
 		for (const Triangle& Tri : Object->mesh->Triangles)
 		{
 
 			// 3D Space / World Space
-			Triangle WorldSpaceTri = TransformToWorld(Tri, Object->Transform.Model);
+			Triangle WorldSpaceTri = TransformToWorld(Tri, Object->Transform.GetWorldMatrix());
 
 			//TODO Fix this whole damn thing calc normals at mesh gen or at vertex shade time fuck the rest
 			TriNormal = Tri.FaceNormal;
@@ -209,20 +190,12 @@ namespace TerraPGE::Renderer
 						Projected.ClipSpaceVerts[p] = Projected.Points[p];
 					}
 
-					// Clip Space -> NDC Space
-					Projected.ApplyPerspectiveDivide();
-
-
-					// Offset to viewport space (Ndc -> Screen Space)
-					Projected.Scale(Vec3((float)(Core::sx * 0.5f), (float)(Core::sy * 0.5f), 1.0f));
-					Projected.Translate(Vec3((float)(Core::sx * 0.5f), (float)(Core::sy * 0.5f), 0.0f));
-
 					// Add Triangle to render list
-					TrisToRender.push_back(Projected);
+					ClipSpaceTris.push_back(Projected);
 				}
 			}
 		}
-		return TrisToRender;
+		return ClipSpaceTris;
 	}
 
 
@@ -294,11 +267,20 @@ namespace TerraPGE::Renderer
 		{
 			Renderable* Object = SceneObjects[i];
 
-			std::vector<Triangle> Tris = VertexShader(Cam, Object);
+			std::vector<Triangle> ClipSpaceTris = VertexShader(Cam, Object);
 
-			for (Triangle& Tri : Tris)
+			for (Triangle& ClipSpaceTri : ClipSpaceTris)
 			{
-				std::vector<Triangle> ToRender = ScreenSpaceClipping(&Tri);
+				// Clip Space -> NDC Space
+				Triangle NdcSpaceTri = ClipSpaceTri;
+				NdcSpaceTri.ApplyPerspectiveDivide();
+
+
+				// Offset to viewport space (Ndc -> Screen Space)
+				NdcSpaceTri.Scale(Vec3((float)(Core::sx * 0.5f), (float)(Core::sy * 0.5f), 1.0f));
+				NdcSpaceTri.Translate(Vec3((float)(Core::sx * 0.5f), (float)(Core::sy * 0.5f), 0.0f));
+
+				std::vector<Triangle> ClippedScreenSpace = ScreenSpaceClipping(&NdcSpaceTri);
 
 				// sort faces 
 		//		std::sort(TrisToRender.begin(), TrisToRender.end(), [](const Triangle& t1, const Triangle& t2)
@@ -311,18 +293,18 @@ namespace TerraPGE::Renderer
 
 				ShaderArgs* Args = DEBUG_NEW ShaderArgs();
 				Args->AddShaderDataByValue(TPGE_SHDR_TYPE, Object->SHADER_TYPE, 0);
-				Args->AddShaderDataPtr(TPGE_SHDR_CAMERA_POS, &Cam->Pos, 0);
-				Args->AddShaderDataPtr(TPGE_SHDR_CAMERA_LDIR, &Cam->LookDir, 0);
+				Args->AddShaderDataByValue<Vec3>(TPGE_SHDR_CAMERA_POS, Cam->Transform.GetLocalPosition(), 0);
+				Args->AddShaderDataByValue<Vec3>(TPGE_SHDR_CAMERA_LDIR, Cam->GetLookDirection(), 0);
 				Args->AddShaderDataPtr(TPGE_SHDR_CAMERA_VIEW_MATRIX, &Cam->ViewMatrix, 0);
 				Args->AddShaderDataPtr(TPGE_SHDR_CAMERA_PROJ_MATRIX, &Cam->ProjectionMatrix, 0);
-				Args->AddShaderDataPtr(TPGE_SHDR_OBJ_MATRIX, &Object->Transform.Model, 0);
+				Args->AddShaderDataPtr(TPGE_SHDR_OBJ_MATRIX, &Object->Transform.World, 0);
 				Args->AddShaderDataPtr(TPGE_SHDR_LIGHT_OBJECTS, SceneLights, 0);
 				Args->AddShaderDataByValue<size_t>(TPGE_SHDR_LIGHT_COUNT, LightCount, 0);
 				Args->AddShaderDataByValue<bool>(TPGE_SHDR_DEBUG_SHADOWS, DebugShadows);
 				Args->AddShaderDataByValue<bool>(TPGE_SHDR_IS_IN_SHADOW, false);
 				Args->AddShaderDataPtr(TPGE_SHDR_TRI, nullptr, 0);
 
-				for (auto& ToDraw : ToRender)
+				for (auto& ToDraw : ClippedScreenSpace)
 				{
 					//SceneLights, LightCount
 					Args->EditShaderData(TPGE_SHDR_TRI, &ToDraw, 0);
@@ -340,9 +322,9 @@ namespace TerraPGE::Renderer
 						if (!Core::ShowTriLines)
 						{
 							if (Core::DoMultiThreading)
-								Renderer::BaryCentricRasterizer(Core::DepthBuffer, EngineGdi, Object->Shader, Args);
+								Renderer::BaryCentricRasterizer(Core::DepthBuffer, Core::sx, Core::sy, EngineGdi, Object->Shader, Args);
 							else
-								Renderer::BaryCentricRasterizer(Core::DepthBuffer, EngineGdi, Object->Shader, Args);
+								Renderer::BaryCentricRasterizer(Core::DepthBuffer, Core::sx, Core::sy, EngineGdi, Object->Shader, Args);
 						}
 						else
 						{
@@ -415,13 +397,11 @@ namespace TerraPGE::Renderer
 			Renderable* Object = SceneObjects[i];
 			TrisToRender.reserve(Object->mesh->Triangles.size());
 
-			Object->Transform = PrepareObjectTransform(Object->Scalar, Object->RotationRads, Object->Pos);
-
 			for (const Triangle& Tri : Object->mesh->Triangles)
 			{
 				// 3D Space / World Space
 				Triangle Proj = Tri;
-				Proj.ApplyMatrix(Object->Transform.Model);
+				Proj.ApplyMatrix(Object->Transform.World);
 
 				for (int i = 0; i < 3; i++)
 				{

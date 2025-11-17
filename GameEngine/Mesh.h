@@ -4,6 +4,137 @@
 #include "Texture.h"
 #include "Materials.h"
 
+
+class ObjectTransform
+{
+private:
+	Vec3 LocalPosition = Vec3(1.0f, 5.0f, 1.0f);
+	Vec3 LocalScale = Vec3(1.0f, 1.0f, 1.0f);
+	Vec3 LocalEulerRotation;
+
+	void RecalculateLocal()
+	{
+		Local = Matrix::CreateScalarMatrix(LocalScale) * Matrix::CreateRotationMatrix(LocalEulerRotation) * Matrix::CreateTranslationMatrix(LocalPosition);
+	}
+
+public:
+	Matrix World = Matrix::CreateIdentity();
+	Matrix Normal = Matrix::CreateIdentity();
+	Matrix Local = Matrix::CreateIdentity();
+
+
+	ObjectTransform(const Vec3& pos = Vec3(0.0f, 0.0f, 0.0f), const Vec3& scale = Vec3(1.0f, 1.0f, 1.0f), const Vec3& euler = Vec3(0.0f, 0.0f, 0.0f)): LocalPosition(pos), LocalScale(scale), LocalEulerRotation(euler)
+	{
+		RecalculateLocal();
+	}
+
+
+	Matrix GetLocalRotationMatrix() const
+	{
+		Matrix R = Matrix::CreateIdentity();
+		// Copy just the rotation part of Local (upper-left 3x3)
+		for (int row = 0; row < 3; ++row)
+		{
+			for (int col = 0; col < 3; ++col)
+			{
+				R.fMatrix[row][col] = Local.fMatrix[row][col];
+			}
+		}
+
+		R.fMatrix[0][3] = R.fMatrix[1][3] = R.fMatrix[2][3] = 0.0f;
+		R.fMatrix[3][0] = R.fMatrix[3][1] = R.fMatrix[3][2] = 0.0f;
+
+		return R;
+	}
+
+
+	Matrix GetWorldMatrix() const
+	{
+		Matrix m = Local;
+		for (const ObjectTransform* p = Parent; p; p = p->Parent)
+			m = p->Local * m;
+		return m;
+	}
+
+
+	void SetWorldPosition(const Vec3& pos)
+	{
+		if (this->Parent)
+		{
+			Matrix invParent = Parent->GetWorldMatrix().InverseSRT();
+			this->LocalPosition = Vec3((invParent * Matrix::CreateTranslationMatrix(pos)).fMatrix[3][0], (invParent * Matrix::CreateTranslationMatrix(pos)).fMatrix[3][1], (invParent * Matrix::CreateTranslationMatrix(pos)).fMatrix[3][2]);
+		}
+		else
+			this->LocalPosition = pos;
+
+		RecalculateLocal();
+	}
+
+
+	Vec3 GetWorldPosition() const
+	{
+		if (!this->Parent)
+			return this->LocalPosition;
+
+		Matrix world = Parent->World * Local;
+
+		return Vec3(
+			world.fMatrix[3][0],
+			world.fMatrix[3][1],
+			world.fMatrix[3][2]
+		);
+	}
+
+
+	void SetParent(ObjectTransform* NewParent)
+	{
+		// Remove from old parent
+		if (Parent)
+		{
+			auto& otherChildren = Parent->Children;
+			otherChildren.erase(std::remove(otherChildren.begin(), otherChildren.end(), this), otherChildren.end());
+		}
+
+		Matrix worldBefore = GetWorldMatrix();
+
+		Parent = NewParent;
+		if (Parent) Parent->Children.push_back(this);
+
+		Matrix invParent = Parent ? Parent->GetWorldMatrix().InverseSRT() : Matrix::CreateIdentity();
+		Local = invParent * worldBefore;
+		Local.Decompose(LocalScale, LocalEulerRotation, LocalPosition);
+		RecalculateLocal();
+
+	}
+
+
+	void AddChild(ObjectTransform* child)
+	{
+		child->SetParent(this);
+	}
+
+
+	void WalkTransformChain()
+	{
+		this->World = this->Parent ? this->Parent->World * this->Local : this->Local;
+		for (auto* c : Children) c->WalkTransformChain();	
+	}
+
+
+	void SetLocalPosition(const Vec3& pos) { LocalPosition = pos; RecalculateLocal(); }
+	void SetLocalScale(const Vec3& s) { LocalScale = s; RecalculateLocal(); }
+	void SetLocalEulerAngles(const Vec3& r) { LocalEulerRotation = r; RecalculateLocal(); }
+
+	const Vec3& GetLocalPosition() const { return LocalPosition; }
+	const Vec3& GetLocalScale() const { return LocalScale; }
+	const Vec3& GetLocalEulerAngles() const { return LocalEulerRotation; }
+	
+public:
+	ObjectTransform* Parent = nullptr;
+	std::vector<ObjectTransform*> Children;
+};
+
+
 class Triangle
 {
 	public:
@@ -86,9 +217,9 @@ class Triangle
 
 	int ClipAgainstPlane(const Vec3& PointOnPlane, const Vec3& PlaneNormalized, Triangle& Out1, Triangle& Out2, bool DebugClip = false)
 	{
-		Vec3 p0 = this->Points[0].GetVec3();
-		Vec3 p1 = this->Points[1].GetVec3();
-		Vec3 p2 = this->Points[2].GetVec3();
+		Vec4 p0 = this->Points[0];
+		Vec4 p1 = this->Points[1];
+		Vec4 p2 = this->Points[2];
 		TextureCoords& t0 = this->TexCoords[0];
 		TextureCoords& t1 = this->TexCoords[1];
 		TextureCoords& t2 = this->TexCoords[2];
@@ -98,8 +229,8 @@ class Triangle
 		float dist1 = PlaneNormalized.Dot(p1) - PlanePointDot;
 		float dist2 = PlaneNormalized.Dot(p2) - PlanePointDot;
 
-		Vec3* InsidePoints[3] = {};
-		Vec3* OutsidePoints[3] = {};
+		Vec4* InsidePoints[3] = {};
+		Vec4* OutsidePoints[3] = {};
 		TextureCoords* InsideTex[3] = {};
 		TextureCoords* OutsideTex[3] = {};
 		int InsideCount = 0;

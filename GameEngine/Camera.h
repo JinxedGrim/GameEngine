@@ -12,7 +12,7 @@ class Camera
 
 	Camera(Vec3 Position, float AspectRatio, float Fov, float Near, float Far)
 	{
-		this->Pos = Position;
+		this->Transform = ObjectTransform(Position, Vec3(1.0f, 1.0f, 1.0f), Vec3(0.0f, 0.0f, 0.0f));
 
 		this->AspectRatio = AspectRatio;
 		this->Fov = Fov;
@@ -25,8 +25,6 @@ class Camera
 
 	Camera(Vec3 Position, Vec3 TargetLook, Vec3 CamUp, float AspectRatio, float Fov, float Near, float Far)
 	{
-		this->Pos = Position;
-
 		this->AspectRatio = AspectRatio;
 		this->Fov = Fov;
 		this->Near = Near;
@@ -34,7 +32,9 @@ class Camera
 		this->CamUp = CamUp;
 		this->NearPlane = { 0.0f, 0.0f, Near };
 		this->CalcProjectionMat();
-		this->PointAt(TargetLook);
+		this->PointAt(Position, TargetLook, CamUp);
+		this->Transform = ObjectTransform(Vec3(0.0f, 0.0f, 0.0f), Vec3(1.0f, 1.0f, 1.0f), Vec3(0.0f, 0.0f, 0.0f));
+
 	}
 
 	// Calculate the projection matrix with some screen args
@@ -54,11 +54,13 @@ class Camera
 		return Result;
 	}
 
+
 	//Calculate projection matrix of this camera
 	void CalcProjectionMat()
 	{
 		this->ProjectionMatrix = Matrix::CalcPerspectiveMatrix(this->Fov, this->AspectRatio, this->Near, this->Far);
 	}
+
 
 	Triangle ProjectTriangle(const Triangle* InTriangle, Matrix& Mat)
 	{
@@ -70,6 +72,7 @@ class Camera
 
 		return OutTri;
 	}
+
 
 	Mesh ProjectMesh(Mesh InMesh)
 	{
@@ -89,6 +92,7 @@ class Camera
 		return OutMesh;
 	}
 
+
 	Triangle ProjectTriangle(const Triangle* InTriangle)
 	{
 		Triangle OutTri = *InTriangle;
@@ -100,12 +104,14 @@ class Camera
 		return OutTri;
 	}
 
+
 	void ProjectTriangle(const Triangle* InTriangle, Triangle& OutTri)
 	{
 		OutTri.Points[0] = InTriangle->Points[0] * this->ProjectionMatrix;
 		OutTri.Points[1] = InTriangle->Points[1] * this->ProjectionMatrix;
 		OutTri.Points[2] = InTriangle->Points[2] * this->ProjectionMatrix;
 	}
+
 
 	Triangle TriangleProjected(const Triangle* InTriangle)
 	{
@@ -116,6 +122,7 @@ class Camera
 			InTriangle->Points[2] * this->ProjectionMatrix
 		};
 	}
+
 
 	static Matrix PointAt(const Vec3& CamPos, const Vec3& Target, const Vec3& Up)
 	{
@@ -134,50 +141,82 @@ class Camera
 		return DimensioningAndTrans;
 	}
 
-	void __inline __fastcall PointAt(const Vec3& Target)
+
+	void PointAt(const Vec3& Target)
 	{
-		Vec3 NewForward = (Target - this->Pos).Normalized();
-
-		Vec3 NewUp = (this->CamUp - (NewForward * this->CamUp.Dot(NewForward))).Normalized();
-
-		Vec3 NewRight = NewUp.Cross(NewForward);
-
-		this->ViewMatrix.fMatrix[0][0] = NewRight.x;	    this->ViewMatrix.fMatrix[0][1] = NewRight.y;	    this->ViewMatrix.fMatrix[0][2] = NewRight.z;      this->ViewMatrix.fMatrix[0][3] = 0.0f;
-		this->ViewMatrix.fMatrix[1][0] = NewUp.x;		    this->ViewMatrix.fMatrix[1][1] = NewUp.y;		    this->ViewMatrix.fMatrix[1][2] = NewUp.z;         this->ViewMatrix.fMatrix[1][3] = 0.0f;
-		this->ViewMatrix.fMatrix[2][0] = NewForward.x;		this->ViewMatrix.fMatrix[2][1] = NewForward.y;		this->ViewMatrix.fMatrix[2][2] = NewForward.z;    this->ViewMatrix.fMatrix[2][3] = 0.0f;
-		this->ViewMatrix.fMatrix[3][0] = this->Pos.x;		this->ViewMatrix.fMatrix[3][1] = this->Pos.y;	    this->ViewMatrix.fMatrix[3][2] = this->Pos.z;     this->ViewMatrix.fMatrix[3][3] = 1.0f;
+		this->ViewMatrix = this->PointAt(this->Transform.GetLocalPosition(), Target, this->CamUp);
 	}
 
-	void __inline __fastcall CalcCamViewMatrix(const Vec3& Target)
+
+	void LookAt(const Vec3& Target)
+	{
+		Vec3 forward = (Target - Transform.GetWorldPosition()).Normalized();
+		Vec3 right = CamUp.Cross(forward).Normalized();
+		Vec3 up = forward.Cross(right);
+
+		// Build view matrix
+		ViewMatrix = Matrix::CreateIdentity();
+		ViewMatrix.fMatrix[0][0] = right.x;   ViewMatrix.fMatrix[0][1] = right.y;   ViewMatrix.fMatrix[0][2] = right.z;
+		ViewMatrix.fMatrix[1][0] = up.x;      ViewMatrix.fMatrix[1][1] = up.y;      ViewMatrix.fMatrix[1][2] = up.z;
+		ViewMatrix.fMatrix[2][0] = forward.x; ViewMatrix.fMatrix[2][1] = forward.y; ViewMatrix.fMatrix[2][2] = forward.z;
+		ViewMatrix.fMatrix[3][0] = Transform.GetWorldPosition().x;
+		ViewMatrix.fMatrix[3][1] = Transform.GetWorldPosition().y;
+		ViewMatrix.fMatrix[3][2] = Transform.GetWorldPosition().z;
+	}
+
+
+	void __inline __fastcall CalcCamViewMatrix()
 	{
 		//this->ViewMatrix = this->PointAt(this->Pos, Target, this->CamUp).QuickInversed();
-		this->PointAt(Target);
-		this->ViewMatrix.QuickInverse();
+		this->Transform.WalkTransformChain();  // make sure world matrix is up to date
+		this->ViewMatrix = this->Transform.World.QuickInversed();
 	}
+
 
 	Vec3 GetNewVelocity(const Vec3& Direction)
 	{
 		return Direction * this->Velocity;
 	}
 
-	Vec3 GetNewVelocity()
+
+	Vec3 GetLookDirection() const
 	{
-		return this->LookDir * this->Velocity;
+		// The forward vector is usually the Z-axis in local space
+		// If your convention is +Z forward:
+		Vec3 forward(
+			Transform.World.fMatrix[2][0],
+			Transform.World.fMatrix[2][1],
+			Transform.World.fMatrix[2][2]
+		);
+
+		return forward.Normalized();
 	}
 
-	Vec3 Pos = Vec3(0, 0, 0);
-	Vec3 ViewAngles = Vec3(0, 0, 0);
-	Vec3 InitialLook = Vec3(0, 0, 1);
-	Vec3 LookDir = Vec3(0, 0, 0);
+
+	Vec3 GetForward() const
+	{
+		// Assuming row-major and SRT order (Model = Parent * Local)
+		Matrix world = Transform.World; // already walked
+		return Vec3(world.fMatrix[2][0], world.fMatrix[2][1], world.fMatrix[2][2]).Normalized();
+	}
+
+	Vec3 GetNewVelocity() const
+	{
+		return GetForward() * Velocity;
+	}
+
+	
 	Vec3 CamUp = Vec3(0, 1, 0);
 	Vec3 NearPlane = { 0, 0, 0.1f };
 	float Velocity = 8.0f;
 
+	ObjectTransform Transform = ObjectTransform(Vec3(0.0f, 0.0f, 0.0f), Vec3(1.0f, 1.0f, 1.0f), Vec3(0.0f, 0.0f, 0.0f));;
+
 	Matrix ProjectionMatrix = {};
 	Matrix ViewMatrix = {};
-	Matrix CamRotation = {};
 	float Fov = 0.f;
 	float AspectRatio = 0.f;
 	float Near = 0.f;
+	Vec3 InitialLook = Vec3(0.0f, 0.0f, 1.0f);
 	float Far = 0.f;
 };

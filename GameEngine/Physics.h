@@ -6,6 +6,16 @@
 
 namespace TerraPGE::Physics
 {
+    struct PhysicsParams
+    {
+        bool DoPhysics = true;
+        bool DoGravity = true;
+        bool ApplyFriction = true;
+
+        // No Floor Found
+        float FallbackHeight = 0.0f;
+    };
+
     const static Vec3 GRAVITY_ACCELERATION_VECTOR = Vec3(0, -9.81, 0);  // m/s²
 
     //float GetFloorHeight(const Vec3& pos, Collider* self, const std::vector<Collider*>& World)
@@ -82,27 +92,36 @@ namespace TerraPGE::Physics
         return DeltaVelocity;
     }
 
-    void Integrate(Collider* collider, float dt, Renderable* Floor, const RaycastHit* FloorHit)
+    void Integrate(Collider* collider, float dt, Renderable* Floor, const RaycastHit* FloorHit, bool ApplyGravity = true)
     {
         if (!collider->PhysicsEnabled)
             return;
 
         // Apply gravity only if not grounded
-        if (!collider->body.IsGrounded)
+        if (ApplyGravity && !collider->body.IsGrounded)
             collider->body.Velocity += IntegrateGravity(dt);
-        else
+        
+        if (collider->body.IsGrounded)
             collider->body.Velocity += IntegrateFriction(collider->body.KineticFriction, Floor->collider.body.KineticFriction, collider->body.mass, dt, collider->body.Velocity);
 
         // Integrate position (all axes)
-        collider->body.Position += IntegrateVelocity(collider->body.Velocity, dt);
+        Vec3 deltaWorld = IntegrateVelocity(collider->body.Velocity, dt);
+
+        collider->Transform->SetLocalEulerAngles(
+            collider->Transform->GetLocalEulerAngles() + collider->body.AngularVelocity * dt
+        );
+
+        collider->Transform->SetLocalPosition(collider->Transform->GetLocalPosition() + deltaWorld);
 
         if (collider->type == ColliderType::None)
             return;
 
         // Ground collision
-        if (collider->TestCollision(&Floor->collider))
+        if (Floor && collider->TestCollision(&Floor->collider))
         {
-            collider->body.Position.y = FloorHit->point.y;
+            Vec3 worldPos = collider->Transform->GetWorldPosition();
+            worldPos.y = FloorHit->point.y;
+            collider->Transform->SetLocalPosition(worldPos);
 
             if (collider->body.Velocity.y < 0.0f)
             {

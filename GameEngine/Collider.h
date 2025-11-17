@@ -1,5 +1,6 @@
 #pragma once
 #include "Math.h"
+#include "Mesh.h"
 
 #define ICE_KINETIC_FRICTION 0.03
 #define STEEL_KINETIC_FRICTION 0.15
@@ -35,8 +36,10 @@ public:
 	float restitution = 0.1f;  // bounce factor [0–1]
     float KineticFriction = WOOD_KINETIC_FRICTION;
     float StaticFriction = WOOD_STATIC_FRICTION;
+    float Drag = 0.0f;
+
 	Vec3 Velocity = Vec3(0.0f, 0.0f, 0.0f);
-	Vec3 Position = Vec3(0.0f, 0.0f, 0.0f);
+    Vec3 AngularVelocity = Vec3(0.0f, 0.0f, 0.0f);
 
 	RigidBody()
 	{
@@ -46,9 +49,9 @@ public:
 		this->Velocity = Vec3(0.0f, 0.0f, 0.0f);
 	}
 
-	RigidBody(float mass, float restitution, Vec3 InitialVelocity = Vec3(0.0f, 0.0f, 0.0f))
+	RigidBody(float mass, float restitution, Vec3 InitialVelocity = Vec3(0.0f, 0.0f, 0.0f), bool IsGrounded = false)
 	{
-		this->IsGrounded = false;
+		this->IsGrounded = IsGrounded;
 		this->mass = mass;   // kg
 		this->restitution = restitution;  // bounce factor [0–1]
 		this->Velocity = InitialVelocity;
@@ -95,8 +98,9 @@ class Collider
 {
 public:
 	ColliderType type;
-	RigidBody body;
-	bool PhysicsEnabled = true;
+	RigidBody body; // maybe just a pointer to the renderable (or mesh) rigidbody
+    ObjectTransform* Transform = nullptr;
+	bool PhysicsEnabled = false;
 	// TODO Breaak these up to seperate classes use polymorphism prolly
 	SphereColliderParams  _sphereParams;
 	AABBColliderParams    _AABBParams;
@@ -108,11 +112,12 @@ public:
 		this->PhysicsEnabled = false;
 	}
 
-	Collider(RigidBody body, ColliderType Type, void* Params = nullptr)
+	Collider(RigidBody body, ColliderType Type, ObjectTransform* Transform, void* Params = nullptr)
 	{
 		this->type = Type;
 		this->body = body;
-		
+        this->Transform = Transform;
+
 		if (Params == nullptr)
 			return;
 
@@ -145,16 +150,7 @@ public:
 	{
 		this->PhysicsEnabled = true;
 
-		this->body.mass = MassInKg;
-		this->body.restitution = Restitution;
-		this->body.Velocity = InitalVelocity;
-		this->body.IsGrounded = false;
-	}
-	
-	
-	void UpdatedRigidBody(Vec3 Pos)
-	{
-		this->body.Position = Pos;
+        this->body = RigidBody(MassInKg, Restitution, InitalVelocity);
 	}
 
 
@@ -823,28 +819,28 @@ private:
 
     bool TestSphere(const Collider* o)  const
     {
-        Vec3 p1 = body.Position + _sphereParams.Offset;
+        Vec3 p1 = Transform->GetWorldPosition() + _sphereParams.Offset;
 
         switch (o->type)
         {
         case ColliderType::Sphere:
             return SphereVSphere(
                 p1, _sphereParams.radius,
-                o->body.Position + o->_sphereParams.Offset,
+                o->Transform->GetWorldPosition() + o->_sphereParams.Offset,
                 o->_sphereParams.radius
             );
 
         case ColliderType::AABB:
             return SphereVAABB(
                 p1, _sphereParams.radius,
-                o->body.Position + o->_AABBParams.offset,
+                o->Transform->GetWorldPosition() + o->_AABBParams.offset,
                 o->_AABBParams.halfExtents
             );
 
         case ColliderType::OBB:
             return SphereVOBB(
                 p1, _sphereParams.radius,
-                o->body.Position + o->_OBBParams.offset,
+                o->Transform->GetWorldPosition() + o->_OBBParams.offset,
                 o->_OBBParams.halfExtents,
                 o->_OBBParams.orientation
             );
@@ -852,7 +848,7 @@ private:
         case ColliderType::Capsule:
             return SphereVCapsule(
                 p1, _sphereParams.radius,
-                o->body.Position + o->_capsuleParams.offset,
+                o->Transform->GetWorldPosition() + o->_capsuleParams.offset,
                 o->_capsuleParams.radius,
                 o->_capsuleParams.halfHeight
             );
@@ -863,13 +859,13 @@ private:
 
     bool TestAABB(const Collider* o) const
     {
-        Vec3 p1 = body.Position + _AABBParams.offset;
+        Vec3 p1 = Transform->GetWorldPosition() + _AABBParams.offset;
 
         switch (o->type)
         {
         case ColliderType::Sphere:
             return SphereVAABB(
-                o->body.Position + o->_sphereParams.Offset,
+                o->Transform->GetWorldPosition() + o->_sphereParams.Offset,
                 o->_sphereParams.radius,
                 p1,
                 _AABBParams.halfExtents
@@ -878,14 +874,14 @@ private:
         case ColliderType::AABB:
             return AABBvAABB(
                 p1, _AABBParams.halfExtents,
-                o->body.Position + o->_AABBParams.offset,
+                o->Transform->GetWorldPosition() + o->_AABBParams.offset,
                 o->_AABBParams.halfExtents
             );
 
         case ColliderType::OBB:
             return AABBvOBB(
                 p1, _AABBParams.halfExtents,
-                o->body.Position + o->_OBBParams.offset,
+                o->Transform->GetWorldPosition() + o->_OBBParams.offset,
                 o->_OBBParams.halfExtents,
                 o->_OBBParams.orientation
             );
@@ -893,7 +889,7 @@ private:
         case ColliderType::Capsule:
             return AABBvCapsule(
                 p1, _AABBParams.halfExtents,
-                o->body.Position + o->_capsuleParams.offset,
+                o->Transform->GetWorldPosition() + o->_capsuleParams.offset,
                 o->_capsuleParams.radius,
                 o->_capsuleParams.halfHeight
             );
@@ -905,13 +901,13 @@ private:
 
     bool TestOBB(const Collider* o)  const
     {
-        Vec3 p1 = body.Position + _OBBParams.offset;
+        Vec3 p1 = this->Transform->GetWorldPosition() + _OBBParams.offset;
 
         switch (o->type)
         {
         case ColliderType::Sphere:
             return SphereVOBB(
-                o->body.Position + o->_sphereParams.Offset,
+                o->Transform->GetWorldPosition() + o->_sphereParams.Offset,
                 o->_sphereParams.radius,
                 p1,
                 _OBBParams.halfExtents,
@@ -920,7 +916,7 @@ private:
 
         case ColliderType::AABB:
             return AABBvOBB(
-                o->body.Position + o->_AABBParams.offset,
+                o->Transform->GetWorldPosition() + o->_AABBParams.offset,
                 o->_AABBParams.halfExtents,
                 p1,
                 _OBBParams.halfExtents,
@@ -933,14 +929,14 @@ private:
                 p1,
                 _OBBParams.halfExtents,
                 o->_OBBParams.orientation,
-                o->body.Position + o->_OBBParams.offset,
+                o->Transform->GetWorldPosition() + o->_OBBParams.offset,
                 o->_OBBParams.halfExtents
             );
 
         case ColliderType::Capsule:
             return OBBvCapsule(
                 p1, _OBBParams.halfExtents, _OBBParams.orientation,
-                o->body.Position + o->_capsuleParams.offset,
+                o->Transform->GetWorldPosition() + o->_capsuleParams.offset,
                 o->_capsuleParams.radius,
                 o->_capsuleParams.halfHeight
             );
@@ -952,13 +948,13 @@ private:
 
     bool TestCapsule(const Collider* o)  const
     {
-        Vec3 p1 = body.Position + _capsuleParams.offset;
+        Vec3 p1 = Transform->GetWorldPosition() + _capsuleParams.offset;
 
         switch (o->type)
         {
         case ColliderType::Sphere:
             return SphereVCapsule(
-                o->body.Position + o->_sphereParams.Offset,
+                o->Transform->GetWorldPosition() + o->_sphereParams.Offset,
                 o->_sphereParams.radius,
                 p1,
                 _capsuleParams.radius,
@@ -967,7 +963,7 @@ private:
 
         case ColliderType::AABB:
             return AABBvCapsule(
-                o->body.Position + o->_AABBParams.offset,
+                o->Transform->GetWorldPosition() + o->_AABBParams.offset,
                 o->_AABBParams.halfExtents,
                 p1,
                 _capsuleParams.radius,
@@ -976,7 +972,7 @@ private:
 
         case ColliderType::OBB:
             return OBBvCapsule(
-                o->body.Position + o->_OBBParams.offset,
+                o->Transform->GetWorldPosition() + o->_OBBParams.offset,
                 o->_OBBParams.halfExtents,
                 o->_OBBParams.orientation,
                 p1,
@@ -989,7 +985,7 @@ private:
                 p1,
                 _capsuleParams.radius,
                 _capsuleParams.halfHeight,
-                o->body.Position + o->_capsuleParams.offset,
+                o->Transform->GetWorldPosition() + o->_capsuleParams.offset,
                 o->_capsuleParams.radius,
                 o->_capsuleParams.halfHeight
             );
