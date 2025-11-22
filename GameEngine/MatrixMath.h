@@ -270,17 +270,10 @@ public:
 		Out->MakeIdentity();
 		float c = cosf(AngleRads), s = sinf(AngleRads);
 
-#ifdef MATH_LEFT_HANDED
 		Out->_11 = c;
 		Out->_13 = -s;
 		Out->_31 = s;
 		Out->_33 = c;
-#else
-		Out->_11 = c;
-		Out->_13 = s;
-		Out->_31 = -s;
-		Out->_33 = c;
-#endif
 	}
 
 	
@@ -290,17 +283,10 @@ public:
 
 		Out->MakeIdentity();
 
-#ifdef MATH_LEFT_HANDED
 		Out->_11 = c;
 		Out->_12 = s;
 		Out->_21 = -s;
 		Out->_22 = c;
-#else
-		Out->_11 = c;
-		Out->_12 = -s;
-		Out->_21 = s;
-		Out->_22 = c;
-#endif
 	}
 
 	
@@ -335,6 +321,11 @@ public:
 
 		return Out;
 	}
+
+
+	static Matrix ConstructViewMatrix(const Vec3& Right, const Vec3& Dir, const Vec3& Up, const Vec3& EyePos);
+
+	static Matrix CalcLookAtMatrix(const Vec3& EyePos, const Vec3& Dir, const Vec3& Up);
 
 
 	void CalcScalarMatrix(const Vec3&);
@@ -376,21 +367,21 @@ public:
 	{
 		Matrix r = *this;
 
-		// Row 0
+		// Column 0 = right
 		Vec3 right(r.fMatrix[0][0], r.fMatrix[0][1], r.fMatrix[0][2]);
 		right.Normalize();
 		r.fMatrix[0][0] = right.x;
 		r.fMatrix[0][1] = right.y;
 		r.fMatrix[0][2] = right.z;
 
-		// Row 1
+		// Column 1 = up
 		Vec3 up(r.fMatrix[1][0], r.fMatrix[1][1], r.fMatrix[1][2]);
 		up.Normalize();
 		r.fMatrix[1][0] = up.x;
 		r.fMatrix[1][1] = up.y;
 		r.fMatrix[1][2] = up.z;
 
-		// Row 2
+		// Column 2 = fwd
 		Vec3 fwd(r.fMatrix[2][0], r.fMatrix[2][1], r.fMatrix[2][2]);
 		fwd.Normalize();
 		r.fMatrix[2][0] = fwd.x;
@@ -399,7 +390,6 @@ public:
 
 		return r;
 	}
-
 
 	inline bool NearlyEqual(float a, float b, float eps = 1e-6f) const
 	{

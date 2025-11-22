@@ -122,7 +122,7 @@ public:
 	Vec3 GetUpVector()
 	{
 		Matrix world = this->GetWorldMatrix();
-		return Vec3(world._21, world._22, world._23).Normalized();
+		return Vec3(world.fMatrix[1][0], world.fMatrix[1][1], world.fMatrix[1][2]).Normalized();
 	}
 
 	Matrix CalculateViewMatrix()

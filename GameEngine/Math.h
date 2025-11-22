@@ -255,28 +255,39 @@ void Matrix::CalcTranslationMatrix(const Vec3& Translation)
 //	this->_41 = Pos.x;    this->_42 = Pos.y;    this->_43 = Pos.z;    this->_44 = 1.0f;
 //}
 
-
-Matrix Matrix::CalcViewMatrix(const Vec3& EyePos, const Vec3& TargetPos, const Vec3& Up)
+Matrix Matrix::ConstructViewMatrix(const Vec3& Right, const Vec3& Up, const Vec3& Forward, const Vec3& EyePos)
 {
-
-	Vec3 forward = (TargetPos - EyePos).Normalized();
-	Vec3 right = Up.Cross(forward).Normalized();
-	Vec3 up = forward.Cross(right);  // recompute for orthonormality
-
-	Matrix View;
-	View.MakeIdentity();
-
+	Matrix View = Matrix::CreateIdentity();
+	//Matrix::CreateTranslationMatrix(-EyePos);
+	
 	// Rotation part (inverse rotation = transpose for orthogonal)
-	View._11 = right.x;   View._12 = right.y;   View._13 = right.z;
-	View._21 = up.x;      View._22 = up.y;      View._23 = up.z;
-	View._31 = forward.x; View._32 = forward.y; View._33 = forward.z;
+	View._11 = Right.x;   View._12 = Right.y;   View._13 = Right.z;
+	View._21 = Up.x;      View._22 = Up.y;      View._23 = Up.z;
+	View._31 = Forward.x; View._32 = Forward.y; View._33 = Forward.z;
 
-	View._41 = -right.Dot(EyePos);
-	View._42 = -Up.Dot(EyePos);
-	View._43 = -forward.Dot(EyePos);
+	View._14 = -Right.Dot(EyePos);
+	View._24 = -Up.Dot(EyePos);
+	View._34 = Forward.Dot(EyePos); // changes dependent upon handedness TODO:  add handedness macro
 	View._44 = 1.0f;
 
 	return View;
+}
+
+
+Matrix Matrix::CalcLookAtMatrix(const Vec3& EyePos, const Vec3& Dir, const Vec3& Up)
+{
+	Vec3 Forward = Dir.Normalized();
+	Vec3 Right = Up.Cross(Forward).Normalized();
+	Vec3 UpReal = Forward.Cross(Right);
+
+	return Matrix::ConstructViewMatrix(Right, UpReal, Forward, EyePos);
+}
+
+Matrix Matrix::CalcViewMatrix(const Vec3& EyePos, const Vec3& TargetPos, const Vec3& Up)
+{
+	Vec3 forward = (TargetPos - EyePos).Normalized();
+
+	return 	Matrix::CalcLookAtMatrix(EyePos, forward, Up);
 }
 
 

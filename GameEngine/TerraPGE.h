@@ -173,7 +173,7 @@ namespace TerraPGE
 			CurrScene->MainCamera->Transform.WalkTransformChain();
 			CurrScene->MainCamera->CalcCamViewMatrix();
 
-			Renderer::RenderShadowMaps(ObjectsToRender, LightsToRender, ToRender.size(), Lights.size(), Core::ShadowMap);
+			//Renderer::RenderShadowMaps(ObjectsToRender, LightsToRender, ToRender.size(), Lights.size(), Core::ShadowMap);
 			//Renderer::RenderDepthMap(ObjectsToRender, ToRender.size(), Core::DepthBuffer, CurrScene->MainCamera->ViewMatrix);
 
 			Renderer::RenderMeshes(CurrScene->MainCamera, ObjectsToRender, LightsToRender, ToRender.size(), Lights.size());

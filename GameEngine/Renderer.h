@@ -15,7 +15,7 @@ namespace TerraPGE::Renderer
 	static GdiPP* EngineGdi = nullptr;
 
 	BrushPP ClearBrush = -1;
-	static const Vec3 PlaneNormal = { 0.0f, 0.0f, 1.0f };
+	static const Vec3 PlaneNormal = { 0.0f, 0.0f, -1.0f };
 
 
 
@@ -372,6 +372,7 @@ namespace TerraPGE::Renderer
 						EngineGdi->DrawTriangle(PixelRound(ToDraw.Points[0].x), PixelRound(ToDraw.Points[0].y), PixelRound(ToDraw.Points[1].x), PixelRound(ToDraw.Points[1].y), PixelRound(ToDraw.Points[2].x), PixelRound(ToDraw.Points[2].y), PenPP(PS_SOLID, 1, RGB(ToDraw.Col.x, ToDraw.Col.y, ToDraw.Col.z)));
 					}
 				}
+
 				Args->Delete();
 
 			}
