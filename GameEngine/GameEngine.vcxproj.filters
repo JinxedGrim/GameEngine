@@ -31,6 +31,9 @@
     <Filter Include="Header Files\EngineAPI">
       <UniqueIdentifier>{e9a2c468-0bf7-46ca-a077-1fcf3868c944}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Header Files\Core\Libs\Math">
+      <UniqueIdentifier>{101519b7-5152-4313-b8b6-ce8742e3070f}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="GameEngine.cpp">
@@ -68,9 +71,6 @@
     <ClInclude Include="..\..\..\..\Desktop\My Stuff\My Librarys\Graphics\WndCreator.hpp">
       <Filter>Header Files\Core\Libs\Graphics</Filter>
     </ClInclude>
-    <ClInclude Include="Math.h">
-      <Filter>Header Files\Core\Libs</Filter>
-    </ClInclude>
     <ClInclude Include="Mesh.h">
       <Filter>Header Files\Core\Engine</Filter>
     </ClInclude>
@@ -98,7 +98,7 @@
     <ClInclude Include="Renderer.h">
       <Filter>Header Files\EngineAPI</Filter>
     </ClInclude>
-    <ClInclude Include="Renderable.h">
+    <ClInclude Include="GameObject.h">
       <Filter>Header Files\EngineAPI</Filter>
     </ClInclude>
     <ClInclude Include="Collider.h">
@@ -109,6 +109,21 @@
     </ClInclude>
     <ClInclude Include="RayCaster.h">
       <Filter>Header Files\Core\Engine</Filter>
+    </ClInclude>
+    <ClInclude Include="Renderable.h">
+      <Filter>Header Files\EngineAPI</Filter>
+    </ClInclude>
+    <ClInclude Include="ObjectTransform.h">
+      <Filter>Header Files\EngineAPI</Filter>
+    </ClInclude>
+    <ClInclude Include="Math.h">
+      <Filter>Header Files\Core\Libs\Math</Filter>
+    </ClInclude>
+    <ClInclude Include="MatrixMath.h">
+      <Filter>Header Files\Core\Libs\Math</Filter>
+    </ClInclude>
+    <ClInclude Include="VectorMath.h">
+      <Filter>Header Files\Core\Libs\Math</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

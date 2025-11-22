@@ -1,7 +1,6 @@
 #pragma once
 #include "Math.h"
-#include "Collider.h"
-#include "Mesh.h"
+#include "GameObject.h"
 
 
 struct Ray

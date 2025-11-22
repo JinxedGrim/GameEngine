@@ -10,11 +10,12 @@
 // Direct2D and DirectWrite are justified the same way
 
 //     TO DO 
-// 1. Fix the shadows
 // 2. Fix Lighting
+// 1. Fix the shadows
 // 3. Add skyboxes 
-// 3. Caclulate Vertex norms for all 3 vertices and store them
-// 4. Better reosource management
+// X. Caclulate Vertex norms for all 3 vertices and store them
+// X. Better reosource management
+// X. Fix camera PointAt
 // X. Audio system 
 // X. Voice 
 // X. SpotLights
@@ -114,6 +115,7 @@ namespace TerraPGE
 			for (size_t idx = 0; idx < Lights.size(); idx++)
 			{
 				LightsToRender[idx] = Lights.at(idx);
+				LightsToRender[idx]->Transform.WalkTransformChain();
 				LightsToRender[idx]->CalcVpMats();
 			}
 

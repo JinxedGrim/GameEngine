@@ -182,10 +182,13 @@
     <ClInclude Include="EngineCore.h" />
     <ClInclude Include="Lighting.h" />
     <ClInclude Include="Materials.h" />
+    <ClInclude Include="MatrixMath.h" />
     <ClInclude Include="Mesh.h" />
+    <ClInclude Include="ObjectTransform.h" />
     <ClInclude Include="Physics.h" />
     <ClInclude Include="Rasterizer.h" />
     <ClInclude Include="RayCaster.h" />
+    <ClInclude Include="GameObject.h" />
     <ClInclude Include="Renderable.h" />
     <ClInclude Include="Renderer.h" />
     <ClInclude Include="ResourceManagement.h" />
@@ -196,6 +199,7 @@
     <ClInclude Include="Math.h" />
     <ClInclude Include="Texture.h" />
     <ClInclude Include="UIPP.h" />
+    <ClInclude Include="VectorMath.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="TeaPot.obj">

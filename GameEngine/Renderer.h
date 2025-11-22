@@ -15,6 +15,8 @@ namespace TerraPGE::Renderer
 	static GdiPP* EngineGdi = nullptr;
 
 	BrushPP ClearBrush = -1;
+	static const Vec3 PlaneNormal = { 0.0f, 0.0f, 1.0f };
+
 
 
 	void PrepareRenderingBackend(WndCreator& Wnd)
@@ -93,14 +95,14 @@ namespace TerraPGE::Renderer
 	}
 
 
-	__inline void PorjectToViewSpace(Triangle& Tri, const Camera* Cam)
+	__inline void PorjectToViewSpace(Triangle* Tri, Camera* Cam)
 	{
 		// 3d Space -> Viewed Space
-		Tri.ApplyMatrix(Cam->ViewMatrix);
+		Tri->ApplyMatrix(Cam->CalcCamViewMatrix());
 
 		for (int i = 0; i < 3; i++)
 		{
-			Tri.ViewSpaceVerts[i] = Tri.Points[i];
+			Tri->ViewSpaceVerts[i] = Tri->Points[i];
 		}
 	}
 
@@ -111,7 +113,7 @@ namespace TerraPGE::Renderer
 		if (!Core::DoCull)
 			return false;
 		Vec3 normal = tri.FaceNormal;
-		float facing = normal.Dot(tri.Points[0] - Cam->Transform.GetLocalPosition());
+		float facing = normal.Dot(tri.Points[0] - Cam->Transform.GetWorldPosition());
 		return facing >= 0.0f;
 	}
 
@@ -170,9 +172,8 @@ namespace TerraPGE::Renderer
 
 			if (!ShouldCulltriangle(WorldSpaceTri, Cam)) // backface culling
 			{
-				PorjectToViewSpace(WorldSpaceTri, Cam);
+				PorjectToViewSpace(&WorldSpaceTri, Cam);
 
-				Vec3 PlaneNormal = { 0.0f, 0.0f, 1.0f };
 				int Count = WorldSpaceTri.ClipAgainstPlane(Cam->NearPlane, PlaneNormal, Clipped[0], Clipped[1], Core::DebugClip);
 
 				if (Count == 0)
@@ -180,18 +181,18 @@ namespace TerraPGE::Renderer
 
 				for (int i = 0; i < Count; i++)
 				{
-					Triangle Projected = Clipped[i];
+					Triangle ClippedViewSpace = Clipped[i];
 
 					// Viewed Space -> clip space
-					Projected = Cam->ProjectTriangle(&Projected);
+					Triangle ClipSpaceTri = Cam->ProjectTriangle(&ClippedViewSpace);
 
 					for (int p = 0; p < 3; p++)
 					{
-						Projected.ClipSpaceVerts[p] = Projected.Points[p];
+						ClipSpaceTri.ClipSpaceVerts[p] = ClipSpaceTri.Points[p];
 					}
 
 					// Add Triangle to render list
-					ClipSpaceTris.push_back(Projected);
+					ClipSpaceTris.push_back(ClipSpaceTri);
 				}
 			}
 		}
@@ -199,7 +200,7 @@ namespace TerraPGE::Renderer
 	}
 
 
-	std::vector<Triangle> ScreenSpaceClipping(Triangle* Tri)
+	std::vector<Triangle> Clipping(Triangle* Tri)
 	{
 		Triangle Clipped[2];
 
@@ -269,7 +270,7 @@ namespace TerraPGE::Renderer
 
 			std::vector<Triangle> ClipSpaceTris = VertexShader(Cam, Object);
 
-			for (Triangle& ClipSpaceTri : ClipSpaceTris)
+			for (const Triangle& ClipSpaceTri : ClipSpaceTris)
 			{
 				// Clip Space -> NDC Space
 				Triangle NdcSpaceTri = ClipSpaceTri;
@@ -280,7 +281,7 @@ namespace TerraPGE::Renderer
 				NdcSpaceTri.Scale(Vec3((float)(Core::sx * 0.5f), (float)(Core::sy * 0.5f), 1.0f));
 				NdcSpaceTri.Translate(Vec3((float)(Core::sx * 0.5f), (float)(Core::sy * 0.5f), 0.0f));
 
-				std::vector<Triangle> ClippedScreenSpace = ScreenSpaceClipping(&NdcSpaceTri);
+				std::vector<Triangle> ClippedScreenSpace = Clipping(&NdcSpaceTri);
 
 				// sort faces 
 		//		std::sort(TrisToRender.begin(), TrisToRender.end(), [](const Triangle& t1, const Triangle& t2)
@@ -293,9 +294,9 @@ namespace TerraPGE::Renderer
 
 				ShaderArgs* Args = DEBUG_NEW ShaderArgs();
 				Args->AddShaderDataByValue(TPGE_SHDR_TYPE, Object->SHADER_TYPE, 0);
-				Args->AddShaderDataByValue<Vec3>(TPGE_SHDR_CAMERA_POS, Cam->Transform.GetLocalPosition(), 0);
+				Args->AddShaderDataByValue<Vec3>(TPGE_SHDR_CAMERA_POS, Cam->Transform.GetWorldPosition(), 0);
 				Args->AddShaderDataByValue<Vec3>(TPGE_SHDR_CAMERA_LDIR, Cam->GetLookDirection(), 0);
-				Args->AddShaderDataPtr(TPGE_SHDR_CAMERA_VIEW_MATRIX, &Cam->ViewMatrix, 0);
+				Args->AddShaderDataByValue<Matrix>(TPGE_SHDR_CAMERA_VIEW_MATRIX, Cam->CalcCamViewMatrix(), 0);
 				Args->AddShaderDataPtr(TPGE_SHDR_CAMERA_PROJ_MATRIX, &Cam->ProjectionMatrix, 0);
 				Args->AddShaderDataPtr(TPGE_SHDR_OBJ_MATRIX, &Object->Transform.World, 0);
 				Args->AddShaderDataPtr(TPGE_SHDR_LIGHT_OBJECTS, SceneLights, 0);

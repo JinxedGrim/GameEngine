@@ -5,136 +5,6 @@
 #include "Materials.h"
 
 
-class ObjectTransform
-{
-private:
-	Vec3 LocalPosition = Vec3(1.0f, 5.0f, 1.0f);
-	Vec3 LocalScale = Vec3(1.0f, 1.0f, 1.0f);
-	Vec3 LocalEulerRotation;
-
-	void RecalculateLocal()
-	{
-		Local = Matrix::CreateScalarMatrix(LocalScale) * Matrix::CreateRotationMatrix(LocalEulerRotation) * Matrix::CreateTranslationMatrix(LocalPosition);
-	}
-
-public:
-	Matrix World = Matrix::CreateIdentity();
-	Matrix Normal = Matrix::CreateIdentity();
-	Matrix Local = Matrix::CreateIdentity();
-
-
-	ObjectTransform(const Vec3& pos = Vec3(0.0f, 0.0f, 0.0f), const Vec3& scale = Vec3(1.0f, 1.0f, 1.0f), const Vec3& euler = Vec3(0.0f, 0.0f, 0.0f)): LocalPosition(pos), LocalScale(scale), LocalEulerRotation(euler)
-	{
-		RecalculateLocal();
-	}
-
-
-	Matrix GetLocalRotationMatrix() const
-	{
-		Matrix R = Matrix::CreateIdentity();
-		// Copy just the rotation part of Local (upper-left 3x3)
-		for (int row = 0; row < 3; ++row)
-		{
-			for (int col = 0; col < 3; ++col)
-			{
-				R.fMatrix[row][col] = Local.fMatrix[row][col];
-			}
-		}
-
-		R.fMatrix[0][3] = R.fMatrix[1][3] = R.fMatrix[2][3] = 0.0f;
-		R.fMatrix[3][0] = R.fMatrix[3][1] = R.fMatrix[3][2] = 0.0f;
-
-		return R;
-	}
-
-
-	Matrix GetWorldMatrix() const
-	{
-		Matrix m = Local;
-		for (const ObjectTransform* p = Parent; p; p = p->Parent)
-			m = p->Local * m;
-		return m;
-	}
-
-
-	void SetWorldPosition(const Vec3& pos)
-	{
-		if (this->Parent)
-		{
-			Matrix invParent = Parent->GetWorldMatrix().InverseSRT();
-			this->LocalPosition = Vec3((invParent * Matrix::CreateTranslationMatrix(pos)).fMatrix[3][0], (invParent * Matrix::CreateTranslationMatrix(pos)).fMatrix[3][1], (invParent * Matrix::CreateTranslationMatrix(pos)).fMatrix[3][2]);
-		}
-		else
-			this->LocalPosition = pos;
-
-		RecalculateLocal();
-	}
-
-
-	Vec3 GetWorldPosition() const
-	{
-		if (!this->Parent)
-			return this->LocalPosition;
-
-		Matrix world = Parent->World * Local;
-
-		return Vec3(
-			world.fMatrix[3][0],
-			world.fMatrix[3][1],
-			world.fMatrix[3][2]
-		);
-	}
-
-
-	void SetParent(ObjectTransform* NewParent)
-	{
-		// Remove from old parent
-		if (Parent)
-		{
-			auto& otherChildren = Parent->Children;
-			otherChildren.erase(std::remove(otherChildren.begin(), otherChildren.end(), this), otherChildren.end());
-		}
-
-		Matrix worldBefore = GetWorldMatrix();
-
-		Parent = NewParent;
-		if (Parent) Parent->Children.push_back(this);
-
-		Matrix invParent = Parent ? Parent->GetWorldMatrix().InverseSRT() : Matrix::CreateIdentity();
-		Local = invParent * worldBefore;
-		Local.Decompose(LocalScale, LocalEulerRotation, LocalPosition);
-		RecalculateLocal();
-
-	}
-
-
-	void AddChild(ObjectTransform* child)
-	{
-		child->SetParent(this);
-	}
-
-
-	void WalkTransformChain()
-	{
-		this->World = this->Parent ? this->Parent->World * this->Local : this->Local;
-		for (auto* c : Children) c->WalkTransformChain();	
-	}
-
-
-	void SetLocalPosition(const Vec3& pos) { LocalPosition = pos; RecalculateLocal(); }
-	void SetLocalScale(const Vec3& s) { LocalScale = s; RecalculateLocal(); }
-	void SetLocalEulerAngles(const Vec3& r) { LocalEulerRotation = r; RecalculateLocal(); }
-
-	const Vec3& GetLocalPosition() const { return LocalPosition; }
-	const Vec3& GetLocalScale() const { return LocalScale; }
-	const Vec3& GetLocalEulerAngles() const { return LocalEulerRotation; }
-	
-public:
-	ObjectTransform* Parent = nullptr;
-	std::vector<ObjectTransform*> Children;
-};
-
-
 class Triangle
 {
 	public:
@@ -332,10 +202,9 @@ class Triangle
 	}
 
 	Vec4 Points[3] = {};
-	size_t Points_[3] = {};
 
 
-	Vec3 WorldSpaceVerts[3] = {};
+	Vec4 WorldSpaceVerts[3] = {};
 	Vec4 ViewSpaceVerts[3] = {};
 	Vec4 ClipSpaceVerts[3] = {};
 
@@ -462,8 +331,6 @@ class Mesh
 			SS << Line;
 			std::string Str = SS.str();
 
-			std::cout << "Verts: ";
-
 			if (Str.find("v ") != std::string::npos)
 			{
 				Vec3 Vert;
@@ -573,14 +440,11 @@ class Mesh
 			{
 				SS >> Unused >> Unused >> Unused >> Unused >> Unused >> Unused >> MtlLibFn;
 			}
+		}
 
 #ifdef _DEBUG
-			std::cout << VertexCache.size() << " Normals: ";
-			std::cout << Normals.size() << " TexturedCahce: " << TexCache.size();
-			std::cout << " Faces: " << Triangles.size() << "\r";
+		std::cout << "Done" << std::endl;
 #endif
-
-		}
 
 		FnPath = FnPath.substr(FnPath.find_last_of("/\\") + 1);
 		FnPath = FnPath.substr(0, FnPath.find_last_of(".obj") - 3);

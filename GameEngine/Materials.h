@@ -87,6 +87,7 @@ public:
 		}
 
 		std::string line;
+		std::cout << "Loading Material: " << MtlFn << std::endl;
 		while (std::getline(mtlFile, line))
 		{
 			std::stringstream ss(line);
@@ -135,6 +136,9 @@ public:
 							ssProp >> textureFilePath;
 							if (textureFilePath != "")
 							{
+#ifdef _DEBUG
+								std::cout << "Loading Texture (ka): " << textureFilePath << std::endl;
+#endif
 								Mat->Textures.push_back(DEBUG_NEW Texture(textureFilePath));
 							}
 						}
@@ -144,6 +148,9 @@ public:
 							ssProp >> textureFilePath;
 							if (textureFilePath != "")
 							{
+#ifdef _DEBUG
+								std::cout << "Loading Texture (kd): " << textureFilePath << std::endl;
+#endif
 								Mat->Textures.push_back(DEBUG_NEW Texture(textureFilePath));
 							}
 						}
