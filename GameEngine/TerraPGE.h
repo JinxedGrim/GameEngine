@@ -10,8 +10,9 @@
 // Direct2D and DirectWrite are justified the same way
 
 //     TO DO 
-// 2. Fix Lighting
-// 1. Fix the shadows
+//    Fix Rednering
+// 1. Fix Lighting
+// 2. Fix the shadows
 // 3. Add skyboxes 
 // X. Caclulate Vertex norms for all 3 vertices and store them
 // X. Better reosource management
@@ -72,11 +73,24 @@ namespace TerraPGE
 	}
 
 
+	void MemCheckpoint()
+	{
+
+	}
+
+
 	//TerraGL (Proposed name for GdiPP)
 	//TerraPGE (Proposed name for this engine)
 	//Engine Pipeline (In a Loop): Check Window State -> Check Inputs -> Clear Screen -> Make Draw Calls (Rendering Pipeline) -> Draw Double Buffer
 	void Run(WndCreator& Wnd, Scene* FirstScene)
 	{
+#ifdef _DEBUG
+		_CrtMemState stateBefore;
+		_CrtMemState stateAfter;
+		_CrtMemState stateDiff;
+#endif
+
+
 		// Counters
 		MSG msg = { 0 };
 		double ElapsedTime = 0.0f;
@@ -94,8 +108,13 @@ namespace TerraPGE
 		auto FrameStart = std::chrono::system_clock::now();
 		auto LastPhysicsTime = std::chrono::system_clock::now();
 
+		std::vector<Renderable*> Roots;
+
 		while (!Wnd.Input.IsKeyPressed(VK_RETURN))
 		{
+#ifdef _DEBUG
+			_CrtMemCheckpoint(&stateBefore);
+#endif
 			FrameStart = std::chrono::system_clock::now();
 
 			Core::UpdateWindow(Wnd, &msg);
@@ -103,6 +122,7 @@ namespace TerraPGE
 			Renderer::ClearScreen();
 			ToRender.clear();
 			Lights.clear();
+			Roots.clear();
 
 			// call draw code
 			CurrScene->RunTick(Renderer::EngineGdi, Wnd, (float)ElapsedTime, &ToRender, &Lights);
@@ -118,8 +138,6 @@ namespace TerraPGE
 				LightsToRender[idx]->Transform.WalkTransformChain();
 				LightsToRender[idx]->CalcVpMats();
 			}
-
-			std::vector<Renderable*> Roots;
 
 			for (size_t idx = 0; idx < ToRender.size(); idx++)
 			{
@@ -170,8 +188,8 @@ namespace TerraPGE
 				Obj->Transform.WalkTransformChain();
 			}
 
+
 			CurrScene->MainCamera->Transform.WalkTransformChain();
-			CurrScene->MainCamera->CalcCamViewMatrix();
 
 			//Renderer::RenderShadowMaps(ObjectsToRender, LightsToRender, ToRender.size(), Lights.size(), Core::ShadowMap);
 			//Renderer::RenderDepthMap(ObjectsToRender, ToRender.size(), Core::DepthBuffer, CurrScene->MainCamera->ViewMatrix);
@@ -213,12 +231,21 @@ namespace TerraPGE
 				// Get current memory usage
 				CurrMB = Core::GetUsedMemory();
 			}
+
+#ifdef _DEBUG
+			_CrtMemCheckpoint(&stateAfter);
+
+			if (_CrtMemDifference(&stateDiff, &stateBefore, &stateAfter))
+			{
+				// This prints only allocations that happened inside RenderFrame
+				_CrtMemDumpStatistics(&stateDiff);
+				_CrtMemDumpAllObjectsSince(&stateBefore);
+			}
+#endif
 		}
 
 		CurrScene->EndScene();
-
 		Wnd.Destroy();
-
 		Core::EngineCleanup();
 	}
 }

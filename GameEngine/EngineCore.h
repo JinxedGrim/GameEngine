@@ -54,7 +54,7 @@ namespace TerraPGE::Core
 	bool WireFrame = false;
 	bool ShowTriLines = false;
 	bool DebugClip = false;
-	bool DoShadows = true;
+	bool DoShadows = false;
 	bool ShowNormals = false;
 	bool NormalMapping = false;
 
@@ -195,3 +195,4 @@ namespace TerraPGE::Core
 		Core::UpdateInput(Wnd);
 	}
 }
+

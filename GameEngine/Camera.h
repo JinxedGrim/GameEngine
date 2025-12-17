@@ -16,9 +16,11 @@ class Camera: public GameObject
 		this->Near = Near;
 		this->Far = Far;
 		this->NearPlane = { 0.0f, 0.0f, Near };
+		this->CamUp = {0.0f, 1.0f, 0.0f};
 
 		this->CalcProjectionMat();
 	}
+
 
 	Camera(Vec3 Position, Vec3 TargetLookPos, Vec3 CamUp, float AspectRatio, float Fov, float Near, float Far) : GameObject(Position)
 	{
@@ -28,53 +30,56 @@ class Camera: public GameObject
 		this->Far = Far;
 		this->CamUp = CamUp;
 		this->NearPlane = { 0.0f, 0.0f, Near };
-		this->Transform.PointAt(TargetLookPos, CamUp);
+
+		//this->Transform.PointAt(TargetLookPos, CamUp);
 		this->CalcProjectionMat();
 	}
 
 
 	//Calculate projection matrix of this camera
-	Matrix CalcProjectionMat()
+	void CalcProjectionMat()
 	{
-		return Matrix::CalcPerspectiveMatrix(this->Fov, this->AspectRatio, this->Near, this->Far);
+		this->ProjectionMatrix = Matrix::CalcPerspectiveMatrix(this->Fov, this->AspectRatio, this->Near, this->Far);
 	}
 
 
-	Triangle ProjectTriangle(const Triangle* InTriangle, Matrix& Mat)
-	{
-		Triangle OutTri;
+	//Triangle ProjectTriangle(const Triangle* InTriangle, Matrix& Mat)
+	//{
+	//	Triangle OutTri;
 
-		OutTri.Points[0] = InTriangle->Points[0] * Mat;
-		OutTri.Points[1] = InTriangle->Points[1] * Mat;
-		OutTri.Points[2] = InTriangle->Points[2] * Mat;
+	//	OutTri.Points[0] = InTriangle->Points[0] * Mat;
+	//	OutTri.Points[1] = InTriangle->Points[1] * Mat;
+	//	OutTri.Points[2] = InTriangle->Points[2] * Mat;
 
-		return OutTri;
-	}
+	//	return OutTri;
+	//}
 
 
-	Mesh ProjectMesh(Mesh InMesh)
-	{
-		Mesh OutMesh = Mesh();
+	//Mesh ProjectMesh(Mesh InMesh)
+	//{
+	//	Mesh OutMesh = Mesh();
 
-		for (int i = 0; i < InMesh.Triangles.size(); i++)
-		{
-			Triangle NewTri;
+	//	for (int i = 0; i < InMesh.Triangles.size(); i++)
+	//	{
+	//		Triangle NewTri;
 
-			NewTri.Points[0] = InMesh.Triangles.at(i).Points[0] * this->ProjectionMatrix;
-			NewTri.Points[1] = InMesh.Triangles.at(i).Points[1] * this->ProjectionMatrix;
-			NewTri.Points[2] = InMesh.Triangles.at(i).Points[2] * this->ProjectionMatrix;
+	//		NewTri.Points[0] = InMesh.Triangles.at(i).Points[0] * this->ProjectionMatrix;
+	//		NewTri.Points[1] = InMesh.Triangles.at(i).Points[1] * this->ProjectionMatrix;
+	//		NewTri.Points[2] = InMesh.Triangles.at(i).Points[2] * this->ProjectionMatrix;
 
-			OutMesh.Triangles.push_back(NewTri);
-		}
+	//		OutMesh.Triangles.push_back(NewTri);
+	//	}
 
-		return OutMesh;
-	}
+	//	return OutMesh;
+	//}
 
 
 	Triangle ProjectTriangle(const Triangle* InTriangle)
 	{
 		Triangle OutTri = *InTriangle;
 
+		this->CalcProjectionMat();
+
 		OutTri.Points[0] = InTriangle->Points[0] * this->ProjectionMatrix;
 		OutTri.Points[1] = InTriangle->Points[1] * this->ProjectionMatrix;
 		OutTri.Points[2] = InTriangle->Points[2] * this->ProjectionMatrix;
@@ -83,12 +88,12 @@ class Camera: public GameObject
 	}
 
 
-	void ProjectTriangle(const Triangle* InTriangle, Triangle& OutTri)
-	{
-		OutTri.Points[0] = InTriangle->Points[0] * this->ProjectionMatrix;
-		OutTri.Points[1] = InTriangle->Points[1] * this->ProjectionMatrix;
-		OutTri.Points[2] = InTriangle->Points[2] * this->ProjectionMatrix;
-	}
+	//void ProjectTriangle(const Triangle* InTriangle, Triangle& OutTri)
+	//{
+	//	OutTri.Points[0] = InTriangle->Points[0] * this->ProjectionMatrix;
+	//	OutTri.Points[1] = InTriangle->Points[1] * this->ProjectionMatrix;
+	//	OutTri.Points[2] = InTriangle->Points[2] * this->ProjectionMatrix;
+	//}
 
 
 	Triangle TriangleProjected(const Triangle* InTriangle)
@@ -102,9 +107,21 @@ class Camera: public GameObject
 	}
 
 
-	Matrix __inline __fastcall CalcCamViewMatrix()
+	void __inline __fastcall CalcCamViewMatrix(const Vec3& TargetPos)
 	{
-		return this->Transform.CalculateViewMatrix();
+		this->ViewMatrix = Matrix::CalcViewMatrix(this->Transform.GetWorldPosition(), TargetPos, this->CamUp);
+	}
+
+
+	void __inline __fastcall CalcCamLookMatrix(const Vec3& Dir)
+	{
+		this->ViewMatrix = Matrix::CalcLookAtMatrix(this->Transform.GetWorldPosition(), Dir, this->CamUp);
+	}
+
+
+	Matrix __inline GetViewMatrix()
+	{
+		return this->ViewMatrix = this->Transform.GetWorldMatrix().QuickInversed();
 	}
 
 
@@ -116,20 +133,20 @@ class Camera: public GameObject
 
 	Vec3 GetLookDirection()
 	{
-		return this->GetForward().Normalized();
+		return Vec3::EulerToDirection(this->Transform.GetWorldRotation());
+		//return this->GetForward().Normalized();
 	}
 
 
-	Vec3 GetForward()
-	{
-		// Assuming row-major and SRT order (Model = Parent * Local)
-		Matrix world = Transform.GetWorldMatrix(); // already walked
-		return Transform.GetWorldForward();
-	}
+	//Vec3 GetForward()
+	//{
+	//	Matrix world = Transform.GetWorldMatrix(); // already walked
+	//	return Transform.GetWorldForward();
+	//}
 
 	Vec3 GetNewVelocity()
 	{
-		return GetForward().Normalized() * Velocity;
+		return GetLookDirection().Normalized() * Velocity;
 	}
 
 	
@@ -138,6 +155,7 @@ class Camera: public GameObject
 	float Velocity = 8.0f;
 
 	Matrix ProjectionMatrix = {};
+	Matrix ViewMatrix = {};
 	float Fov = 90.0f;
 	float AspectRatio = 0.f;
 	float Near = 0.1f;

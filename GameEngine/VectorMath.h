@@ -30,6 +30,7 @@ float Clamp(float Min, float Max, float Val)
 
 class Vec4;
 class Matrix;
+class Matrix3x3;
 
 
 class Vec2
@@ -192,16 +193,17 @@ public:
 	}
 
 
-	// Calculates Dot Product (How similar two vecs are)
-	const float Dot(const Vec3& Rhs) const
-	{
-		return { this->x * Rhs.x + this->y * Rhs.y + this->z * Rhs.z };
-	}
-
 
 	float __inline LengthSquared()
 	{
 		return this->Dot(*this);
+	}
+
+
+	// Calculates Dot Product (How similar two vecs are)
+	const float Dot(const Vec3& Rhs) const
+	{
+		return { this->x * Rhs.x + this->y * Rhs.y + this->z * Rhs.z };
 	}
 
 
@@ -261,6 +263,26 @@ public:
 	float Angle(const Vec3 To) const
 	{
 		return (float)ToDegree(acos(Clamp(-1.f, 1.f, this->Dot(To))));
+	}
+
+
+	static Vec3 EulerToDirection(const Vec3& eulerDeg)
+	{
+		float pitch = ToRad(eulerDeg.x);
+		float yaw = ToRad(eulerDeg.y);
+
+		float cp = cosf(pitch);
+		float sp = sinf(pitch);
+		float cy = cosf(yaw);
+		float sy = sinf(yaw);
+
+
+		Vec3 forward;
+		forward.x = sy * cp;
+		forward.y = sp;
+		forward.z = cy * cp;
+
+		return forward.Normalized();
 	}
 
 
@@ -327,7 +349,6 @@ public:
 	{
 		return (*this - b).Normalized();
 	}
-
 
 	// operators
 	Vec3 operator + (const Vec3& b) const
@@ -408,7 +429,12 @@ public:
 
 
 	Vec3 operator * (const Matrix& b) const;
+
+
 	void operator *= (const Matrix& b);
+
+	Vec3 operator*(const Matrix3x3& m) const;
+
 
 	Vec3 operator / (const Vec3& b) const
 	{
@@ -532,6 +558,7 @@ public:
 		this->w = _w;
 	}
 
+
 	Vec4(const Vec3& _Vec, float _w)
 	{
 		this->x = _Vec.x;
@@ -540,26 +567,29 @@ public:
 		this->w = _w;
 	}
 
+
 	__inline Vec3 xyz() const
 	{
 		return Vec3(this->x, this->y, this->z);
 	}
+
 
 	__inline Vec3 GetVec3() const
 	{
 		return Vec3(this->x, this->y, this->z);
 	}
 
+
 	void __inline CorrectPerspective()
 	{
 		if (this->w != 0)
 		{
-			float invW = 1.0f / this->w;
-			this->x *= invW;
-			this->y *= invW;
-			this->z *= invW;
+			this->x /= this->w;
+			this->y /= this->w;
+			this->z /= this->w;
 		}
 	}
+
 
 	Vec4 CalculateIntersectionPoint(const Vec4& LineEnd, const Vec3& PointOnPlane, const Vec3& PlaneNormal, float* OutT = nullptr) const
 	{
@@ -581,9 +611,12 @@ public:
 		return LineStart + (LineEnd - LineStart) * t;
 	}
 
+
 	Vec4 operator * (const Matrix& b) const;
 
+
 	void operator *= (const Matrix& b);
+
 
 	Vec4& operator=(const Vec3& b)
 	{
@@ -593,6 +626,7 @@ public:
 		w = 1.0f;
 		return *this;
 	}
+
 
 	Vec4 operator-(const Vec3& b) const
 	{
@@ -605,6 +639,7 @@ public:
 		};
 	}
 
+
 	Vec4 operator+(const Vec3& b) const
 	{
 		return
@@ -616,12 +651,14 @@ public:
 		};
 	}
 
+
 	void operator+=(const Vec3& b)
 	{
 		this->x += b.x;
 		this->y += b.y;
 		this->z += b.z;
 	}
+
 
 	Vec4 operator*(const Vec3& b) const
 	{
@@ -634,6 +671,7 @@ public:
 		};
 	}
 
+
 	Vec4 operator*(const float& b) const
 	{
 		return
@@ -644,6 +682,7 @@ public:
 			this->w
 		};
 	}
+
 
 	Vec4 operator/(const float& b) const
 	{
@@ -656,6 +695,7 @@ public:
 		};
 	}
 
+
 	Vec4 operator-(const Vec4& b) const
 	{
 		return
@@ -666,6 +706,7 @@ public:
 			this->w
 		};
 	}
+
 
 	Vec4 operator+(const Vec4& b) const
 	{
@@ -678,6 +719,7 @@ public:
 		};
 	}
 
+
 	void operator*=(const Vec3& b)
 	{
 		this->x *= b.x;
@@ -685,10 +727,12 @@ public:
 		this->z *= b.z;
 	}
 
+
 	operator Vec3() const
 	{
 		return Vec3(x, y, z);
 	}
+
 
 	float x = 0.0f;
 	float y = 0.0f;
@@ -707,12 +751,12 @@ Vec4 Vec3::MakeVec4()
 
 std::ostream& operator << (std::ostream& os, const Vec4& v)
 {
-	os << "x: " << v.x << " y: " << v.y << " z: " << v.z << " w: " << v.w;
+	os << "(" << v.x << ", " << v.y << ", " << v.z << ", " << v.w << ")";
 	return os;
 }
 std::ostream& operator << (std::ostream& os, const Vec3& v)
 {
-	os << "x: " << v.x << " y: " << v.y << " z: " << v.z;
+	os << "(" << v.x << ", " << v.y << ", " << v.z << ")";
 	return os;
 }
 

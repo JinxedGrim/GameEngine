@@ -27,7 +27,7 @@ public:
 	static Vec3 DirToEuler(const Vec3& d_raw)
 	{
 		Vec3 d = d_raw.Normalized();
-		float pitch = asinf(-d.y);
+		float pitch = asinf(d.y);
 		float yaw = atan2f(d.x, d.z);
 		float roll = 0.0f;
 		return Vec3(pitch, yaw, roll);

@@ -2,7 +2,7 @@
 
 #ifndef MATH_RIGHT_HANDED
 #ifndef MATH_LEFT_HANDED
-#define MATH_RIGHT_HANDED
+#define MATH_LEFT_HANDED
 #endif
 #endif
 
@@ -25,15 +25,17 @@
 
 Vec3 Vec3::operator * (const Matrix& m) const
 {
-	Vec3 Out;
+	// For row-Vector, row-major, left handed storage:
+ 
+	//x' = x*m00 + y*m10 + z*m20 + w*m30;
+	//y' = x*m01 + y*m11 + z*m21 + w*m31;
+	//z' = x*m02 + y*m12 + z*m22 + w*m32;
 
 	return Vec3(
-		x * m._11 + y * m._12 + z * m._13 + m._41,
-		x * m._21 + y * m._22 + z * m._23 + m._42,
-		x * m._31 + y * m._32 + z * m._33 + m._43
+		x * m._11 + y * m._21 + z * m._31 + m._41,
+		x * m._12 + y * m._22 + z * m._32 + m._42,
+		x * m._13 + y * m._23 + z * m._33 + m._43
 	);
-
-	return Out;
 }
 
 
@@ -43,23 +45,30 @@ void Vec3::operator *= (const Matrix& b)
 	float Tmpy = this->y;
 	float Tmpz = this->z;
 
-	this->x = Tmpx * b.fMatrix[0][0] + Tmpy * b.fMatrix[1][0] + Tmpz * b.fMatrix[2][0] + b.fMatrix[3][0];
-	this->y = Tmpx * b.fMatrix[0][1] + Tmpy * b.fMatrix[1][1] + Tmpz * b.fMatrix[2][1] + b.fMatrix[3][1];
-	this->z = Tmpx * b.fMatrix[0][2] + Tmpy * b.fMatrix[1][2] + Tmpz * b.fMatrix[2][2] + b.fMatrix[3][2];
-	float w = Tmpx * b.fMatrix[0][3] + Tmpy * b.fMatrix[1][3] + Tmpz * b.fMatrix[2][3] + b.fMatrix[3][3];
+	this->x = Tmpx * b._11 + Tmpy * b._21 + Tmpz * b._31 + b._41;
+	this->y = Tmpx * b._12 + Tmpy * b._22 + Tmpz * b._32 + b._42;
+	this->z = Tmpx * b._13 + Tmpy * b._23 + Tmpz * b._33 + b._43;
 }
 
 
 Vec4 Vec4::operator * (const Matrix& b) const
 {
-	Vec4 Out;
+	return Vec4(
+		x * b._11 + y * b._21 + z * b._31 + w * b._41,
+		x * b._12 + y * b._22 + z * b._32 + w * b._42,
+		x * b._13 + y * b._23 + z * b._33 + w * b._43,
+		x * b._14 + y * b._24 + z * b._34 + w * b._44
+	);
+}
 
-	Out.x = this->x * b.fMatrix[0][0] + this->y * b.fMatrix[1][0] + this->z * b.fMatrix[2][0] + this->w * b.fMatrix[3][0];
-	Out.y = this->x * b.fMatrix[0][1] + this->y * b.fMatrix[1][1] + this->z * b.fMatrix[2][1] + this->w * b.fMatrix[3][1];
-	Out.z = this->x * b.fMatrix[0][2] + this->y * b.fMatrix[1][2] + this->z * b.fMatrix[2][2] + this->w * b.fMatrix[3][2];
-	Out.w = this->x * b.fMatrix[0][3] + this->y * b.fMatrix[1][3] + this->z * b.fMatrix[2][3] + this->w * b.fMatrix[3][3];
 
-	return Out;
+Vec3 Vec3::operator * (const Matrix3x3& m) const
+{
+	return Vec3(
+		x * m._11 + y * m._21 + z * m._31,
+		x * m._12 + y * m._22 + z * m._32,
+		x * m._13 + y * m._23 + z * m._33
+	);
 }
 
 
@@ -71,67 +80,55 @@ void Vec4::operator *= (const Matrix& b)
 	float _tmpw = this->w;
 
 
-	this->x = _tmpx * b.fMatrix[0][0] + _tmpy * b.fMatrix[1][0] + _tmpz * b.fMatrix[2][0] + _tmpw * b.fMatrix[3][0];
-	this->y = _tmpx * b.fMatrix[0][1] + _tmpy * b.fMatrix[1][1] + _tmpz * b.fMatrix[2][1] + _tmpw * b.fMatrix[3][1];
-	this->z = _tmpx * b.fMatrix[0][2] + _tmpy * b.fMatrix[1][2] + _tmpz * b.fMatrix[2][2] + _tmpw * b.fMatrix[3][2];
-	this->w = _tmpx * b.fMatrix[0][3] + _tmpy * b.fMatrix[1][3] + _tmpz * b.fMatrix[2][3] + _tmpw * b.fMatrix[3][3];
+	this->x = _tmpx * b._11 + _tmpy * b._21 + _tmpz * b._31 + _tmpw * b._41;
+	this->y = _tmpx * b._12 + _tmpy * b._22 + _tmpz * b._32 + _tmpw * b._42;
+	this->z = _tmpx * b._13 + _tmpy * b._23 + _tmpz * b._33 + _tmpw * b._43;
+	this->w = _tmpx * b._14 + _tmpy * b._24 + _tmpz * b._34 + _tmpw * b._44;
 }
 
 
-inline Matrix3x3 ExtractRotation3x3(const Matrix& M)
-{
-	Matrix3x3 R;
-
-	R._11 = M._11; R._12 = M._12; R._13 = M._13;
-	R._21 = M._21; R._22 = M._22; R._23 = M._23;
-	R._31 = M._31; R._32 = M._32; R._33 = M._33;
-
-	return R;
-}
-
-
-__inline Vec3 Matrix::ToEulerAnglesXYZ() const
-{
-	float r00 = fMatrix[0][0], r01 = fMatrix[0][1], r02 = fMatrix[0][2];
-	float r10 = fMatrix[1][0], r11 = fMatrix[1][1], r12 = fMatrix[1][2];
-	float r20 = fMatrix[2][0], r21 = fMatrix[2][1], r22 = fMatrix[2][2];
-
-	float pitch, yaw, roll;
-
-	// ---- yaw extraction (from forward.x and forward.z) ----
-	yaw = std::atan2(r20, r22);
-
-	// ---- pitch extraction ----
-	// pitch = asin(-forward.y)
-	float cy = std::sqrt(r20 * r20 + r22 * r22);
-	pitch = std::atan2(-r21, cy);
-
-	// ---- roll extraction ----
-	if (cy > 1e-6f)     // not in gimbal lock
-	{
-		roll = std::atan2(r01, r00);
-	}
-	else
-	{
-		// gimbal lock: pitch is +-90
-		roll = std::atan2(-r12, r11);
-	}
-
-	return Vec3(
-		ToDegree(pitch),
-		ToDegree(yaw),
-		ToDegree(roll)
-	);
-}
+//__inline Vec3 Matrix::ToEulerAnglesXYZ() const
+//{
+//	float r00 = fMatrix[0][0], r01 = fMatrix[0][1], r02 = fMatrix[0][2];
+//	float r10 = fMatrix[1][0], r11 = fMatrix[1][1], r12 = fMatrix[1][2];
+//	float r20 = fMatrix[2][0], r21 = fMatrix[2][1], r22 = fMatrix[2][2];
+//
+//	float pitch, yaw, roll;
+//
+//	// ---- yaw extraction (from forward.x and forward.z) ----
+//	yaw = std::atan2(r20, r22);
+//
+//	// ---- pitch extraction ----
+//	// pitch = asin(-forward.y)
+//	float cy = std::sqrt(r20 * r20 + r22 * r22);
+//	pitch = std::atan2(-r21, cy);
+//
+//	// ---- roll extraction ----
+//	if (cy > 1e-6f)     // not in gimbal lock
+//	{
+//		roll = std::atan2(r01, r00);
+//	}
+//	else
+//	{
+//		// gimbal lock: pitch is +-90
+//		roll = std::atan2(-r12, r11);
+//	}
+//
+//	return Vec3(
+//		ToDegree(pitch),
+//		ToDegree(yaw),
+//		ToDegree(roll)
+//	);
+//}
 
 
 Matrix Matrix::CreateScalarMatrix(const Vec3& Scalar)
 {
 	Matrix Out;
 
-	Out.fMatrix[0][0] = 1.f * Scalar.x;
-	Out.fMatrix[1][1] = 1.f * Scalar.y;
-	Out.fMatrix[2][2] = 1.f * Scalar.z;
+	Out.fMatrix[0][0] = Scalar.x;
+	Out.fMatrix[1][1] = Scalar.y;
+	Out.fMatrix[2][2] = Scalar.z;
 	Out.fMatrix[3][3] = 1.f;
 
 	return Out;
@@ -141,62 +138,60 @@ Matrix Matrix::CreateScalarMatrix(const Vec3& Scalar)
 Matrix Matrix::CreateTranslationMatrix(const Vec3& Translation)
 {
 	Matrix Out = Matrix::CreateIdentity();
-	Out._41 = Translation.x;
-	Out._42 = Translation.y;
-	Out._43 = Translation.z;
+	Out.SetTranslation(Translation);
 	return Out;
 }
 
 
 Matrix Matrix::CreateRotationMatrix(const Vec3& RotationDeg) // pitch yaw roll
 {
-	float RotRadsZ = RotationDeg.z;
-	Matrix A;
-	Matrix B;
-	Matrix C;
-	Matrix::CreateRotationX(&A, ToRad(RotationDeg.x)); // pitch
-	Matrix::CreateRotationY(&B, ToRad(RotationDeg.y)); // yaw
-	Matrix::CreateRotationZ(&C, ToRad(RotRadsZ));      // roll
+	Matrix Rx; // Pitch
+	Matrix Ry; // Yaw
+	Matrix Rz; // Roll
+	Matrix::CreateRotationX(&Rx, RotationDeg.x);      // pitch
+	Matrix::CreateRotationY(&Ry, RotationDeg.y);      // yaw
+	Matrix::CreateRotationZ(&Rz, RotationDeg.z);      // roll
 
-	A = C * B * A;
+	Matrix R = Rz * Ry * Rx;
 
-	return A;
+	return R;
 }
 
 
-__inline Matrix Matrix::CreateMatrixFromRigthForwardUp(const Vec3& Right, const Vec3& Up, const Vec3& Forward, const Vec3& Trans)
-{
-	Matrix rotMatrix = Matrix::CreateIdentity();
-
-	// row-major: row0 = right, row1 = up, row2 = forward
-	rotMatrix._11 = Right.x;  rotMatrix._12 = Right.y;  rotMatrix._13 = Right.z;  rotMatrix._14 = 0.0f;
-	rotMatrix._21 = Up.x;     rotMatrix._22 = Up.y;     rotMatrix._23 = Up.z;     rotMatrix._24 = 0.0f;
-	rotMatrix._31 = Forward.x; rotMatrix._32 = Forward.y; rotMatrix._33 = Forward.z; rotMatrix._34 = 0.0f;
-
-	// translation row
-	rotMatrix._41 = Trans.x; rotMatrix._42 = Trans.y; rotMatrix._43 = Trans.z; rotMatrix._44 = 1.0f;
-
-	return rotMatrix;
-}
-
-
-void Matrix::CalcScalarMatrix(const Vec3& Scalar)
-{
-	this->MakeIdentity();
-	this->fMatrix[0][0] = 1.f * Scalar.x;
-	this->fMatrix[1][1] = 1.f * Scalar.y;
-	this->fMatrix[2][2] = 1.f * Scalar.z;
-	this->fMatrix[3][3] = 1.f;
-}
+//__inline Matrix Matrix::CreateMatrixFromRigthForwardUp(const Vec3& Right, const Vec3& Up, const Vec3& Forward, const Vec3& Trans)
+//{
+//	Matrix rotMatrix = Matrix::CreateIdentity();
+//
+//	// row-major: row0 = right, row1 = up, row2 = forward
+//	rotMatrix._11 = Right.x;  rotMatrix._12 = Right.y;  rotMatrix._13 = Right.z;  rotMatrix._14 = 0.0f;
+//	rotMatrix._21 = Up.x;     rotMatrix._22 = Up.y;     rotMatrix._23 = Up.z;     rotMatrix._24 = 0.0f;
+//	rotMatrix._31 = Forward.x; rotMatrix._32 = Forward.y; rotMatrix._33 = Forward.z; rotMatrix._34 = 0.0f;
+//
+//	// translation row
+//	rotMatrix._41 = Trans.x; rotMatrix._42 = Trans.y; rotMatrix._43 = Trans.z; rotMatrix._44 = 1.0f;
+//
+//	return rotMatrix;
+//}
 
 
-void Matrix::CalcTranslationMatrix(const Vec3& Translation)
-{
-	this->MakeIdentity();
-	this->fMatrix[3][0] = Translation.x;
-	this->fMatrix[3][1] = Translation.y;
-	this->fMatrix[3][2] = Translation.z;
-}
+//void Matrix::CalcScalarMatrix(const Vec3& Scalar)
+//{
+//	this->MakeIdentity();
+//	this->fMatrix[0][0] = 1.f * Scalar.x;
+//	this->fMatrix[1][1] = 1.f * Scalar.y;
+//	this->fMatrix[2][2] = 1.f * Scalar.z;
+//	this->fMatrix[3][3] = 1.f;
+//}
+//
+//
+//void Matrix::CalcTranslationMatrix(const Vec3& Translation)
+//{
+//	this->MakeIdentity();
+//	this->fMatrix[3][0] = Translation.x;
+//	this->fMatrix[3][1] = Translation.y;
+//	this->fMatrix[3][2] = Translation.z;
+//}
+//
 
 
 //void Matrix::CalcRotationMatrix(const Vec3& RotationDeg) // pitch yaw roll
@@ -255,19 +250,20 @@ void Matrix::CalcTranslationMatrix(const Vec3& Translation)
 //	this->_41 = Pos.x;    this->_42 = Pos.y;    this->_43 = Pos.z;    this->_44 = 1.0f;
 //}
 
+
 Matrix Matrix::ConstructViewMatrix(const Vec3& Right, const Vec3& Up, const Vec3& Forward, const Vec3& EyePos)
 {
 	Matrix View = Matrix::CreateIdentity();
 	//Matrix::CreateTranslationMatrix(-EyePos);
 	
 	// Rotation part (inverse rotation = transpose for orthogonal)
-	View._11 = Right.x;   View._12 = Right.y;   View._13 = Right.z;
-	View._21 = Up.x;      View._22 = Up.y;      View._23 = Up.z;
-	View._31 = Forward.x; View._32 = Forward.y; View._33 = Forward.z;
+	View._11 = Right.x;   View._12 = Up.x;   View._13 = Forward.x;
+	View._21 = Right.y;   View._22 = Up.y;   View._23 = Forward.y;
+	View._31 = Right.z;   View._32 = Up.z;   View._33 = Forward.z;
 
 	View._14 = -Right.Dot(EyePos);
 	View._24 = -Up.Dot(EyePos);
-	View._34 = Forward.Dot(EyePos); // changes dependent upon handedness TODO:  add handedness macro
+	View._34 = -Forward.Dot(EyePos);
 	View._44 = 1.0f;
 
 	return View;
@@ -283,8 +279,10 @@ Matrix Matrix::CalcLookAtMatrix(const Vec3& EyePos, const Vec3& Dir, const Vec3&
 	return Matrix::ConstructViewMatrix(Right, UpReal, Forward, EyePos);
 }
 
+
 Matrix Matrix::CalcViewMatrix(const Vec3& EyePos, const Vec3& TargetPos, const Vec3& Up)
 {
+	// LEFT HANDED
 	Vec3 forward = (TargetPos - EyePos).Normalized();
 
 	return 	Matrix::CalcLookAtMatrix(EyePos, forward, Up);
@@ -338,7 +336,7 @@ __inline Matrix Matrix::InverseSRT() const
 	out.fMatrix[2][2] /= sz;
 
 	// Invert translation
-	Vec3 t(fMatrix[3][0], fMatrix[3][1], fMatrix[3][2]);
+	Vec3 t = this->GetTranslation();
 	Vec3 invT = -(t);
 
 	// Compute transformed translation
@@ -359,15 +357,10 @@ __inline Matrix Matrix::InverseSRT() const
 __inline void Matrix::Decompose(Vec3& outScale, Vec3& outEuler, Vec3& outPos) const
 {
 	// 1. Extract translation (T)
-	outPos = Vec3(
-		fMatrix[3][0],
-		fMatrix[3][1],
-		fMatrix[3][2]
-	);
+	outPos = this->GetTranslation();
 
 	// 2. Remove translation
-	Matrix M = *this;
-	M.fMatrix[3][0] = M.fMatrix[3][1] = M.fMatrix[3][2] = 0.0f;
+	Matrix M = this->GetBasis();
 
 	// 3. Extract scale from the basis vectors (since M = S*R)
 	Vec3 X(M.fMatrix[0][0], M.fMatrix[0][1], M.fMatrix[0][2]);
@@ -391,7 +384,7 @@ __inline void Matrix::Decompose(Vec3& outScale, Vec3& outEuler, Vec3& outPos) co
 	R.fMatrix[2][0] = Z.x; R.fMatrix[2][1] = Z.y; R.fMatrix[2][2] = Z.z;
 
 	// 5. Convert R to Euler
-	outEuler = R.ToEulerAnglesXYZ(); // You must implement this
+	outEuler = R.ExtractEuler(); // You must implement this
 }
 
 
@@ -458,4 +451,4 @@ public:
 #define DEBUG_NEW new (_NORMAL_BLOCK, __FILE__, __LINE__)
 #else
 #define DEBUG_NEW new
-#endif
+#endif 

@@ -48,6 +48,20 @@ namespace TerraPGE::Renderer
 		Vec3 uvw0 = ScreenSpaceTri->TexCoords[0].AsVec3(), uvw1 = ScreenSpaceTri->TexCoords[1].AsVec3(), uvw2 = ScreenSpaceTri->TexCoords[2].AsVec3();
 		Vec3 n0 = ScreenSpaceTri->FaceNormal, n1 = ScreenSpaceTri->FaceNormal, n2 = ScreenSpaceTri->FaceNormal;
 
+		// Clip Space
+		Vec4 clip0 = ScreenSpaceTri->ClipSpaceVerts[0];
+		Vec4 clip1 = ScreenSpaceTri->ClipSpaceVerts[1];
+		Vec4 clip2 = ScreenSpaceTri->ClipSpaceVerts[2];
+
+		// Clip Space
+		Vec4 world0 = ScreenSpaceTri->WorldSpaceVerts[0];
+		Vec4 world1 = ScreenSpaceTri->WorldSpaceVerts[1];
+		Vec4 world2 = ScreenSpaceTri->WorldSpaceVerts[2];
+
+		float w0 = 1.0f / clip0.w;
+		float w1 = 1.0f / clip1.w;
+		float w2 = 1.0f / clip2.w;
+
 		// --- 2. Compute triangle bounding box ---
 		int minX = std::max(0, (int)std::floor(std::min({ v0.x, v1.x, v2.x })));
 		int maxX = std::min(Core::sx - 1, (int)std::ceil(std::max({ v0.x, v1.x, v2.x })));
@@ -56,6 +70,8 @@ namespace TerraPGE::Renderer
 
 		float denom = (v1.y - v2.y) * (v0.x - v2.x) + (v2.x - v1.x) * (v0.y - v2.y);
 		if (denom == 0.0f) return; // Degenerate triangle
+
+
 
 		for (int y = minY; y <= maxY; y++)
 		{
@@ -66,47 +82,29 @@ namespace TerraPGE::Renderer
 				float beta = ((v2.y - v0.y) * (x - v2.x) + (v0.x - v2.x) * (y - v2.y)) / denom;
 				float gamma = 1.0f - alpha - beta;
 
+				float denomW = alpha * w0 + beta * w1 + gamma * w2;
+
+				float a = (alpha * w0) / denomW;
+				float b = (beta * w1) / denomW;
+				float c = (gamma * w2) / denomW;
+
 				// --- 5. Check if pixel is inside triangle ---
-				if (alpha < 0 || beta < 0 || gamma < 0) continue;
+				if (alpha < 0 || beta < 0 || gamma < 0) 
+					continue;
 
-				Vec4 clip0 = ScreenSpaceTri->ClipSpaceVerts[0];
-				Vec4 clip1 = ScreenSpaceTri->ClipSpaceVerts[1];
-				Vec4 clip2 = ScreenSpaceTri->ClipSpaceVerts[2];
-				// compute 1/w (handle w == 0 defensively)
-				float iw0 = (clip0.w != 0.0f) ? clip0.w : 0.0f;
-				float iw1 = (clip1.w != 0.0f) ? clip1.w : 0.0f;
-				float iw2 = (clip2.w != 0.0f) ? clip2.w : 0.0f;
+				Vec3 InterpolatedPos =
+					world0 * a +
+					world1 * b +
+					world2 * c;
 
-				float invW = alpha * iw0 + beta * iw1 + gamma * iw2;
-				if (invW <= 0.0f) continue; // behind camera or bad
-
-				Vec3 wp0 = ScreenSpaceTri->WorldSpaceVerts[0];
-				Vec3 wp1 = ScreenSpaceTri->WorldSpaceVerts[1];
-				Vec3 wp2 = ScreenSpaceTri->WorldSpaceVerts[2];
-
-				Vec3 worldNumer =
-					wp0 * (alpha * iw0) +
-					wp1 * (beta * iw1) +
-					wp2 * (gamma * iw2);
-				
-				Vec3 InterpolatedPos = worldNumer / invW; // correct world pos
-
-				// --- Perspective-correct interpolate NDC z and convert to depth buffer ---
-				float ndcZ_numer =
-					(clip0.z * (alpha * iw0)) +
-					(clip1.z * (beta * iw1)) +
-					(clip2.z * (gamma * iw2));
-
-				float ndcZ = ndcZ_numer / invW;             // ndc.z in [-1,1]
-				float Depth = ndcZ * 0.5f + 0.5f;          // depth in [0,1]
+				float Depth = ScreenSpaceTri->Points[0].z * a + ScreenSpaceTri->Points[1].z * b + ScreenSpaceTri->Points[2].z * c;
 
 				if (x == ScreenWidth / 2 && y == ScreenHeight / 2)
 				{
 					TestClipW = clip0.w;
 					TestDepth = Depth;
 					TestClipZ = clip0.z;
-					clip0.CorrectPerspective();
-					TestNdcZ = clip0.z;
+					TestNdcZ = ScreenSpaceTri->ViewSpaceVerts[0].z;
 				}
 
 				// depth test (assumes DepthBuffer init = 1.0f and smaller means closer)
@@ -115,26 +113,16 @@ namespace TerraPGE::Renderer
 				{
 					DepthBuffer[idx] = Depth;
 
-					// --- 7. Interpolate attributes ---
-					// --- Perspective-correct interpolate UV ---
-					Vec3 uvw0 = ScreenSpaceTri->TexCoords[0].AsVec3(); // (u,v) as Vec3/Vec2 — adapt to your storage
-					Vec3 uvw1 = ScreenSpaceTri->TexCoords[1].AsVec3();
-					Vec3 uvw2 = ScreenSpaceTri->TexCoords[2].AsVec3();
+					Vec3 uvw =
+						uvw0 * a +
+						uvw1 * b +
+						uvw2 * c;
 
-					Vec3 uvNumer =
-						uvw0 * (alpha * iw0) +
-						uvw1 * (beta * iw1) +
-						uvw2 * (gamma * iw2);
+					Vec3 InterpolatedNormal =
+						n0 * a +
+						n1 * b +
+						n2 * c;
 
-					Vec2 InterpolatedUV = Vec2((uvNumer.x / invW), (uvNumer.y / invW));
-
-					// --- 6. Interpolate depth ---	
-					Vec3 normalNumer =
-						n0 * (alpha * iw0) +
-						n1 * (beta * iw1) +
-						n2 * (gamma * iw2);
-
-					Vec3 InterpolatedNormal = normalNumer / invW;
 					InterpolatedNormal.Normalize();
 
 					// Shade
@@ -192,6 +180,7 @@ namespace TerraPGE::Renderer
 						
 						BaseArgs->EditShaderDataValue<Color>(TPGE_SHDR_FRAG_COLOR, Color(ColorVal, ColorVal, ColorVal));
 					}
+	
 					else if (*ShaderType != ShaderTypes::SHADER_FRAGMENT || ScreenSpaceTri->OverrideTextureColor || !Core::DoLighting)
 					{
 						// This entire else if is mainly for debugging clipping
@@ -201,7 +190,7 @@ namespace TerraPGE::Renderer
 						}
 						else if (ScreenSpaceTri->Material->HasUsableTexture())
 						{
-							Vec3 TexturCol = ScreenSpaceTri->Material->Textures.at(0)->GetPixelColor(InterpolatedUV.x, 1.0f - InterpolatedUV.y).GetRGB();
+							Vec3 TexturCol = ScreenSpaceTri->Material->Textures.at(0)->GetPixelColor(uvw.x, 1.0f - uvw.y).GetRGB();
 							BaseArgs->EditShaderDataValue<Color>(TPGE_SHDR_FRAG_COLOR, Color(TexturCol.x, TexturCol.y, TexturCol.z));
 						}
 						else
@@ -215,7 +204,7 @@ namespace TerraPGE::Renderer
 						Vec3 BaryCoords = Vec3(alpha, beta, gamma);
 						BaseArgs->EditShaderDataValue<Vec3>(TPGE_SHDR_FRAG_POS, InterpolatedPos);
 						BaseArgs->EditShaderDataValue<Vec3>(TPGE_SHDR_FRAG_NORMAL, InterpolatedNormal);
-						BaseArgs->EditShaderDataValue<TextureCoords>(TPGE_SHDR_TEX_UVW, { InterpolatedUV.x, InterpolatedUV.y, uvNumer.z });
+						BaseArgs->EditShaderDataValue<TextureCoords>(TPGE_SHDR_TEX_UVW, { uvw.x, uvw.y, uvw.z });
 						BaseArgs->EditShaderDataValue<Vec3>(TPGE_SHDR_FRAG_BARY_COORDS, BaryCoords);
 						BaseArgs->EditShaderDataValue<Vec2>(TPGE_SHDR_PIXEL_COORDS, Vec2((float)x, (float)y));
 						Shader(BaseArgs);
@@ -234,10 +223,6 @@ namespace TerraPGE::Renderer
 
 	void __fastcall BaryCentricRasterizerDepth(Triangle* ScreenSpaceTri, float* Buffer, const SIZE_T BufferWidth, const SIZE_T BufferHeight, const Matrix& Vp)
 	{
-		float FarSubNear = Core::FFAR - Core::FNEAR;
-		float FarNear = Core::FFAR * Core::FNEAR;
-
-
 		// Extract per-vertex attributes
 		Vec3 uvw0 = ScreenSpaceTri->TexCoords[0].AsVec3(), uvw1 = ScreenSpaceTri->TexCoords[1].AsVec3(), uvw2 = ScreenSpaceTri->TexCoords[2].AsVec3();
 		Vec3 n0 = ScreenSpaceTri->FaceNormal, n1 = ScreenSpaceTri->FaceNormal, n2 = ScreenSpaceTri->FaceNormal;
