@@ -41,7 +41,7 @@ public:
 
 	Vec3 GetLocalForward() const
 	{
-		Vec3 f(Local.fMatrix[2][0], Local.fMatrix[2][1], Local.fMatrix[2][2]);
+		Vec3 f = this->Local.GetForward();
 
 		if (f.Magnitude() > 1e-6f)
 			return f.Normalized();

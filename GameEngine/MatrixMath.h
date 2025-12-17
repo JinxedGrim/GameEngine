@@ -292,6 +292,7 @@ public:
 		out.SetTranslation(Vec3(0.0f, 0.0f, 0.0f));
 
 		out.Transpose3x3();
+		out.NormalizeBasis();
 
 		Vec3 newT;
 		newT = t * out.Extract3x3();
@@ -453,18 +454,16 @@ public:
 
 		float pitch, yaw, roll;
 
-		// F.y = sin(pitch)
-		if (std::fabs(U.z) < 0.99999f)
+		if (std::fabs(U.z) < 0.99999f) // no gimbal lock
 		{
-			pitch = std::asin(U.z);                 // X
-			yaw = std::atan2(-F.x, F.z);          // Y
-			roll = std::atan2(-U.x, U.y);          // Z
+			pitch = std::asin(U.z);              // rotation around X
+			yaw = std::atan2(-F.x, F.z);       // rotation around Y
+			roll = std::atan2(-U.x, U.y);       // rotation around Z
 		}
-		else
+		else // gimbal lock
 		{
-			// Gimbal lock (pitch = ±90°)
 			pitch = (U.z > 0) ? PI / 2 : -PI / 2;
-			yaw = 0.0f;
+			yaw = 0.0f;                        // arbitrary
 			roll = std::atan2(R.y, R.x);
 		}
 

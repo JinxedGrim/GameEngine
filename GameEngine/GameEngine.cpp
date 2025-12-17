@@ -338,7 +338,7 @@ class ExampleScene : public TerraPGE::Scene
 	}
 
 
-	void HandleMovement(WndCreator& Wnd, const float& ElapsedTime)
+	void HandleInput(WndCreator& Wnd, GdiPP* Gdi, const float& ElapsedTime)
 	{
 		if (Wnd.Input.IsKeyDown(VK_SPACE))
 		{
@@ -386,37 +386,6 @@ class ExampleScene : public TerraPGE::Scene
 			this->MainCamera->SetLocalViewAngles(Euler.AngleNormalized());
 		}
 
-	}
-
-
-	TerraPGE::Renderable* GetHoveredObj(const std::vector<TerraPGE::Renderable*>* ToRender)
-	{
-		TerraPGE::Renderable* hovered = nullptr;
-		for (TerraPGE::Renderable* obj : *ToRender)
-		{
-			this->MainCamera->Transform.WalkTransformChain();
-			Matrix inv = obj->Transform.World.QuickInversed();
-			Vec3 localOrigin = this->MainCamera->Transform.GetWorldPosition() * inv;
-			Vec3 localDir = ((this->MainCamera->GetLookDirection())).Normalized();
-
-
-			if (!obj) continue;
-
-			Ray camRay = Ray(localOrigin, localDir);
-			RaycastHit Out;
-			if (RaycastMesh(camRay, obj->mesh->Triangles, &Out))
-			{
-				if (Out.hit)
-					hovered = obj;
-			}
-		}
-
-		return hovered;
-	}
-
-
-	void RunTick(GdiPP* Gdi, WndCreator& Wnd, const float& ElapsedTime, std::vector<TerraPGE::Renderable*>* ToRender, std::vector<LightObject*>* Lights) override
-	{
 		if (Wnd.Input.IsKeyPressed(VK_INSERT))
 		{
 			if (IsFullScreen)
@@ -466,8 +435,38 @@ class ExampleScene : public TerraPGE::Scene
 				HoveredRend->collider.body.Velocity = this->MainCamera->GetLookDirection().Normalized() * 8.0f;
 			}
 		}
+	}
 
-		HandleMovement(Wnd, ElapsedTime);
+
+	TerraPGE::Renderable* GetHoveredObj(const std::vector<TerraPGE::Renderable*>* ToRender)
+	{
+		TerraPGE::Renderable* hovered = nullptr;
+		for (TerraPGE::Renderable* obj : *ToRender)
+		{
+			this->MainCamera->Transform.WalkTransformChain();
+			Matrix inv = obj->Transform.World.QuickInversed();
+			Vec3 localOrigin = this->MainCamera->Transform.GetWorldPosition() * inv;
+			Vec3 localDir = ((this->MainCamera->GetLookDirection())).Normalized();
+
+
+			if (!obj) continue;
+
+			Ray camRay = Ray(localOrigin, localDir);
+			RaycastHit Out;
+			if (RaycastMesh(camRay, obj->mesh->Triangles, &Out))
+			{
+				if (Out.hit)
+					hovered = obj;
+			}
+		}
+
+		return hovered;
+	}
+
+
+	void RunTick(GdiPP* Gdi, WndCreator& Wnd, const float& ElapsedTime, std::vector<TerraPGE::Renderable*>* ToRender, std::vector<LightObject*>* Lights) override
+	{
+		HandleInput(Wnd, Gdi, ElapsedTime);
 
 		ToRender->push_back(CubeRender);
 		ToRender->push_back(PlaneRender);
@@ -552,43 +551,45 @@ class ExampleScene : public TerraPGE::Scene
 	{
 		if (TerraPGE::Core::FpsEngineCounter && ShowStrs)
 		{
-			static std::string FovStr = "(F2)  Fov: ";
-			static std::string CullingStr = "(F6)  Culling: ";
-			static std::string LightingStr = "(F7)  Lighting: ";
-			static std::string FilledStr = "(F8)  Filled: ";
-			static std::string TriLinesStr = "(F9) Show Tri Lines: ";
-			static std::string MeshStr = "(ESC) Mesh: ";
-			static std::string VertStr = " Verts: ";
-			static std::string TriCountStr = ", Triangle Count: ";
-			static std::string NormalCountStr = ", Normal Count: ";
-			static std::string MaterialNameStr = " MatName: ";
+			static std::string FovStr = "Cmaera Intrinsics:  Fov: ";
+			static std::string AspectStr = "  Aspect: ";
+			static std::string NearStr = "  Near: ";
+			static std::string FarStr = "  Far: ";
 			static std::string CamPosXstr = "Camera Pos: ( X: ";
 			static std::string CamPosYstr = ", Y: ";
 			static std::string CamPosZstr = ", Z: ";
 			static std::string CamPosEndstr = ")";
-			static std::string CamPosWolrd = "Camera World Pos: ( X: ";
+			static std::string CamPosWolrd = "  World: ( X: ";
 			static std::string CamRotXstr = "Camera Rot: ( Pitch: ";
 			static std::string CamRotYstr = ", Yaw: ";
 			static std::string CamRotZstr = ", Roll: ";
 			static std::string CamRotEndstr = ")";
-			static std::string CamWorldRotXstr = "Camera  WorldRot: ( Pitch: ";
+			static std::string CamWorldRotXstr = " World: ( Pitch: ";
+			static std::string CullingStr = "(F6)  Culling: ";
+			static std::string LightingStr = "(F7)  Lighting: ";
+			static std::string FilledStr = "(F8)  Filled: ";
+			static std::string TriLinesStr = "(F9) Show Tri Lines: ";
 			static std::string DepthStr = "Depth: ";
 			static std::string ClipStr = "Clip: (z, w): ";
 			static std::string NdcStr = "Ndc: ";
 
-			Gdi->DrawStringA(20, 40, FovStr + std::to_string(TerraPGE::Core::FOV), RGB(255, 0, 0), TRANSPARENT);
-			Gdi->DrawStringA(20, 60, CullingStr + std::to_string(TerraPGE::Core::DoCull), RGB(255, 0, 0), TRANSPARENT);
-			Gdi->DrawStringA(20, 80, LightingStr + std::to_string(TerraPGE::Core::DoLighting), RGB(255, 0, 0), TRANSPARENT);
-			Gdi->DrawStringA(20, 100, FilledStr + std::to_string(TerraPGE::Core::WireFrame), RGB(255, 0, 0), TRANSPARENT);
-			Gdi->DrawStringA(20, 120, TriLinesStr + std::to_string(TerraPGE::Core::ShowTriLines), RGB(255, 0, 0), TRANSPARENT);
-			Gdi->DrawStringA(20, 160, CamPosXstr + std::to_string(MainCamera->Transform.GetLocalPosition().x) + CamPosYstr + std::to_string(MainCamera->Transform.GetLocalPosition().y) + CamPosZstr + std::to_string(MainCamera->Transform.GetLocalPosition().z) + CamPosEndstr, RGB(255, 0, 0), TRANSPARENT);
-			Gdi->DrawStringA(20, 180, CamPosWolrd + std::to_string(MainCamera->Transform.GetWorldPosition().x) + CamPosYstr + std::to_string(MainCamera->Transform.GetWorldPosition().y) + CamPosZstr + std::to_string(MainCamera->Transform.GetWorldPosition().z) + CamPosEndstr, RGB(255, 0, 0), TRANSPARENT);
-			Gdi->DrawStringA(20, 200, CamRotXstr + std::to_string(MainCamera->Transform.GetLocalEulerAngles().x) + CamRotYstr + std::to_string(MainCamera->Transform.GetLocalEulerAngles().y) + CamRotZstr + std::to_string(MainCamera->Transform.GetLocalEulerAngles().z) + CamRotEndstr, RGB(255, 0, 0), TRANSPARENT);
-			Gdi->DrawStringA(20, 220, CamWorldRotXstr + std::to_string(MainCamera->Transform.GetWorldRotation().x) + CamRotYstr + std::to_string(MainCamera->Transform.GetWorldRotation().y) + CamRotZstr + std::to_string(MainCamera->Transform.GetWorldRotation().z) + CamRotEndstr, RGB(255, 0, 0), TRANSPARENT);
-			Gdi->DrawStringA(20, 240, DepthStr + std::to_string(TerraPGE::Renderer::TestDepth), RGB(255, 0, 0), TRANSPARENT);
-			Gdi->DrawStringA(20, 260, ClipStr + std::to_string(TerraPGE::Renderer::TestClipZ) + ", " + std::to_string(TerraPGE::Renderer::TestClipW), RGB(255, 0, 0), TRANSPARENT);
-			Gdi->DrawStringA(20, 280, NdcStr + std::to_string(TerraPGE::Renderer::TestNdcZ), RGB(255, 0, 0), TRANSPARENT);
+			Vec3 LocalPos = MainCamera->GetLocalPosition();
+			Vec3 WorldPos = MainCamera->GetWorldPosition();
+			Vec3 LocalEuler = MainCamera->GetLocalViewAngles();
+			Vec3 WorldEuler = MainCamera->GetWorldViewAngles();
+
+			Gdi->DrawStringA(20, 40, FovStr + std::to_string(TerraPGE::Core::FOV) + AspectStr + std::to_string(MainCamera->GetAspectRatio()) + NearStr + std::to_string(MainCamera->GetNear()) + FarStr + std::to_string(MainCamera->GetFar()), RGB(255, 0, 0), TRANSPARENT);
+			Gdi->DrawStringA(20, 60, CamPosXstr + std::to_string(LocalPos.x) + CamPosYstr + std::to_string(LocalPos.y) + CamPosZstr + std::to_string(LocalPos.z) + CamPosEndstr + CamPosWolrd + std::to_string(WorldPos.x) + CamPosYstr + std::to_string(WorldPos.y) + CamPosZstr + std::to_string(WorldPos.z) + CamPosEndstr, RGB(255, 0, 0), TRANSPARENT);
+			Gdi->DrawStringA(20, 80, CamRotXstr + std::to_string(LocalEuler.x) + CamRotYstr + std::to_string(LocalEuler.y) + CamRotZstr + std::to_string(LocalEuler.z) + CamRotEndstr + CamWorldRotXstr + std::to_string(WorldEuler.x) + CamRotYstr + std::to_string(WorldEuler.y) + CamRotZstr + std::to_string(WorldEuler.z) + CamRotEndstr, RGB(255, 0, 0), TRANSPARENT);
+			Gdi->DrawStringA(20, 120, CullingStr + std::to_string(TerraPGE::Core::DoCull), RGB(255, 0, 0), TRANSPARENT);
+			Gdi->DrawStringA(20, 140, LightingStr + std::to_string(TerraPGE::Core::DoLighting), RGB(255, 0, 0), TRANSPARENT);
+			Gdi->DrawStringA(20, 160, FilledStr + std::to_string(TerraPGE::Core::WireFrame), RGB(255, 0, 0), TRANSPARENT);
+			Gdi->DrawStringA(20, 180, TriLinesStr + std::to_string(TerraPGE::Core::ShowTriLines), RGB(255, 0, 0), TRANSPARENT);
+			Gdi->DrawStringA(20, 200, DepthStr + std::to_string(TerraPGE::Renderer::TestDepth), RGB(255, 0, 0), TRANSPARENT);
+			Gdi->DrawStringA(20, 220, ClipStr + std::to_string(TerraPGE::Renderer::TestClipZ) + ", " + std::to_string(TerraPGE::Renderer::TestClipW), RGB(255, 0, 0), TRANSPARENT);
+			Gdi->DrawStringA(20, 240, NdcStr + std::to_string(TerraPGE::Renderer::TestNdcZ), RGB(255, 0, 0), TRANSPARENT);
 		}
+
 
 		DrawCrosshair(Gdi);
 	}
@@ -665,40 +666,68 @@ class ExampleScene : public TerraPGE::Scene
 
 int APIENTRY WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _In_ LPSTR lpCmdLine, _In_ int nShowCmd)
 {
-	Vec3 x(1, 0, 0);
-	Vec3 y(0, 1, 0);
-
-	Vec3 z = x.Cross(y);    // Using your cross product
-
-	std::cout << x << " cross " << y << " = " << z << std::endl;
-
-	Vec3 Target = Vec3(0, 0, 2);
-	Vec3 Eye = Vec3(0, 0, -1);
-	Vec3 WorldUp = Vec3(0, 1, 0);
-	Vec3 Forward, Right, Up;
-
-	Forward = (Target - Eye).Normalized();
-	Right = (Forward.Cross(WorldUp)).Normalized();   // For left-handed
-	Up = Right.Cross(Forward).Normalized();
-
-	std::cout << "Target: " << Target << "\n"
-		<< "Eye: " << Eye << "\n"
-		<< "WorldUp: " << WorldUp << "\n"
-		<< "Forward = " << Forward << "\n"
-		<< "Right = " << Right << "\n"
-		<< "Up = " << Up << "\n\n";
-
 	float fovY = 90.0f;
 	float aspect = 1.0f;
 	float nearZ = 1.0f;
-	float farZ = 10.0f;
+	float farZ = 20.0f;
+
+	Camera* Cam_1 = new Camera(Vec3(0, 0, 0), aspect, fovY, nearZ, farZ);
+	Vec4 p(1, 2, 3, 1);
+	Vec4 p2 = p * Cam_1->GetViewMatrix();
+
+	std::cout << "Cam Pos: " << Cam_1->Transform.GetLocalPosition() << " Near: " << Cam_1->GetNear() << " Far: " << Cam_1->GetFar() << std::endl;
+	std::cout << "p = " << p << "  p*Cam_Vm = " << p2 << "\n";
+
+	Vec4 fwd(0, 0, 1, 1);
+	Vec4 fv = fwd * Cam_1->GetViewMatrix();
+
+	std::cout << "forward = " << fwd << "  fwd*Cam_Vm = " << fv << "\n";
+
+	Vec4 right(1, 0, 0, 1);
+	Vec4 rv = right * Cam_1->GetViewMatrix();
+
+	std::cout << "right = " << right << "  right*Cam_Vm = " << rv << "\n\n";
+
+	Vec4 v(0, 0, 5, 1);
+	Vec4 c = v * Cam_1->GetProjectionMatrix();
+
+	std::cout << "v = " << v << " v*Cam_Pm = " << c << " (v.z should == result.w)" << "\n";
+
+	Vec4 v2(0, 0, nearZ, 1);
+	Vec4 c2 = v2 * Cam_1->GetProjectionMatrix();
+	float z = c2.z / c2.w;
+
+	std::cout << "v = " << v2 << " v*Cam_Pm = " << c2 << " ndcZ = " << z << " should == 0" << std::endl;
+
+	Vec4 v3(0, 0, farZ, 1);
+	Vec4 c3 = v3 * Cam_1->GetProjectionMatrix();
+	z = c3.z / c3.w;
+
+	std::cout << "v = " << v3 << " v*Cam_Pm = " << c3 << " ndcZ = " << z << " should == 1" << "\n\n";
+
+	std::cout << "Rotating to: (0, 90, 0)" << std::endl;
+
+	Cam_1->SetLocalViewAngles(Vec3(0, -90, 0));
+
+	Vec4 vy = fwd * Cam_1->GetViewMatrix();
+
+	std::cout << "fwd = " << fwd << " fwd*Cam_Vm: " << vy << std::endl;
+
+	Matrix W = Cam_1->Transform.Local;
+	Matrix V = Cam_1->GetViewMatrix();
+
+	Matrix I = W * V;
+
+	std::cout << "Cam_World * Cam_Vm: " << I << std::endl;
+
+	delete Cam_1;
 
 	Vec3 worldPos(12, 5, -2);
 	Vec4 Vw(worldPos.x, worldPos.y, worldPos.z, 1.0f);
 
 	Camera* Cam = new Camera(Vec3(10, 3, -5), aspect, fovY, nearZ, farZ);
 	Matrix TransOnly = Cam->Transform.Local;
-	Cam->SetLocalViewAngles(Vec3(0, 90, 0));
+	//Cam->SetLocalViewAngles(Vec3(0, 90, 0));
 	Matrix LocalMat = Cam->Transform.Local;
 
 	Matrix Rx, Ry, Rz;
@@ -706,8 +735,10 @@ int APIENTRY WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance,
 	Matrix::CreateRotationX(&Rx, 0);
 	Matrix::CreateRotationY(&Ry, 90.0f);
 	Matrix::CreateRotationZ(&Rz, 0);
-	Matrix Rot = Rz * Ry * Rx;
-	Vec3 EulerA = Rot.ExtractEuler();
+
+	Matrix Rot = Matrix::CreateRotationMatrix(Cam->GetLocalViewAngles());
+
+	Vec3 EulerA = Cam->GetWorldViewAngles();
 	Matrix View = Cam->GetViewMatrix();
 
 	Vec4 Vview = Vw * View;
@@ -718,7 +749,7 @@ int APIENTRY WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance,
 	float ndcY = Vclip.y / Vclip.w;
 	float ndcZ = Vclip.z / Vclip.w;
 
-	std::cout << "Cam Pos: " << Cam->Transform.GetLocalPosition() << std::endl;
+	std::cout << "Cam Pos: " << Cam->Transform.GetLocalPosition() << " Near: " << Cam->GetNear() << " Far: " << Cam->GetFar() << std::endl;
 	std::cout << "Cam Rot: " << Cam->Transform.GetLocalEulerAngles() << std::endl;
 	std::cout << "Cam RotX Mat: " << Rx << std::endl;
 	std::cout << "Cam RotY Mat: " << Ry << std::endl;

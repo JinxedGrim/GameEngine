@@ -53,6 +53,7 @@ public:
 
 		this->IsViewDirty = true;
 		this->IsProjectionDirty = true;
+
 		this->GetViewMatrix();
 		this->GetProjectionMatrix();
 	}
@@ -85,6 +86,31 @@ public:
 		this->NearPlane = Vec3(0, 0, Near);
 		this->IsProjectionDirty = true;
 	}
+
+
+	float GetFov() const
+	{
+		return this->Fov;
+	}
+
+
+	float GetAspectRatio() const 
+	{
+		return this->AspectRatio;
+	}
+
+
+	float GetFar() const
+	{
+		return this->Far;
+	}
+
+
+	float GetNear() const 
+	{
+		return this->Near;	
+	}
+
 
 
 	Vec3 GetNearPLane() const
@@ -141,11 +167,22 @@ public:
 		return this->Transform.GetLocalPosition();
 	}
 
+	Vec3 GetWorldPosition()
+	{
+		return this->Transform.GetWorldMatrix().GetTranslation();
+	}
+
 
 	void SetLocalViewAngles(const Vec3& Angles) 
 	{
 		this->Transform.SetLocalEulerAngles(Angles);
 		this->IsViewDirty = true;
+	}
+
+
+	Vec3 GetWorldViewAngles()
+	{
+		return this->Transform.GetWorldMatrix().ExtractEuler();
 	}
 
 

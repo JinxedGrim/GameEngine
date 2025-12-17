@@ -152,7 +152,7 @@ Matrix Matrix::CreateRotationMatrix(const Vec3& RotationDeg) // pitch yaw roll
 	Matrix::CreateRotationY(&Ry, RotationDeg.y);      // yaw
 	Matrix::CreateRotationZ(&Rz, RotationDeg.z);      // roll
 
-	Matrix R = Rz * Ry * Rx;
+	Matrix R = Rx * Ry * Rz;
 
 	return R;
 }
