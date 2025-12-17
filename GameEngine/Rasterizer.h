@@ -22,6 +22,13 @@ namespace TerraPGE::Renderer
 	};
 
 
+	__inline float RemapNonLinearDepth(float Depth, float Near, float Far)
+	{
+		return Near * Far / (Far - Depth * (Far - Near));
+
+	}
+
+
 	template<typename T>
 	void __fastcall BaryCentricRasterizer(float* DepthBuffer, int ScreenWidth, int ScreenHeight, GdiPP* Gdi, T&& Shader, ShaderArgs* BaseArgs1)
 	{
@@ -58,10 +65,6 @@ namespace TerraPGE::Renderer
 		Vec4 world1 = ScreenSpaceTri->WorldSpaceVerts[1];
 		Vec4 world2 = ScreenSpaceTri->WorldSpaceVerts[2];
 
-		float w0 = 1.0f / clip0.w;
-		float w1 = 1.0f / clip1.w;
-		float w2 = 1.0f / clip2.w;
-
 		// --- 2. Compute triangle bounding box ---
 		int minX = std::max(0, (int)std::floor(std::min({ v0.x, v1.x, v2.x })));
 		int maxX = std::min(Core::sx - 1, (int)std::ceil(std::max({ v0.x, v1.x, v2.x })));
@@ -82,28 +85,24 @@ namespace TerraPGE::Renderer
 				float beta = ((v2.y - v0.y) * (x - v2.x) + (v0.x - v2.x) * (y - v2.y)) / denom;
 				float gamma = 1.0f - alpha - beta;
 
-				float denomW = alpha * w0 + beta * w1 + gamma * w2;
-
-				float a = (alpha * w0) / denomW;
-				float b = (beta * w1) / denomW;
-				float c = (gamma * w2) / denomW;
-
 				// --- 5. Check if pixel is inside triangle ---
 				if (alpha < 0 || beta < 0 || gamma < 0) 
 					continue;
 
 				Vec3 InterpolatedPos =
-					world0 * a +
-					world1 * b +
-					world2 * c;
+					world0 * alpha +
+					world1 * beta +
+					world2 * gamma;
 
-				float Depth = ScreenSpaceTri->Points[0].z * a + ScreenSpaceTri->Points[1].z * b + ScreenSpaceTri->Points[2].z * c;
+				float Depth = ScreenSpaceTri->Points[0].z * alpha + ScreenSpaceTri->Points[1].z * beta + ScreenSpaceTri->Points[2].z * gamma;
+
+				Depth = RemapNonLinearDepth(Depth, TerraPGE::Core::FNEAR, TerraPGE::Core::FFAR);
 
 				if (x == ScreenWidth / 2 && y == ScreenHeight / 2)
 				{
 					TestClipW = clip0.w;
-					TestDepth = Depth;
 					TestClipZ = clip0.z;
+					TestDepth = Depth;
 					TestNdcZ = ScreenSpaceTri->ViewSpaceVerts[0].z;
 				}
 
@@ -114,14 +113,14 @@ namespace TerraPGE::Renderer
 					DepthBuffer[idx] = Depth;
 
 					Vec3 uvw =
-						uvw0 * a +
-						uvw1 * b +
-						uvw2 * c;
+						uvw0 +
+						uvw1 +
+						uvw2;
 
 					Vec3 InterpolatedNormal =
-						n0 * a +
-						n1 * b +
-						n2 * c;
+						n0 * alpha +
+						n1 * beta +
+						n2 * gamma;
 
 					InterpolatedNormal.Normalize();
 

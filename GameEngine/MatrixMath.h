@@ -188,6 +188,102 @@ public:
 	}
 
 
+	__inline Vec3 GetTranslation() const
+	{
+		return Vec3(this->_41, this->_42, this->_43);
+	}
+
+
+	__inline void SetTranslation(const Vec3& t)
+	{
+		this->_41 = t.x;
+		this->_42 = t.y;
+		this->_43 = t.z;
+	}
+
+
+	__inline Vec3 GetRight() const
+	{
+		return Vec3(fMatrix[0][0], fMatrix[0][1], fMatrix[0][2]);
+	}
+
+
+	__inline Vec3 GetUp() const
+	{
+		return Vec3(fMatrix[1][0], fMatrix[1][1], fMatrix[1][2]);
+	}
+
+
+	__inline Vec3 GetForward() const
+	{
+		return Vec3(fMatrix[2][0], fMatrix[2][1], fMatrix[2][2]);
+	}
+
+
+	__inline void SetRight(const Vec3& R)
+	{
+		this->_11 = R.x;
+		this->_12 = R.y;
+		this->_13 = R.z;
+	}
+
+
+	__inline void SetUp(const Vec3& U)
+	{
+		this->_21 = U.x;
+		this->_22 = U.y;
+		this->_23 = U.z;
+	}
+
+
+	__inline void SetForward(const Vec3& F)
+	{
+		this->_31 = F.x;
+		this->_32 = F.y;
+		this->_33 = F.z;
+	}
+
+
+	__inline Matrix3x3 GetBasis3x3() const
+	{
+		Matrix3x3 R;
+
+		R._11 = this->_11; R._12 = this->_12; R._13 = this->_13;
+		R._21 = this->_21; R._22 = this->_22; R._23 = this->_23;
+		R._31 = this->_31; R._32 = this->_32; R._33 = this->_33;
+
+		return R;
+	}
+
+
+	__inline Matrix GetBasis() const
+	{
+		Matrix R = Matrix::CreateIdentity();
+
+		R._11 = this->_11; R._12 = this->_12; R._13 = this->_13;
+		R._21 = this->_21; R._22 = this->_22; R._23 = this->_23;
+		R._31 = this->_31; R._32 = this->_32; R._33 = this->_33;
+
+		R.SetTranslation(Vec3(0, 0, 0));
+
+		return R;
+	}
+
+	void NormalizeBasis()
+	{
+		Vec3 R = this->GetRight();
+		Vec3 U = this->GetUp();
+		Vec3 F = this->GetForward();
+
+		F = R.Cross(U).Normalized();
+		U = F.Cross(R).Normalized();
+
+		this->SetRight(R);
+		this->SetUp(U);
+		this->SetForward(F);
+	}
+
+
 	Matrix QuickInversed()
 	{
 		Matrix out = *this;
@@ -259,7 +355,7 @@ public:
 	static void CreateRotationX(Matrix* Out, float AngleDegrees)
 	{
 		Out->MakeIdentity();
-		float c = SNAP_ZERO(cosf(ToRad(AngleDegrees))), s = SNAP_ZERO(sinf(ToRad(AngleDegrees)));
+		float c = cosf(ToRad(AngleDegrees)), s = sinf(ToRad(AngleDegrees));
 
 		// Row-vector, left-handed
 		Out->_22 = c;
@@ -272,7 +368,7 @@ public:
 	static void CreateRotationY(Matrix* Out, float AngleDegrees)
 	{
 		Out->MakeIdentity();
-		float c = SNAP_ZERO(cosf(ToRad(AngleDegrees))), s = SNAP_ZERO(sinf(ToRad(AngleDegrees)));
+		float c = cosf(ToRad(AngleDegrees)), s = sinf(ToRad(AngleDegrees));
 
 		// Row-vector, left-handed
 		Out->_11 = c;
@@ -286,8 +382,8 @@ public:
 	{
 		Out->MakeIdentity();
 
-		float c = SNAP_ZERO(cosf(ToRad(AngleDegrees)));
-		float s = SNAP_ZERO(sinf(ToRad(AngleDegrees)));
+		float c = cosf(ToRad(AngleDegrees));
+		float s = sinf(ToRad(AngleDegrees));
 
 		// Row-vector, left-handed
 		Out->_11 = c;
@@ -310,17 +406,17 @@ public:
 	{
 		float TanHalf = tanf(ToRad(Fov * 0.5f));
 
-		float Fx = 1.0f / (TanHalf * AspectRatio);
-		float Fy = (1.0f / tanf(ToRad(Fov * 0.5f)));
+		float Fx = 1.0f / (TanHalf / AspectRatio);
+		float Fy = (1.0f / TanHalf);
 		float FN = Far - Near;
 
-		float A = Far / (FN);             // = 10/9
-		float B = ((-Near * Far) / FN);  // = -10/9
+		float A = Far / (FN);
+		float B = -Near * Far / FN;  
 
 		Matrix M = Matrix::CreateIdentity();
 
 		M._11 = Fx;
-		M._22 = -Fy;                       // keep if using DX/Vulkan inverted Y
+		M._22 = -Fy;                       
 		M._33 =  A;
 		M._34 =  1.0f;
 		M._43 =  B;
@@ -336,32 +432,6 @@ public:
 		//Projection.fMatrix[3][3] = 0.0f;
 
 		return M;
-	}
-
-
-	__inline Matrix3x3 GetBasis3x3() const
-	{
-		Matrix3x3 R;
-
-		R._11 = this->_11; R._12 = this->_12; R._13 = this->_13;
-		R._21 = this->_21; R._22 = this->_22; R._23 = this->_23;
-		R._31 = this->_31; R._32 = this->_32; R._33 = this->_33;
-
-		return R;
-	}
-
-
-	__inline Matrix GetBasis() const
-	{
-		Matrix R = Matrix::CreateIdentity();
-
-		R._11 = this->_11; R._12 = this->_12; R._13 = this->_13;
-		R._21 = this->_21; R._22 = this->_22; R._23 = this->_23;
-		R._31 = this->_31; R._32 = this->_32; R._33 = this->_33;
-
-		R.SetTranslation(Vec3(0, 0, 0));
-
-		return R;
 	}
 
 
@@ -383,31 +453,34 @@ public:
 
 		float pitch, yaw, roll;
 
-		// pitch = rotation around X
-		// yaw   = rotation around Y
-		// roll  = rotation around Z
-		if (std::fabs(F.y) < 0.99999f)  // no gimbal lock
+		// F.y = sin(pitch)
+		if (std::fabs(U.z) < 0.99999f)
 		{
-			pitch = std::asin(-F.y);                   // Rx
-			yaw = std::atan2(F.x, F.z);             // Ry
-			roll = std::atan2(R.y, U.y);             // Rz
+			pitch = std::asin(U.z);                 // X
+			yaw = std::atan2(-F.x, F.z);          // Y
+			roll = std::atan2(-U.x, U.y);          // Z
 		}
 		else
 		{
-			// gimbal lock, pitch = ±90°, yaw + roll ambiguous
-			pitch = (F.y < 0) ? PI : -PI;
+			// Gimbal lock (pitch = ±90°)
+			pitch = (U.z > 0) ? PI / 2 : -PI / 2;
 			yaw = 0.0f;
-			roll = std::atan2(-U.x, R.x);
+			roll = std::atan2(R.y, R.x);
 		}
 
-		return Vec3(ToDegree(pitch), ToDegree(yaw), ToDegree(roll));
+		return Vec3(
+			ToDegree(pitch),
+			ToDegree(yaw),
+			ToDegree(roll)
+		);
 	}
+
 
 	__inline Vec3 ExtractScale()
 	{
-		Vec3 X(this->fMatrix[0][0], this->fMatrix[0][1], this->fMatrix[0][2]);
-		Vec3 Y(this->fMatrix[1][0], this->fMatrix[1][1], this->fMatrix[1][2]);
-		Vec3 Z(this->fMatrix[2][0], this->fMatrix[2][1], this->fMatrix[2][2]);
+		Vec3 X = this->GetRight();
+		Vec3 Y = this->GetUp();
+		Vec3 Z = this->GetForward();
 
 		return Vec3(
 			X.Magnitude(),
@@ -537,37 +610,6 @@ public:
 	__inline bool operator!=(const Matrix& rhs) const
 	{
 		return !(*this == rhs);
-	}
-
-
-	__inline Vec3 GetRight() const
-	{
-		return Vec3(fMatrix[0][0], fMatrix[0][1], fMatrix[0][2]);
-	}
-
-
-	__inline Vec3 GetUp() const
-	{
-		return Vec3(fMatrix[1][0], fMatrix[1][1], fMatrix[1][2]);
-	}
-
-
-	__inline Vec3 GetForward() const
-	{
-		return Vec3(fMatrix[2][0], fMatrix[2][1], fMatrix[2][2]);
-	}
-
-
-	__inline Vec3 GetTranslation() const
-	{
-		return Vec3(this->_41, this->_42, this->_43);
-	}
-
-	__inline void SetTranslation(const Vec3 &t)
-	{
-		this->_41 = t.x;
-		this->_42 = t.y;
-		this->_43 = t.z;
 	}
 
 		

@@ -273,8 +273,8 @@ class ExampleScene : public TerraPGE::Scene
 		this->MainCamera = DEBUG_NEW Camera(Vec3(0, 3, 0), (float)((float)TerraPGE::Core::sy / (float)TerraPGE::Core::sx), TerraPGE::Core::FOV, TerraPGE::Core::FNEAR, TerraPGE::Core::FFAR);
 
 		LockCamera = false;
-		this->MainCamera->Transform.SetLocalPosition(Vec3(0, 3, 0));
-		this->MainCamera->Transform.SetLocalEulerAngles(Vec3(-89, 0, 0));
+		this->MainCamera->SetLocalPosition(Vec3(0, 3, 0));
+		this->MainCamera->SetLocalViewAngles(Vec3(-89, 0, 0));
 
 		this->LoadingMode++;
 		TerraPGE::UpdateLoadingScreen();
@@ -378,12 +378,12 @@ class ExampleScene : public TerraPGE::Scene
 
 		if (!LockCamera)
 		{
-			Vec3 Euler = this->MainCamera->Transform.GetLocalEulerAngles();
+			Vec3 Euler = this->MainCamera->GetLocalViewAngles();
 
 			Euler -= Vec3((float)Wnd.Input.Current.DeltaY * TerraPGE::Sensitivity, 0, 0);
 			Euler -= Vec3(0, (float)Wnd.Input.Current.DeltaX * TerraPGE::Sensitivity, 0);
 
-			this->MainCamera->Transform.SetLocalEulerAngles(Euler.AngleNormalized());
+			this->MainCamera->SetLocalViewAngles(Euler.AngleNormalized());
 		}
 
 	}
@@ -417,14 +417,6 @@ class ExampleScene : public TerraPGE::Scene
 
 	void RunTick(GdiPP* Gdi, WndCreator& Wnd, const float& ElapsedTime, std::vector<TerraPGE::Renderable*>* ToRender, std::vector<LightObject*>* Lights) override
 	{
-		static float PrevFov = this->MainCamera->Fov;
-
-		if (PrevFov != this->MainCamera->Fov)
-		{
-			this->MainCamera->CalcProjectionMat();
-			PrevFov = this->MainCamera->Fov;
-		}
-
 		if (Wnd.Input.IsKeyPressed(VK_INSERT))
 		{
 			if (IsFullScreen)
@@ -440,7 +432,7 @@ class ExampleScene : public TerraPGE::Scene
 				IsFullScreen = !IsFullScreen;
 			}
 			TerraPGE::Core::UpdateScreenInfo(Gdi);
-			MainCamera->AspectRatio = (float)((float)TerraPGE::Core::sy / (float)TerraPGE::Core::sx);
+			MainCamera->SetAspectRatio((float)((float)TerraPGE::Core::sy / (float)TerraPGE::Core::sx));
 		}
 
 		if (Wnd.Input.IsKeyPressed(VK_ESCAPE))
@@ -625,12 +617,12 @@ class ExampleScene : public TerraPGE::Scene
 			}
 			if (GetAsyncKeyState(VK_F2))
 			{
-				Scene->MainCamera->Fov += 30;
 				TerraPGE::Core::FOV += 30;
+				Scene->MainCamera->SetFov(TerraPGE::Core::FOV);
 				if (TerraPGE::Core::FOV > 120)
 				{
-					Scene->MainCamera->Fov = 60;
 					TerraPGE::Core::FOV = 60;
+					Scene->MainCamera->SetFov(TerraPGE::Core::FOV);
 				}
 			}
 			if (GetAsyncKeyState(VK_F3))
@@ -706,7 +698,7 @@ int APIENTRY WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance,
 
 	Camera* Cam = new Camera(Vec3(10, 3, -5), aspect, fovY, nearZ, farZ);
 	Matrix TransOnly = Cam->Transform.Local;
-	Cam->Transform.SetLocalEulerAngles(Vec3(0, 90, 0));
+	Cam->SetLocalViewAngles(Vec3(0, 90, 0));
 	Matrix LocalMat = Cam->Transform.Local;
 
 	Matrix Rx, Ry, Rz;
@@ -714,14 +706,12 @@ int APIENTRY WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance,
 	Matrix::CreateRotationX(&Rx, 0);
 	Matrix::CreateRotationY(&Ry, 90.0f);
 	Matrix::CreateRotationZ(&Rz, 0);
-	Matrix Rot = Rz * Ry * Rz;
+	Matrix Rot = Rz * Ry * Rx;
 	Vec3 EulerA = Rot.ExtractEuler();
-	Matrix View = Cam->Transform.Local.QuickInversed();
-
-	Cam->CalcProjectionMat();
+	Matrix View = Cam->GetViewMatrix();
 
 	Vec4 Vview = Vw * View;
-	Vec4 Vclip = Vview * Cam->ProjectionMatrix;
+	Vec4 Vclip = Vview * Cam->GetProjectionMatrix();
 
 	// Perspective divide
 	float ndcX = Vclip.x / Vclip.w;
@@ -738,7 +728,7 @@ int APIENTRY WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance,
 	std::cout << "Cam Local Matrix: " << LocalMat << std::endl;
 	std::cout << "Cam Local Matrix (Trans only): " << TransOnly << std::endl;
 	std::cout << "Cam View Matrix: " << View << std::endl;
-	std::cout << "Cam Projection Matrix: " << Cam->ProjectionMatrix << std::endl;
+	std::cout << "Cam Projection Matrix: " << Cam->GetProjectionMatrix() << std::endl;
 	std::cout << "World Position  = " << Vw << "\n";
 	std::cout << "View Position   = " << Vview << "\n";
 	std::cout << "Clip Position   = " << Vclip << "\n";

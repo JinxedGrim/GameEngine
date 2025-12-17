@@ -47,6 +47,9 @@ __pragma(warning(default:6387))
 
 
 
+
+
+
     COLORREF GetBrushColor(HBRUSH brush)
 {
     LOGBRUSH lbr;

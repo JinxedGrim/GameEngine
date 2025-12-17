@@ -17,8 +17,6 @@ namespace TerraPGE::Renderer
 	BrushPP ClearBrush = -1;
 	static const Vec3 PlaneNormal = { 0.0f, 0.0f, 1.0f };
 
-
-
 	void PrepareRenderingBackend(WndCreator& Wnd)
 	{
 		switch (CurrBackend)
@@ -174,7 +172,7 @@ namespace TerraPGE::Renderer
 			{
 				Triangle ViewSpaceTri = ProjectToViewSpace(&WorldSpaceTri, Cam);
 
-				int Count = ViewSpaceTri.ClipAgainstPlane(Cam->NearPlane, PlaneNormal, Clipped[0], Clipped[1], Core::DebugClip);
+				int Count = ViewSpaceTri.ClipAgainstPlane(Cam->GetNearPLane(), PlaneNormal, Clipped[0], Clipped[1], Core::DebugClip);
 
 				if (Count == 0)
 					continue;
@@ -182,16 +180,15 @@ namespace TerraPGE::Renderer
 				for (int i = 0; i < Count; i++)
 				{
 					// Viewed Space -> clip space
-					Cam->CalcProjectionMat();
-					Triangle ClipSpaceTri = Cam->ProjectTriangle(&Clipped[i]);
+					Clipped[i].ApplyMatrix(Cam->GetProjectionMatrix());
 
 					for (int p = 0; p < 3; p++)
 					{
-						ClipSpaceTri.ClipSpaceVerts[p] = ClipSpaceTri.Points[p];
+						Clipped[i].ClipSpaceVerts[p] = Clipped[i].Points[p];
 					}
 
 					// Add Triangle to render list
-					ClipSpaceTris.push_back(ClipSpaceTri);
+					ClipSpaceTris.push_back(Clipped[i]);
 				}
 			}
 		}
@@ -295,8 +292,8 @@ namespace TerraPGE::Renderer
 				Args->AddShaderDataByValue(TPGE_SHDR_TYPE, Object->SHADER_TYPE, 0);
 				Args->AddShaderDataByValue<Vec3>(TPGE_SHDR_CAMERA_POS, Cam->Transform.GetWorldPosition(), 0);
 				Args->AddShaderDataByValue<Vec3>(TPGE_SHDR_CAMERA_LDIR, Cam->GetLookDirection(), 0);
-				Args->AddShaderDataPtr(TPGE_SHDR_CAMERA_VIEW_MATRIX, &Cam->ViewMatrix, 0);
-				Args->AddShaderDataPtr(TPGE_SHDR_CAMERA_PROJ_MATRIX, &Cam->ProjectionMatrix, 0);
+				Args->AddShaderDataPtr(TPGE_SHDR_CAMERA_VIEW_MATRIX, Cam->_GetViewMatrixPtr(), 0);
+				Args->AddShaderDataPtr(TPGE_SHDR_CAMERA_PROJ_MATRIX, Cam->_GetProjectionMatrixPtr(), 0);
 				Args->AddShaderDataPtr(TPGE_SHDR_OBJ_MATRIX, &Object->Transform.World, 0);
 				Args->AddShaderDataPtr(TPGE_SHDR_LIGHT_OBJECTS, SceneLights, 0);
 				Args->AddShaderDataByValue<size_t>(TPGE_SHDR_LIGHT_COUNT, LightCount, 0);

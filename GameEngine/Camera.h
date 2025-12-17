@@ -6,105 +6,20 @@
 
 class Camera: public GameObject
 {
-	public:
-	Camera() = delete;
+private:
+	Vec3 CamUp = Vec3(0, 1, 0);
+	Vec3 NearPlane = { 0, 0, 0.1f };
 
-	Camera(Vec3 Position, float AspectRatio, float Fov, float Near, float Far) : GameObject(Position)
-	{
-		this->AspectRatio = AspectRatio;
-		this->Fov = Fov;
-		this->Near = Near;
-		this->Far = Far;
-		this->NearPlane = { 0.0f, 0.0f, Near };
-		this->CamUp = {0.0f, 1.0f, 0.0f};
+	Matrix ProjectionMatrix = {};
+	Matrix ViewMatrix = {};
 
-		this->CalcProjectionMat();
-	}
+	bool IsViewDirty = true;
+	bool IsProjectionDirty = true;
 
-
-	Camera(Vec3 Position, Vec3 TargetLookPos, Vec3 CamUp, float AspectRatio, float Fov, float Near, float Far) : GameObject(Position)
-	{
-		this->AspectRatio = AspectRatio;
-		this->Fov = Fov;
-		this->Near = Near;
-		this->Far = Far;
-		this->CamUp = CamUp;
-		this->NearPlane = { 0.0f, 0.0f, Near };
-
-		//this->Transform.PointAt(TargetLookPos, CamUp);
-		this->CalcProjectionMat();
-	}
-
-
-	//Calculate projection matrix of this camera
-	void CalcProjectionMat()
-	{
-		this->ProjectionMatrix = Matrix::CalcPerspectiveMatrix(this->Fov, this->AspectRatio, this->Near, this->Far);
-	}
-
-
-	//Triangle ProjectTriangle(const Triangle* InTriangle, Matrix& Mat)
-	//{
-	//	Triangle OutTri;
-
-	//	OutTri.Points[0] = InTriangle->Points[0] * Mat;
-	//	OutTri.Points[1] = InTriangle->Points[1] * Mat;
-	//	OutTri.Points[2] = InTriangle->Points[2] * Mat;
-
-	//	return OutTri;
-	//}
-
-
-	//Mesh ProjectMesh(Mesh InMesh)
-	//{
-	//	Mesh OutMesh = Mesh();
-
-	//	for (int i = 0; i < InMesh.Triangles.size(); i++)
-	//	{
-	//		Triangle NewTri;
-
-	//		NewTri.Points[0] = InMesh.Triangles.at(i).Points[0] * this->ProjectionMatrix;
-	//		NewTri.Points[1] = InMesh.Triangles.at(i).Points[1] * this->ProjectionMatrix;
-	//		NewTri.Points[2] = InMesh.Triangles.at(i).Points[2] * this->ProjectionMatrix;
-
-	//		OutMesh.Triangles.push_back(NewTri);
-	//	}
-
-	//	return OutMesh;
-	//}
-
-
-	Triangle ProjectTriangle(const Triangle* InTriangle)
-	{
-		Triangle OutTri = *InTriangle;
-
-		this->CalcProjectionMat();
-
-		OutTri.Points[0] = InTriangle->Points[0] * this->ProjectionMatrix;
-		OutTri.Points[1] = InTriangle->Points[1] * this->ProjectionMatrix;
-		OutTri.Points[2] = InTriangle->Points[2] * this->ProjectionMatrix;
-
-		return OutTri;
-	}
-
-
-	//void ProjectTriangle(const Triangle* InTriangle, Triangle& OutTri)
-	//{
-	//	OutTri.Points[0] = InTriangle->Points[0] * this->ProjectionMatrix;
-	//	OutTri.Points[1] = InTriangle->Points[1] * this->ProjectionMatrix;
-	//	OutTri.Points[2] = InTriangle->Points[2] * this->ProjectionMatrix;
-	//}
-
-
-	Triangle TriangleProjected(const Triangle* InTriangle)
-	{
-		return
-		{
-			InTriangle->Points[0] * this->ProjectionMatrix,
-			InTriangle->Points[1] * this->ProjectionMatrix,
-			InTriangle->Points[2] * this->ProjectionMatrix
-		};
-	}
+	float Fov = 90.0f;
+	float AspectRatio = 0.f;
+	float Near = 0.1f;
+	float Far = 50.f;
 
 
 	void __inline __fastcall CalcCamViewMatrix(const Vec3& TargetPos)
@@ -118,23 +33,126 @@ class Camera: public GameObject
 		this->ViewMatrix = Matrix::CalcLookAtMatrix(this->Transform.GetWorldPosition(), Dir, this->CamUp);
 	}
 
+public:
 
-	Matrix __inline GetViewMatrix()
+	float Velocity = 8.0f;
+
+	Camera() = delete;
+
+
+	Camera(Vec3 Position, float AspectRatio, float Fov, float Near, float Far) : GameObject(Position)
 	{
-		return this->ViewMatrix = this->Transform.GetWorldMatrix().QuickInversed();
+		this->AspectRatio = AspectRatio;
+		this->Fov = Fov;
+		this->Near = Near;
+		this->Far = Far;
+		this->NearPlane = { 0.0f, 0.0f, Near };
+		this->CamUp = {0.0f, 1.0f, 0.0f};
+
+		this->SetLocalPosition(Position);
+
+		this->IsViewDirty = true;
+		this->IsProjectionDirty = true;
+		this->GetViewMatrix();
+		this->GetProjectionMatrix();
 	}
 
 
-	Vec3 GetNewVelocity(const Vec3& Direction)
+	void SetFov(float Fov)
+	{
+		this->Fov = Fov;
+		this->IsProjectionDirty = true;
+	}
+
+
+	void SetAspectRatio(float AspectRatio)
+	{
+		this->AspectRatio = AspectRatio;
+		this->IsProjectionDirty = true;
+	}
+
+
+	void SetFar(float Far)
+	{
+		this->Far = Far;
+		this->IsProjectionDirty = true;
+	}
+
+
+	void SetNear(float Near)
+	{
+		this->Near = Near;
+		this->NearPlane = Vec3(0, 0, Near);
+		this->IsProjectionDirty = true;
+	}
+
+
+	Vec3 GetNearPLane() const
+	{
+		return this->NearPlane;
+	}
+
+
+	Matrix GetViewMatrix()
+	{
+		if (IsViewDirty)
+		{
+			this->ViewMatrix = this->Transform.GetWorldMatrix().QuickInversed();
+			IsViewDirty = false;
+		}
+
+		return this->ViewMatrix;
+	}
+
+
+	Matrix GetProjectionMatrix()
+	{
+		if (this->IsProjectionDirty)
+		{
+			this->ProjectionMatrix = Matrix::CalcPerspectiveMatrix(this->Fov, this->AspectRatio, this->Near, this->Far);
+			IsProjectionDirty = false;
+		}
+
+		return this->ProjectionMatrix;
+	}
+
+
+	Vec3 GetNewVelocity(const Vec3& Direction) const
 	{
 		return Direction * this->Velocity;
 	}
 
 
-	Vec3 GetLookDirection()
+	Vec3 GetLookDirection() const
 	{
 		return Vec3::EulerToDirection(this->Transform.GetWorldRotation());
 		//return this->GetForward().Normalized();
+	}
+
+
+	Vec3 GetLocalViewAngles()
+	{
+		return this->Transform.GetLocalEulerAngles();
+	}
+
+
+	Vec3 GetLocalPosition()
+	{
+		return this->Transform.GetLocalPosition();
+	}
+
+
+	void SetLocalViewAngles(const Vec3& Angles) 
+	{
+		this->Transform.SetLocalEulerAngles(Angles);
+		this->IsViewDirty = true;
+	}
+
+
+	void SetLocalPosition(const Vec3& Pos)
+	{
+		this->Transform.SetLocalPosition(Pos);
+		this->IsViewDirty = true;
 	}
 
 
@@ -144,20 +162,33 @@ class Camera: public GameObject
 	//	return Transform.GetWorldForward();
 	//}
 
+
 	Vec3 GetNewVelocity()
 	{
 		return GetLookDirection().Normalized() * Velocity;
 	}
 
-	
-	Vec3 CamUp = Vec3(0, 1, 0);
-	Vec3 NearPlane = { 0, 0, 0.1f };
-	float Velocity = 8.0f;
 
-	Matrix ProjectionMatrix = {};
-	Matrix ViewMatrix = {};
-	float Fov = 90.0f;
-	float AspectRatio = 0.f;
-	float Near = 0.1f;
-	float Far = 50.f;
+	Matrix* _GetViewMatrixPtr()
+	{
+		if (IsViewDirty)
+		{
+			this->ViewMatrix = this->Transform.GetWorldMatrix().QuickInversed();
+			IsViewDirty = false;
+		}
+
+		return &(this->ViewMatrix);
+	}
+
+
+	Matrix* _GetProjectionMatrixPtr()
+	{
+		if (this->IsProjectionDirty)
+		{
+			this->ProjectionMatrix = Matrix::CalcPerspectiveMatrix(this->Fov, this->AspectRatio, this->Near, this->Far);
+			IsProjectionDirty = false;
+		}
+
+		return &(this->ProjectionMatrix);
+	}
 };
