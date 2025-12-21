@@ -7,11 +7,13 @@ namespace TerraPGE::Renderer
 	bool DebugDepthBuffer = false;
 	bool DebugShadows = false;
 	bool DebugShadowMap = false;
+	bool SkipDepthTesting = false;
 	float TestClipZ = 1.0f;
 	float TestNdcZ = 1.0f;
 	float TestClipW = 1.0f;
 	float TestNdcW = 1.0f;
 	float TestDepth = 1.0f;
+	bool ConvertToSRGB = true;
 
 	struct FragmentInfo
 	{
@@ -21,12 +23,71 @@ namespace TerraPGE::Renderer
 		float Depth;
 	};
 
-
-	__inline float RemapNonLinearDepth(float Depth, float Near, float Far)
+	struct BaryCoords
 	{
-		return Near * Far / (Far - Depth * (Far - Near));
+		float Alpha;
+		float Beta;
+		float Gamma;
 
-	}
+		float InvW0;
+		float InvW1;
+		float InvW2;
+
+		float LerpInvW;
+
+		void AddBary(float A, float B, float G)
+		{
+			this->Alpha = A;
+			this->Beta = B;
+			this->Gamma = G;
+		}
+
+		void AddWFromTri(const Triangle* Tri)
+		{
+			this->InvW0 = 1 / Tri->Points[0].w;
+			this->InvW1 = 1 / Tri->Points[1].w;
+			this->InvW2 = 1 / Tri->Points[2].w;
+		}
+
+		void CallLerpedInvW()
+		{
+			this->LerpInvW = InvW0 * Alpha + InvW1 * Beta + InvW2 * Gamma;
+		}
+
+		float Interpolate(float Val0, float Val1, float Val2)
+		{
+			// Undivide && interpolate
+			float vOverW =
+				Val0 * this->InvW0 * this->Alpha +
+				Val1 * this->InvW1 * this->Beta +
+				Val2 * this->InvW2 * this->Gamma;
+
+			// re-apply perspective
+			return vOverW / this->LerpInvW;
+		}
+
+		Vec3 InterpolateVec3(const Vec3& V0, const Vec3& V1, const Vec3& V2)
+		{
+			// Undivide && interpolate
+			float vXOverW =
+				(V0.x * this->InvW0 * this->Alpha +
+				V0.x * this->InvW1 * this->Beta +
+				V0.x * this->InvW2 * this->Gamma) / LerpInvW;
+
+			float vYOverW =
+				(V1.y * this->InvW0 * this->Alpha +
+				V1.y * this->InvW1 * this->Beta +
+				V1.y * this->InvW2 * this->Gamma) / LerpInvW;
+
+			float vZOverW =
+				(V2.z * this->InvW0 * this->Alpha +
+				V2.z * this->InvW1 * this->Beta +
+				V2.z * this->InvW2 * this->Gamma) / LerpInvW;
+
+			// re-apply perspective
+			return Vec3(vXOverW, vYOverW, vZOverW);
+		}
+	};
 
 
 	template<typename T>
@@ -46,6 +107,9 @@ namespace TerraPGE::Renderer
 		size_t LightCount = BaseArgs->FindShaderResourceValue<size_t>(TPGE_SHDR_LIGHT_COUNT);
 		bool HasLight = LightCount > 0;
 
+		BaryCoords Interp;
+		Interp.AddWFromTri(ScreenSpaceTri);
+
 		// Screen Space
 		Vec4 v0 = ScreenSpaceTri->Points[0];
 		Vec4 v1 = ScreenSpaceTri->Points[1];
@@ -55,12 +119,6 @@ namespace TerraPGE::Renderer
 		Vec3 uvw0 = ScreenSpaceTri->TexCoords[0].AsVec3(), uvw1 = ScreenSpaceTri->TexCoords[1].AsVec3(), uvw2 = ScreenSpaceTri->TexCoords[2].AsVec3();
 		Vec3 n0 = ScreenSpaceTri->FaceNormal, n1 = ScreenSpaceTri->FaceNormal, n2 = ScreenSpaceTri->FaceNormal;
 
-		// Clip Space
-		Vec4 clip0 = ScreenSpaceTri->ClipSpaceVerts[0];
-		Vec4 clip1 = ScreenSpaceTri->ClipSpaceVerts[1];
-		Vec4 clip2 = ScreenSpaceTri->ClipSpaceVerts[2];
-
-		// Clip Space
 		Vec4 world0 = ScreenSpaceTri->WorldSpaceVerts[0];
 		Vec4 world1 = ScreenSpaceTri->WorldSpaceVerts[1];
 		Vec4 world2 = ScreenSpaceTri->WorldSpaceVerts[2];
@@ -74,8 +132,6 @@ namespace TerraPGE::Renderer
 		float denom = (v1.y - v2.y) * (v0.x - v2.x) + (v2.x - v1.x) * (v0.y - v2.y);
 		if (denom == 0.0f) return; // Degenerate triangle
 
-
-
 		for (int y = minY; y <= maxY; y++)
 		{
 			for (int x = minX; x <= maxX; x++)
@@ -85,43 +141,37 @@ namespace TerraPGE::Renderer
 				float beta = ((v2.y - v0.y) * (x - v2.x) + (v0.x - v2.x) * (y - v2.y)) / denom;
 				float gamma = 1.0f - alpha - beta;
 
-				// --- 5. Check if pixel is inside triangle ---
-				if (alpha < 0 || beta < 0 || gamma < 0) 
+				// --- Check if pixel is inside triangle ---
+				if (alpha < 0 || beta < 0 || gamma < 0)
 					continue;
 
-				Vec3 InterpolatedPos =
-					world0 * alpha +
-					world1 * beta +
-					world2 * gamma;
+				Interp.AddBary(alpha, beta, gamma);
+				Interp.CallLerpedInvW();
 
-				float Depth = ScreenSpaceTri->Points[0].z * alpha + ScreenSpaceTri->Points[1].z * beta + ScreenSpaceTri->Points[2].z * gamma;
+				float Depth = Interp.Interpolate(v0.z, v1.z, v2.z);
 
-				Depth = RemapNonLinearDepth(Depth, TerraPGE::Core::FNEAR, TerraPGE::Core::FFAR);
+				//float Depth1 = RemapNonLinearDepth(Depth, TerraPGE::Core::FNEAR, TerraPGE::Core::FFAR);
 
 				if (x == ScreenWidth / 2 && y == ScreenHeight / 2)
 				{
-					TestClipW = clip0.w;
-					TestClipZ = clip0.z;
 					TestDepth = Depth;
-					TestNdcZ = ScreenSpaceTri->ViewSpaceVerts[0].z;
+					TestNdcZ = Depth;
+					TestClipW = ScreenSpaceTri->ClipSpaceVerts[0].w;
 				}
 
 				// depth test (assumes DepthBuffer init = 1.0f and smaller means closer)
 				int idx = y * Core::sx + x;
-				if (Depth < DepthBuffer[idx])
+				if (Depth < DepthBuffer[idx] || SkipDepthTesting)
 				{
+					Vec3 InterpolatedWorldPos = Interp.InterpolateVec3(world0, world1, world2);
+
 					DepthBuffer[idx] = Depth;
 
-					Vec3 uvw =
-						uvw0 +
-						uvw1 +
-						uvw2;
+					float w = uvw0.z;
+					Vec3 uvw = Interp.InterpolateVec3(uvw0, uvw1, uvw2);
+					//uvw.w = w;
 
-					Vec3 InterpolatedNormal =
-						n0 * alpha +
-						n1 * beta +
-						n2 * gamma;
-
+					Vec3 InterpolatedNormal = Interp.InterpolateVec3(n0, n1, n2);
 					InterpolatedNormal.Normalize();
 
 					// Shade
@@ -132,28 +182,28 @@ namespace TerraPGE::Renderer
 					if (Core::DoShadows && HasLight)
 					{
 						// do for all lights
-						for (int lightIdx = 0; lightIdx < LightCount; lightIdx++)
-						{
-							Vec4 ShadowNdcPos = Lights[0]->CalcNdc(Vec4(InterpolatedPos, 1.0f));
-							ShadowNdcPos.CorrectPerspective();
+						//for (int lightIdx = 0; lightIdx < LightCount; lightIdx++)
+						//{
+						//	Vec4 ShadowNdcPos = Lights[0]->CalcNdc(Vec4(InterpolatedPos, 1.0f));
+						//	ShadowNdcPos.CorrectPerspective();
 
-							ShadowNdcPos *= (Vec3((float)(Core::ShadowMapWidth * 0.5f), (float)(Core::ShadowMapHeight * 0.5f), 1.0f));
-							ShadowNdcPos += (Vec3((float)(Core::ShadowMapWidth * 0.5f), (float)(Core::ShadowMapHeight * 0.5f), 0.0f));
+						//	ShadowNdcPos *= (Vec3((float)(Core::ShadowMapWidth * 0.5f), (float)(Core::ShadowMapHeight * 0.5f), 1.0f));
+						//	ShadowNdcPos += (Vec3((float)(Core::ShadowMapWidth * 0.5f), (float)(Core::ShadowMapHeight * 0.5f), 0.0f));
 
-							MapIdx = ContIdx(PixelRoundMinMax(ShadowNdcPos.x, 0, Core::ShadowMapWidth - 1), PixelRoundMinMax(ShadowNdcPos.y, 0, Core::ShadowMapHeight - 1), Core::ShadowMapWidth);
+						//	MapIdx = ContIdx(PixelRoundMinMax(ShadowNdcPos.x, 0, Core::ShadowMapWidth - 1), PixelRoundMinMax(ShadowNdcPos.y, 0, Core::ShadowMapHeight - 1), Core::ShadowMapWidth);
 
-							ShadowValue = Core::ShadowMap[MapIdx] + ShadowMapBias;
-							ShadowDepth = (((FarNear / (Core::FFAR - ShadowNdcPos.z * FarSubNear) - Core::FNEAR) / FarSubNear) + 1.0f) / 2.0f;
+						//	ShadowValue = Core::ShadowMap[MapIdx] + ShadowMapBias;
+						//	ShadowDepth = (((FarNear / (Core::FFAR - ShadowNdcPos.z * FarSubNear) - Core::FNEAR) / FarSubNear) + 1.0f) / 2.0f;
 
-							if (ShadowDepth > ShadowValue)
-							{
-								BaseArgs->EditShaderDataValue(TPGE_SHDR_IS_IN_SHADOW, true);
-							}
-							else
-							{
-								BaseArgs->EditShaderDataValue(TPGE_SHDR_IS_IN_SHADOW, false);
-							}
-						}
+						//	if (ShadowDepth > ShadowValue)
+						//	{
+						//		BaseArgs->EditShaderDataValue(TPGE_SHDR_IS_IN_SHADOW, true);
+						//	}
+						//	else
+						//	{
+						//		BaseArgs->EditShaderDataValue(TPGE_SHDR_IS_IN_SHADOW, false);
+						//	}
+						//}
 					}
 
 					// Debug depth buffer (Grayscale the pixel * depth val)
@@ -173,13 +223,12 @@ namespace TerraPGE::Renderer
 							}
 						}
 
-						float ColorVal = 255.0f - (255.0f * Val);
+						float ColorVal = (255.0f * Val);
 
-						ColorVal = std::clamp(ColorVal, 0.0f, 1.0f);
+						ColorVal = std::clamp(ColorVal, 0.0f, 255.0f);
 						
 						BaseArgs->EditShaderDataValue<Color>(TPGE_SHDR_FRAG_COLOR, Color(ColorVal, ColorVal, ColorVal));
 					}
-	
 					else if (*ShaderType != ShaderTypes::SHADER_FRAGMENT || ScreenSpaceTri->OverrideTextureColor || !Core::DoLighting)
 					{
 						// This entire else if is mainly for debugging clipping
@@ -201,9 +250,9 @@ namespace TerraPGE::Renderer
 					{
 						// Set up some shader args and call fragment shader=
 						Vec3 BaryCoords = Vec3(alpha, beta, gamma);
-						BaseArgs->EditShaderDataValue<Vec3>(TPGE_SHDR_FRAG_POS, InterpolatedPos);
+						BaseArgs->EditShaderDataValue<Vec3>(TPGE_SHDR_FRAG_POS, InterpolatedWorldPos);
 						BaseArgs->EditShaderDataValue<Vec3>(TPGE_SHDR_FRAG_NORMAL, InterpolatedNormal);
-						BaseArgs->EditShaderDataValue<TextureCoords>(TPGE_SHDR_TEX_UVW, { uvw.x, uvw.y, uvw.z });
+						BaseArgs->EditShaderDataValue<TextureCoords>(TPGE_SHDR_TEX_UVW, { uvw.x / uvw.z, uvw.y / uvw.z, uvw.z });
 						BaseArgs->EditShaderDataValue<Vec3>(TPGE_SHDR_FRAG_BARY_COORDS, BaryCoords);
 						BaseArgs->EditShaderDataValue<Vec2>(TPGE_SHDR_PIXEL_COORDS, Vec2((float)x, (float)y));
 						Shader(BaseArgs);
@@ -211,11 +260,20 @@ namespace TerraPGE::Renderer
 
 					// Set pixel in pixel buffer
 					Color* FragmentColor = BaseArgs->FindShaderResourcePtr<Color*>(TPGE_SHDR_FRAG_COLOR);
+
+					if (ConvertToSRGB)
+					{
+						FragmentColor->Normalize();
+						FragmentColor->TosRGB();
+						FragmentColor->Denormalize();
+					}
+
 					COLORREF PixelClr = RGB(PixelRoundFloor(FragmentColor->R), PixelRoundFloor(FragmentColor->G), PixelRoundFloor(FragmentColor->B));
 					Gdi->QuickSetPixel(x, y, PixelClr);
 				}
 			}
 		}
+
 		BaseArgs->Delete();
 	}
 

@@ -87,41 +87,6 @@ void Vec4::operator *= (const Matrix& b)
 }
 
 
-//__inline Vec3 Matrix::ToEulerAnglesXYZ() const
-//{
-//	float r00 = fMatrix[0][0], r01 = fMatrix[0][1], r02 = fMatrix[0][2];
-//	float r10 = fMatrix[1][0], r11 = fMatrix[1][1], r12 = fMatrix[1][2];
-//	float r20 = fMatrix[2][0], r21 = fMatrix[2][1], r22 = fMatrix[2][2];
-//
-//	float pitch, yaw, roll;
-//
-//	// ---- yaw extraction (from forward.x and forward.z) ----
-//	yaw = std::atan2(r20, r22);
-//
-//	// ---- pitch extraction ----
-//	// pitch = asin(-forward.y)
-//	float cy = std::sqrt(r20 * r20 + r22 * r22);
-//	pitch = std::atan2(-r21, cy);
-//
-//	// ---- roll extraction ----
-//	if (cy > 1e-6f)     // not in gimbal lock
-//	{
-//		roll = std::atan2(r01, r00);
-//	}
-//	else
-//	{
-//		// gimbal lock: pitch is +-90
-//		roll = std::atan2(-r12, r11);
-//	}
-//
-//	return Vec3(
-//		ToDegree(pitch),
-//		ToDegree(yaw),
-//		ToDegree(roll)
-//	);
-//}
-
-
 Matrix Matrix::CreateScalarMatrix(const Vec3& Scalar)
 {
 	Matrix Out;
@@ -251,41 +216,60 @@ Matrix Matrix::CreateRotationMatrix(const Vec3& RotationDeg) // pitch yaw roll
 //}
 
 
-Matrix Matrix::ConstructViewMatrix(const Vec3& Right, const Vec3& Up, const Vec3& Forward, const Vec3& EyePos)
+Matrix Matrix::ConstructViewMatrix(const Vec3& Right, const Vec3& Up, const Vec3& Forward, const Vec3& Origin)
 {
 	Matrix View = Matrix::CreateIdentity();
 	//Matrix::CreateTranslationMatrix(-EyePos);
 	
 	// Rotation part (inverse rotation = transpose for orthogonal)
-	View._11 = Right.x;   View._12 = Up.x;   View._13 = Forward.x;
-	View._21 = Right.y;   View._22 = Up.y;   View._23 = Forward.y;
-	View._31 = Right.z;   View._32 = Up.z;   View._33 = Forward.z;
+	View._11 = Right.x;   View._21 = Up.x;   View._31 = Forward.x;
+	View._12 = Right.y;   View._22 = Up.y;   View._32 = Forward.y;
+	View._13 = Right.z;   View._23 = Up.z;   View._33 = Forward.z;
 
-	View._14 = -Right.Dot(EyePos);
-	View._24 = -Up.Dot(EyePos);
-	View._34 = -Forward.Dot(EyePos);
+	View.Transpose3x3();
+
+	View._41 = -Right.Dot(Origin);
+	View._42 = -Up.Dot(Origin);
+	View._43 = -Forward.Dot(Origin);
 	View._44 = 1.0f;
 
 	return View;
 }
 
 
-Matrix Matrix::CalcLookAtMatrix(const Vec3& EyePos, const Vec3& Dir, const Vec3& Up)
+Matrix Matrix::CalcLookAtMatrix(const Vec3& Origin, const Vec3& Forward, const Vec3& Up)
 {
-	Vec3 Forward = Dir.Normalized();
-	Vec3 Right = Up.Cross(Forward).Normalized();
-	Vec3 UpReal = Forward.Cross(Right);
+	Vec3 F = Forward.Normalized();
+	Vec3 R = Up.Cross(Forward).Normalized();
+	Vec3 U = Forward.Cross(R);
 
-	return Matrix::ConstructViewMatrix(Right, UpReal, Forward, EyePos);
+	return Matrix::ConstructViewMatrix(R, U, F, Origin);
 }
 
 
-Matrix Matrix::CalcViewMatrix(const Vec3& EyePos, const Vec3& TargetPos, const Vec3& Up)
+Matrix Matrix::CalcViewMatrix(const Vec3& Origin, const Vec3& TargetPos, const Vec3& Up)
 {
 	// LEFT HANDED
-	Vec3 forward = (TargetPos - EyePos).Normalized();
+	Vec3 forward = (TargetPos - Origin).Normalized();
 
-	return 	Matrix::CalcLookAtMatrix(EyePos, forward, Up);
+	return 	Matrix::CalcLookAtMatrix(Origin, forward, Up);
+}
+
+
+Matrix Matrix::CalcInverseView(const Vec3& Up)
+{
+	Vec3 Forward = this->GetForward().Normalized();
+	Vec3 Right = Up.Cross(Forward).Normalized();
+	Vec3 RealUp = Forward.Cross(Right).Normalized();
+
+	Matrix Out;
+	Out.SetRight(Right);
+	Out.SetUp(RealUp);
+	Out.SetForward(Forward);
+
+	Out.SetTranslation(this->GetTranslation());
+
+	return Out.QuickInversed();
 }
 
 
@@ -353,7 +337,7 @@ __inline Matrix Matrix::InverseSRT() const
 	return out;
 }
 
-
+/*
 __inline void Matrix::Decompose(Vec3& outScale, Vec3& outEuler, Vec3& outPos) const
 {
 	// 1. Extract translation (T)
@@ -386,7 +370,7 @@ __inline void Matrix::Decompose(Vec3& outScale, Vec3& outEuler, Vec3& outPos) co
 	// 5. Convert R to Euler
 	outEuler = R.ExtractEuler(); // You must implement this
 }
-
+*/
 
 #define COLOR_NORMAL 0
 #define COLOR_255 1
@@ -412,6 +396,27 @@ public:
 		}
 	}
 
+	inline float LinearToSRGB_Channel(float c)
+	{
+		c = std::clamp(c, 0.0f, 1.0f);
+
+		if (c <= 0.0031308f)
+			return 12.92f * c;
+		else
+			return 1.055f * powf(c, 1.0f / 2.4f) - 0.055f;
+	}
+
+	inline float SRGBToLinear_Channel(float c)
+	{
+		c = std::clamp(c, 0.0f, 1.0f);
+
+		if (c <= 0.04045f)
+			return c / 12.92f;
+		else
+			return powf((c + 0.055f) / 1.055f, 2.4f);
+	}
+
+
 	Color(const Vec3 RGB, const float A = 255.0f, const int Mode = COLOR_255)
 	{
 		this->R = RGB.x;
@@ -433,9 +438,32 @@ public:
 		this->A = this->A / 255.0f;
 	}
 
+
 	Vec3 GetRGB() const
 	{
 		return Vec3(R * (A / 255.0f), G * (A / 255.0f), B * (A / 255.0f));
+	}
+
+	void Denormalize()
+	{
+		this->R = this->R * 255.0f;
+		this->G = this->G * 255.0f;
+		this->B = this->B * 255.0f;
+		this->A = this->A * 255.0f;
+	}
+
+	void TosRGB()
+	{
+		this->R = LinearToSRGB_Channel(R);
+		this->G = LinearToSRGB_Channel(G);
+		this->B = LinearToSRGB_Channel(B);
+	}
+
+	void ToLinear()
+	{
+		this->R = SRGBToLinear_Channel(R);
+		this->G = SRGBToLinear_Channel(G);
+		this->B = SRGBToLinear_Channel(B);
 	}
 
 	float R = 255.0f;

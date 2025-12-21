@@ -17,6 +17,9 @@ namespace TerraPGE::Renderer
 	BrushPP ClearBrush = -1;
 	static const Vec3 PlaneNormal = { 0.0f, 0.0f, 1.0f };
 
+	bool DebugClip = false;
+	bool DoCull = true;
+
 	void PrepareRenderingBackend(WndCreator& Wnd)
 	{
 		switch (CurrBackend)
@@ -111,7 +114,7 @@ namespace TerraPGE::Renderer
 	__inline bool ShouldCulltriangle(const Triangle& tri, const Camera* Cam)
 	{
 		//if ((TriNormal.Dot(WorldSpaceTri.Points[0] - Cam->Pos) < 0.0f) || !TerraPGE::DoCull || !MeshToRender->BackfaceCulling) // backface culling
-		if (!Core::DoCull)
+		if (!Renderer::DoCull)
 			return false;
 		Vec3 normal = tri.FaceNormal;
 		float facing = normal.Dot(tri.Points[0] - Cam->Transform.GetWorldPosition());
@@ -140,7 +143,6 @@ namespace TerraPGE::Renderer
 			{
 				NormPos = ((Tri.Points[0] + Tri.Points[1] + Tri.Points[2]) / 3.0f);
 				NormDir = (Tri.Points[1] - Tri.Points[0]).GetVec3().CrossNormalized((Tri.Points[2] - Tri.Points[0])).Normalized();
-
 				TriNormal = -(WorldSpaceTri.Points[1] - WorldSpaceTri.Points[0]).GetVec3().CrossNormalized((WorldSpaceTri.Points[2] - WorldSpaceTri.Points[0])).Normalized(); // this line and the if statement is used for culling
 
 				for (int i = 0; i < 3; i++)
@@ -172,7 +174,7 @@ namespace TerraPGE::Renderer
 			{
 				Triangle ViewSpaceTri = ProjectToViewSpace(&WorldSpaceTri, Cam);
 
-				int Count = ViewSpaceTri.ClipAgainstPlane(Cam->GetNearPLane(), PlaneNormal, Clipped[0], Clipped[1], Core::DebugClip);
+				int Count = ViewSpaceTri.ClipAgainstPlane(Cam->GetNearPLane(), PlaneNormal, Clipped[0], Clipped[1], Renderer::DebugClip);
 
 				if (Count == 0)
 					continue;
@@ -197,56 +199,56 @@ namespace TerraPGE::Renderer
 
 
 	std::vector<Triangle> Clipping(Triangle* Tri)
-	{
-		Triangle Clipped[2];
-
-		std::vector<Triangle> ListTris;
-		ListTris.push_back(*Tri);
-		int NewTris = 1;
-
-		for (int p = 0; p < 4; p++)
 		{
-			int NewTrisToAdd = 0;
-			while (NewTris > 0)
+			Triangle Clipped[2];
+
+			std::vector<Triangle> ListTris;
+			ListTris.push_back(*Tri);
+			int NewTris = 1;
+
+			for (int p = 0; p < 4; p++)
 			{
-				Triangle Test = ListTris.front();
-				ListTris.erase(ListTris.begin());
-				NewTris--;
+				int NewTrisToAdd = 0;
+				while (NewTris > 0)
+				{
+					Triangle Test = ListTris.front();
+					ListTris.erase(ListTris.begin());
+					NewTris--;
 
-				switch (p)
-				{
-				case 0:
-				{
-					NewTrisToAdd = Test.ClipAgainstPlane({ 0.0f, 0.0f, 0.0f }, { 0.0f, 1.0f, 0.0f }, Clipped[0], Clipped[1], Core::DebugClip);
-					break;
-				}
-				case 1:
-				{
-					NewTrisToAdd = Test.ClipAgainstPlane({ 0.0f, (float)Core::sy - 1, 0.0f }, { 0.0f, -1.0f, 0.0f }, Clipped[0], Clipped[1], Core::DebugClip);
-					break;
-				}
-				case 2:
-				{
-					NewTrisToAdd = Test.ClipAgainstPlane({ 0.0f, 0.0f, 0.0f }, { 1.0f, 0.0f, 0.0f }, Clipped[0], Clipped[1], Core::DebugClip);
-					break;
-				}
-				case 3:
-				{
-					NewTrisToAdd = Test.ClipAgainstPlane({ (float)Core::sx - 1, 0.0f, 0.0f }, { -1.0f, 0.0f, 0.0f }, Clipped[0], Clipped[1], Core::DebugClip);
-					break;
-				}
-				}
+					switch (p)
+					{
+					case 0:
+					{
+						NewTrisToAdd = Test.ClipAgainstPlane({ 0.0f, 0.0f, 0.0f }, { 0.0f, 1.0f, 0.0f }, Clipped[0], Clipped[1], Renderer::DebugClip);
+						break;
+					}
+					case 1:
+					{
+						NewTrisToAdd = Test.ClipAgainstPlane({ 0.0f, (float)Core::sy - 1, 0.0f }, { 0.0f, -1.0f, 0.0f }, Clipped[0], Clipped[1], Renderer::DebugClip);
+						break;
+					}
+					case 2:
+					{
+						NewTrisToAdd = Test.ClipAgainstPlane({ 0.0f, 0.0f, 0.0f }, { 1.0f, 0.0f, 0.0f }, Clipped[0], Clipped[1], Renderer::DebugClip);
+						break;
+					}
+					case 3:
+					{
+						NewTrisToAdd = Test.ClipAgainstPlane({ (float)Core::sx - 1, 0.0f, 0.0f }, { -1.0f, 0.0f, 0.0f }, Clipped[0], Clipped[1], Renderer::DebugClip);
+						break;
+					}
+					}
 
-				for (int w = 0; w < NewTrisToAdd; w++)
-				{
-					ListTris.push_back(Clipped[w]);
+					for (int w = 0; w < NewTrisToAdd; w++)
+					{
+						ListTris.push_back(Clipped[w]);
+					}
 				}
+				NewTris = (int)ListTris.size();
 			}
-			NewTris = (int)ListTris.size();
-		}
 
-		return ListTris;
-	}
+			return ListTris;
+		}
 
 
 	// Render function for rendering entire meshes
@@ -279,6 +281,7 @@ namespace TerraPGE::Renderer
 				NdcSpaceTri.Translate(Vec3((float)(Core::sx * 0.5f), (float)(Core::sy * 0.5f), 0.0f));
 
 				std::vector<Triangle> ClippedScreenSpace = Clipping(&NdcSpaceTri);
+
 				// sort faces 
 		//		std::sort(TrisToRender.begin(), TrisToRender.end(), [](const Triangle& t1, const Triangle& t2)
 		//		{
@@ -294,7 +297,7 @@ namespace TerraPGE::Renderer
 				Args->AddShaderDataByValue<Vec3>(TPGE_SHDR_CAMERA_LDIR, Cam->GetLookDirection(), 0);
 				Args->AddShaderDataPtr(TPGE_SHDR_CAMERA_VIEW_MATRIX, Cam->_GetViewMatrixPtr(), 0);
 				Args->AddShaderDataPtr(TPGE_SHDR_CAMERA_PROJ_MATRIX, Cam->_GetProjectionMatrixPtr(), 0);
-				Args->AddShaderDataPtr(TPGE_SHDR_OBJ_MATRIX, &Object->Transform.World, 0);
+				Args->AddShaderDataPtr(TPGE_SHDR_OBJ_MATRIX, Object->Transform._GetWorldMatrixPtr(), 0);
 				Args->AddShaderDataPtr(TPGE_SHDR_LIGHT_OBJECTS, SceneLights, 0);
 				Args->AddShaderDataByValue<size_t>(TPGE_SHDR_LIGHT_COUNT, LightCount, 0);
 				Args->AddShaderDataByValue<bool>(TPGE_SHDR_DEBUG_SHADOWS, DebugShadows);
@@ -328,7 +331,6 @@ namespace TerraPGE::Renderer
 							if (Object->mesh->MeshName != "Ray")
 							{
 								EngineGdi->DrawFilledTriangle(PixelRound(ToDraw.Points[0].x), PixelRound(ToDraw.Points[0].y), PixelRound(ToDraw.Points[1].x), PixelRound(ToDraw.Points[1].y), PixelRound(ToDraw.Points[2].x), PixelRound(ToDraw.Points[2].y), BrushPP(RGB(ToDraw.Col.x, ToDraw.Col.y, ToDraw.Col.z)), PenPP(PS_SOLID, 1, RGB(1, 1, 1)));
-
 								//if (ShowNormals)
 								//{
 								//	Ray NormalRay = Ray(ToDraw.NormalPositions[0], ToDraw.NormDirections[0]);
@@ -370,7 +372,6 @@ namespace TerraPGE::Renderer
 				}
 
 				Args->Delete();
-
 			}
 		}
 	}

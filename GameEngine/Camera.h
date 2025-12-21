@@ -27,12 +27,6 @@ private:
 		this->ViewMatrix = Matrix::CalcViewMatrix(this->Transform.GetWorldPosition(), TargetPos, this->CamUp);
 	}
 
-
-	void __inline __fastcall CalcCamLookMatrix(const Vec3& Dir)
-	{
-		this->ViewMatrix = Matrix::CalcLookAtMatrix(this->Transform.GetWorldPosition(), Dir, this->CamUp);
-	}
-
 public:
 
 	float Velocity = 8.0f;
@@ -123,7 +117,7 @@ public:
 	{
 		if (IsViewDirty)
 		{
-			this->ViewMatrix = this->Transform.GetWorldMatrix().QuickInversed();
+			this->ViewMatrix = this->Transform.Local.CalcInverseView(this->CamUp);
 			IsViewDirty = false;
 		}
 

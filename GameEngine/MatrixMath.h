@@ -269,6 +269,7 @@ public:
 		return R;
 	}
 
+
 	void NormalizeBasis()
 	{
 		Vec3 R = this->GetRight();
@@ -292,65 +293,18 @@ public:
 		out.SetTranslation(Vec3(0.0f, 0.0f, 0.0f));
 
 		out.Transpose3x3();
-		out.NormalizeBasis();
 
 		Vec3 newT;
-		newT = t * out.Extract3x3();
+		newT = -t * out.Extract3x3();
 
-		out.SetTranslation(-newT);
+		out.SetTranslation(newT);
 		out._44 = 1.f;
 
 		return out;
 	}
 
 
-	//void QuickInverse()
-	//{
-	//	this->Transpose3x3();
-	//	fMatrix[0][3] = fMatrix[1][3] = fMatrix[2][3] = 0.0f;
-
-	//	float tx = fMatrix[3][0];
-	//	float ty = fMatrix[3][1];
-	//	float tz = fMatrix[3][2];
-
-	//	fMatrix[3][0] = -(tx * fMatrix[0][0] + ty * fMatrix[0][1] + tz * fMatrix[0][2]);
-	//	fMatrix[3][1] = -(tx * fMatrix[1][0] + ty * fMatrix[1][1] + tz * fMatrix[1][2]);
-	//	fMatrix[3][2] = -(tx * fMatrix[2][0] + ty * fMatrix[2][1] + tz * fMatrix[2][2]);
-	//	fMatrix[3][3] = 1.0f;
-
-		//float tmp = this->fMatrix[0][1];
-		//float tmp1 = this->fMatrix[1][2];
-		//float tmp2 = this->fMatrix[0][2];
-
-		//this->fMatrix[0][1] = this->fMatrix[1][0];
-		//this->fMatrix[0][2] = this->fMatrix[2][0];
-		//this->fMatrix[0][3] = 0.0f;
-
-		//this->fMatrix[1][0] = tmp;
-		//this->fMatrix[1][2] = this->fMatrix[2][1];
-		//this->fMatrix[1][3] = 0.0f;
-
-		//this->fMatrix[2][0] = tmp2;
-		//this->fMatrix[2][1] = tmp1;
-		//this->fMatrix[2][3] = 0.0f;
-
-
-		// Calculate the last column of the output matrix manually
-		//float t0 = -(this->fMatrix[3][0]);
-		//float t1 = -(this->fMatrix[3][1]);
-		//float t2 = -(this->fMatrix[3][2]);
-
-		//this->fMatrix[3][0] = t0 * this->fMatrix[0][0] + t1 * this->fMatrix[1][0] + t2 * this->fMatrix[2][0];
-		//this->fMatrix[3][1] = t0 * this->fMatrix[0][1] + t1 * this->fMatrix[1][1] + t2 * this->fMatrix[2][1];
-		//this->fMatrix[3][2] = t0 * this->fMatrix[0][2] + t1 * this->fMatrix[1][2] + t2 * this->fMatrix[2][2];
-		//this->fMatrix[3][3] = 1.0f;
-//	}
-
-
 	__inline Matrix InverseSRT() const;
-
-
-	__inline void Decompose(Vec3& outScale, Vec3& outEuler, Vec3& outPos) const;
 
 
 	static void CreateRotationX(Matrix* Out, float AngleDegrees)
@@ -358,10 +312,9 @@ public:
 		Out->MakeIdentity();
 		float c = cosf(ToRad(AngleDegrees)), s = sinf(ToRad(AngleDegrees));
 
-		// Row-vector, left-handed
 		Out->_22 = c;
-		Out->_23 = s;
-		Out->_32 = -s;
+		Out->_23 = -s;
+		Out->_32 = s;
 		Out->_33 = c;
 	}
 
@@ -371,7 +324,6 @@ public:
 		Out->MakeIdentity();
 		float c = cosf(ToRad(AngleDegrees)), s = sinf(ToRad(AngleDegrees));
 
-		// Row-vector, left-handed
 		Out->_11 = c;
 		Out->_13 = -s;
 		Out->_31 = s;
@@ -386,10 +338,9 @@ public:
 		float c = cosf(ToRad(AngleDegrees));
 		float s = sinf(ToRad(AngleDegrees));
 
-		// Row-vector, left-handed
 		Out->_11 = c;
-		Out->_12 = s;
-		Out->_21 = -s;
+		Out->_12 = -s;
+		Out->_21 = s;
 		Out->_22 = c;
 	}
 
@@ -441,8 +392,8 @@ public:
 
 	Vec3 ExtractEuler()
 	{
-		Matrix3x3 B = this->GetBasis();
-		Vec3 Scale = this->ExtractScale();
+		Matrix3x3 B = GetBasis();
+		Vec3 Scale = ExtractScale();
 
 		Vec3 R = B.GetRight() / Scale.x;
 		Vec3 U = B.GetUp() / Scale.y;
@@ -454,17 +405,17 @@ public:
 
 		float pitch, yaw, roll;
 
-		if (std::fabs(U.z) < 0.99999f) // no gimbal lock
+		if (fabs(U.z) < 0.99999f)
 		{
-			pitch = std::asin(U.z);              // rotation around X
-			yaw = std::atan2(-F.x, F.z);       // rotation around Y
-			roll = std::atan2(-U.x, U.y);       // rotation around Z
+			pitch = -asinf(U.z);
+			yaw = -atan2f(-F.x, F.z);
+			roll = atan2f(-U.x, U.y);
 		}
-		else // gimbal lock
+		else
 		{
-			pitch = (U.z > 0) ? PI / 2 : -PI / 2;
-			yaw = 0.0f;                        // arbitrary
-			roll = std::atan2(R.y, R.x);
+			pitch = (U.z > 0) ? PI * 0.5f : -PI * 0.5f;
+			yaw = -atan2f(R.z, F.z);
+			roll = 0.0f;
 		}
 
 		return Vec3(
@@ -489,7 +440,6 @@ public:
 	}
 
 
-
 	static Matrix ConstructViewMatrix(const Vec3& Right, const Vec3& Dir, const Vec3& Up, const Vec3& EyePos);
 
 
@@ -510,6 +460,8 @@ public:
 
 	static Matrix CalcViewMatrix(const Vec3& Pos, const Vec3& Target, const Vec3& Up);
 
+	Matrix CalcInverseView(const Vec3& Up);
+
 
 	void  MakeOrthoMatrix(const float& Left, const float& Right, const float& Top, const float& Bottom, const float& Near, const float& Far);
 
@@ -518,35 +470,6 @@ public:
 
 
 	static __inline Matrix CreateMatrixFromRigthForwardUp(const Vec3&, const Vec3&, const Vec3&, const Vec3&);
-
-
-	//Matrix GetRTMat()
-	//{
-	//	Matrix r = *this;
-
-	//	// row 0 = right
-	//	Vec3 right(r.fMatrix[0][0], r.fMatrix[0][1], r.fMatrix[0][2]);
-	//	right.Normalize();
-	//	r.fMatrix[0][0] = right.x;
-	//	r.fMatrix[0][1] = right.y;
-	//	r.fMatrix[0][2] = right.z;
-
-	//	// row 1 = up
-	//	Vec3 up(r.fMatrix[1][0], r.fMatrix[1][1], r.fMatrix[1][2]);
-	//	up.Normalize();
-	//	r.fMatrix[1][0] = up.x;
-	//	r.fMatrix[1][1] = up.y;
-	//	r.fMatrix[1][2] = up.z;
-
-	//	// row 2 = forward
-	//	Vec3 fwd(r.fMatrix[2][0], r.fMatrix[2][1], r.fMatrix[2][2]);
-	//	fwd.Normalize();
-	//	r.fMatrix[2][0] = fwd.x;
-	//	r.fMatrix[2][1] = fwd.y;
-	//	r.fMatrix[2][2] = fwd.z;
-
-	//	return r;
-	//}
 
 
 	inline bool NearlyEqual(float a, float b, float eps = 1e-6f) const

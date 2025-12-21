@@ -7,6 +7,7 @@ private:
 	Vec3 LocalPosition = Vec3(1.0f, 5.0f, 1.0f);
 	Vec3 LocalScale = Vec3(1.0f, 1.0f, 1.0f);
 	Vec3 LocalEulerRotation = Vec3(0.0f, 0.0f, 0.0f);
+	bool IsTransformDirty = false;
 
 	void RecalculateLocalMatrix()
 	{
@@ -15,7 +16,8 @@ private:
 
 	void RecalculateLocalVec3()
 	{
-		Local.Decompose(this->LocalScale, this->LocalEulerRotation, this->LocalPosition);
+		return;
+		//Local.Decompose(this->LocalScale, this->LocalEulerRotation, this->LocalPosition);
 	}
 
 public:
@@ -111,7 +113,6 @@ public:
 
 		Matrix invParent = Parent ? Parent->GetWorldMatrix().InverseSRT() : Matrix::CreateIdentity();
 		Local = invParent * worldBefore;
-		Local.Decompose(LocalScale, LocalEulerRotation, LocalPosition);
 		RecalculateLocalMatrix();
 	}
 
@@ -126,6 +127,17 @@ public:
 	{
 		this->World = this->Parent ? this->Parent->World * this->Local : this->Local;
 		for (auto* c : Children) c->WalkTransformChain();
+	}
+
+	Matrix* _GetWorldMatrixPtr()
+	{
+		this->WalkTransformChain();
+		return &this->World;
+	}
+
+	Matrix* _GetLocalMatrixPtr()
+	{
+		return &this->Local;
 	}
 
 

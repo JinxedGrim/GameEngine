@@ -274,7 +274,7 @@ class ExampleScene : public TerraPGE::Scene
 
 		LockCamera = false;
 		this->MainCamera->SetLocalPosition(Vec3(0, 3, 0));
-		this->MainCamera->SetLocalViewAngles(Vec3(-89, 0, 0));
+		this->MainCamera->SetLocalViewAngles(Vec3(0, 0, 0));
 
 		this->LoadingMode++;
 		TerraPGE::UpdateLoadingScreen();
@@ -290,7 +290,7 @@ class ExampleScene : public TerraPGE::Scene
 
 		params = Collider::CalculateAABB(PlaneRender->mesh->Triangles);
 		PlaneRender->AddAABBCollider(params, 1000.0f, 0.1f, Vec3(0.0f, 0.0f, 0.0f));
-		PlaneRender->collider.body.KineticFriction = ICE_KINETIC_FRICTION;
+		PlaneRender->collider.body.KineticFriction = WOOD_KINETIC_FRICTION;
 		PlaneRender->collider.PhysicsEnabled = false;
 
 		//this->SlRender = DEBUG_NEW TerraPGE::Renderable(&(sl.LightMesh), (this->MainCamera), Vec3(1.0f, 1.0f, 1.0f), Vec3(0.0f, 0.0f, 0.0f), sl.Transform.GetLocalPosition(), TerraPGE::EngineShaders::Shader_Frag_Phong, ShaderTypes::SHADER_FRAGMENT);
@@ -340,6 +340,8 @@ class ExampleScene : public TerraPGE::Scene
 
 	void HandleInput(WndCreator& Wnd, GdiPP* Gdi, const float& ElapsedTime)
 	{
+		Vec3 Euler = this->MainCamera->GetLocalViewAngles();
+
 		if (Wnd.Input.IsKeyDown(VK_SPACE))
 		{
 			this->MainCamera->Transform.SetLocalPosition(MainCamera->Transform.GetLocalPosition() + (MainCamera->GetNewVelocity(Vec3(0, 1, 0) * MainCamera->Transform.GetWorldMatrix().GetBasis())) * ElapsedTime);
@@ -350,24 +352,55 @@ class ExampleScene : public TerraPGE::Scene
 			this->MainCamera->Transform.SetLocalPosition(MainCamera->Transform.GetLocalPosition() + (MainCamera->GetNewVelocity(Vec3(0, -1, 0) * MainCamera->Transform.GetWorldMatrix().GetBasis())) * ElapsedTime);
 		}
 
+		if (Wnd.Input.IsKeyDown(VK_UP))
+		{
+			Euler += Vec3((float)20 * ElapsedTime, 0, 0);
+
+			if (Euler.x > 89)
+				Euler.x = 89;
+			if (Euler.x < -89)
+				Euler.x = -89;
+		}
+
+		if (Wnd.Input.IsKeyDown(VK_DOWN))
+		{
+			Euler += Vec3((float)-20 * ElapsedTime, 0, 0);
+
+			if (Euler.x > 89)
+				Euler.x = 89;
+			if (Euler.x < -89)
+				Euler.x = -89;
+		}
+
+		if (Wnd.Input.IsKeyDown(VK_LEFT))
+		{
+			Euler += Vec3(0, (float)(float)-20 * ElapsedTime, 0);
+
+		}
+
+		if (Wnd.Input.IsKeyDown(VK_RIGHT))
+		{
+			Euler += Vec3(0, (float)(float)20 * ElapsedTime, 0);
+		}
+
 		if (Wnd.Input.IsKeyDown('A'))
 		{
-			this->MainCamera->Transform.SetLocalPosition(MainCamera->Transform.GetLocalPosition() + (MainCamera->GetNewVelocity(Vec3(-1, 0, 0) * MainCamera->Transform.GetWorldMatrix().GetBasis())) * ElapsedTime);
+			this->MainCamera->SetLocalPosition(MainCamera->Transform.GetLocalPosition() + (-MainCamera->GetNewVelocity(MainCamera->Transform.GetWorldMatrix().GetRight())) * ElapsedTime);
 		}
 
 		if (Wnd.Input.IsKeyDown('D'))
 		{
-			this->MainCamera->Transform.SetLocalPosition(MainCamera->Transform.GetLocalPosition() + (MainCamera->GetNewVelocity(Vec3(1, 0, 0) * MainCamera->Transform.GetWorldMatrix().GetBasis())) * ElapsedTime);
+			this->MainCamera->SetLocalPosition(MainCamera->Transform.GetLocalPosition() + (MainCamera->GetNewVelocity(MainCamera->Transform.GetWorldMatrix().GetRight())) * ElapsedTime);
 		}
 
 		if (Wnd.Input.IsKeyDown('W'))
 		{
-			this->MainCamera->Transform.SetLocalPosition(MainCamera->Transform.GetLocalPosition() + (MainCamera->GetNewVelocity(Vec3(0, 0, 1) * MainCamera->Transform.GetWorldMatrix().GetBasis())) * ElapsedTime);
+			this->MainCamera->SetLocalPosition(MainCamera->Transform.GetLocalPosition() + (MainCamera->GetNewVelocity(MainCamera->Transform.GetWorldMatrix().GetForward())) * ElapsedTime);
 		}
 
 		if (Wnd.Input.IsKeyDown('S'))
 		{
-			this->MainCamera->Transform.SetLocalPosition(MainCamera->Transform.GetLocalPosition() + (MainCamera->GetNewVelocity(Vec3(0, 0, -1) * MainCamera->Transform.GetWorldMatrix().GetBasis())) * ElapsedTime);
+			this->MainCamera->SetLocalPosition(MainCamera->GetLocalPosition() + (-MainCamera->GetNewVelocity(MainCamera->Transform.GetWorldMatrix().GetForward())) * ElapsedTime);
 		}
 
 		if (Wnd.Input.IsKeyDown('C'))
@@ -378,12 +411,8 @@ class ExampleScene : public TerraPGE::Scene
 
 		if (!LockCamera)
 		{
-			Vec3 Euler = this->MainCamera->GetLocalViewAngles();
-
 			Euler -= Vec3((float)Wnd.Input.Current.DeltaY * TerraPGE::Sensitivity, 0, 0);
-			Euler -= Vec3(0, (float)Wnd.Input.Current.DeltaX * TerraPGE::Sensitivity, 0);
-
-			this->MainCamera->SetLocalViewAngles(Euler.AngleNormalized());
+			Euler += Vec3(0, (float)Wnd.Input.Current.DeltaX * TerraPGE::Sensitivity, 0);
 		}
 
 		if (Wnd.Input.IsKeyPressed(VK_INSERT))
@@ -435,6 +464,14 @@ class ExampleScene : public TerraPGE::Scene
 				HoveredRend->collider.body.Velocity = this->MainCamera->GetLookDirection().Normalized() * 8.0f;
 			}
 		}
+
+		if (Euler.x > 89)
+			Euler.x = 89;
+		if (Euler.x < -89)
+			Euler.x = -89;
+		Euler.z = 0;
+
+		this->MainCamera->SetLocalViewAngles(Euler);
 	}
 
 
@@ -581,7 +618,7 @@ class ExampleScene : public TerraPGE::Scene
 			Gdi->DrawStringA(20, 40, FovStr + std::to_string(TerraPGE::Core::FOV) + AspectStr + std::to_string(MainCamera->GetAspectRatio()) + NearStr + std::to_string(MainCamera->GetNear()) + FarStr + std::to_string(MainCamera->GetFar()), RGB(255, 0, 0), TRANSPARENT);
 			Gdi->DrawStringA(20, 60, CamPosXstr + std::to_string(LocalPos.x) + CamPosYstr + std::to_string(LocalPos.y) + CamPosZstr + std::to_string(LocalPos.z) + CamPosEndstr + CamPosWolrd + std::to_string(WorldPos.x) + CamPosYstr + std::to_string(WorldPos.y) + CamPosZstr + std::to_string(WorldPos.z) + CamPosEndstr, RGB(255, 0, 0), TRANSPARENT);
 			Gdi->DrawStringA(20, 80, CamRotXstr + std::to_string(LocalEuler.x) + CamRotYstr + std::to_string(LocalEuler.y) + CamRotZstr + std::to_string(LocalEuler.z) + CamRotEndstr + CamWorldRotXstr + std::to_string(WorldEuler.x) + CamRotYstr + std::to_string(WorldEuler.y) + CamRotZstr + std::to_string(WorldEuler.z) + CamRotEndstr, RGB(255, 0, 0), TRANSPARENT);
-			Gdi->DrawStringA(20, 120, CullingStr + std::to_string(TerraPGE::Core::DoCull), RGB(255, 0, 0), TRANSPARENT);
+			Gdi->DrawStringA(20, 120, CullingStr + std::to_string(TerraPGE::Renderer::DoCull), RGB(255, 0, 0), TRANSPARENT);
 			Gdi->DrawStringA(20, 140, LightingStr + std::to_string(TerraPGE::Core::DoLighting), RGB(255, 0, 0), TRANSPARENT);
 			Gdi->DrawStringA(20, 160, FilledStr + std::to_string(TerraPGE::Core::WireFrame), RGB(255, 0, 0), TRANSPARENT);
 			Gdi->DrawStringA(20, 180, TriLinesStr + std::to_string(TerraPGE::Core::ShowTriLines), RGB(255, 0, 0), TRANSPARENT);
@@ -652,7 +689,7 @@ class ExampleScene : public TerraPGE::Scene
 			}
 			if (GetAsyncKeyState(VK_F8))
 			{
-				TerraPGE::Core::DebugClip = !TerraPGE::Core::DebugClip;
+				TerraPGE::Renderer::DebugClip = !TerraPGE::Renderer::DebugClip;
 			}
 			if (GetAsyncKeyState(VK_F10))
 			{
@@ -707,15 +744,56 @@ int APIENTRY WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance,
 
 	std::cout << "Rotating to: (0, 90, 0)" << std::endl;
 
-	Cam_1->SetLocalViewAngles(Vec3(0, -90, 0));
+	Cam_1->SetLocalViewAngles(Vec3(0, 90, 0));
 
 	Vec4 vy = fwd * Cam_1->GetViewMatrix();
 
 	std::cout << "fwd = " << fwd << " fwd*Cam_Vm: " << vy << std::endl;
 
+	std::cout << "Rotating to: (0, 180, 0)" << std::endl;
+
+	Cam_1->SetLocalViewAngles(Vec3(0, 180, 0));
+
+	vy = fwd * Cam_1->GetViewMatrix();
+
+	std::cout << "fwd = " << fwd << " fwd*Cam_Vm: " << vy << std::endl;
+
+	Cam_1->SetLocalPosition(Vec3(3, 2, 1));
+	std::cout << "Moving to: (3, 2, 1)" << std::endl;
+	std::cout << "Rotating to: (0, 0, 0)" << std::endl;
+
+	Cam_1->SetLocalViewAngles(Vec3(0, 0, 0));
+
+	vy = fwd * Cam_1->GetViewMatrix();
+
+	std::cout << "fwd = " << fwd << " fwd*Cam_Vm: " << vy << std::endl;
+
+	std::cout << "Rotating to: (0, 90, 0)" << std::endl;
+
+	Cam_1->SetLocalViewAngles(Vec3(0, 90, 0));
+
+	vy = fwd * Cam_1->GetViewMatrix();
+
+	std::cout << "fwd = " << fwd << " fwd*Cam_Vm: " << vy << std::endl;
+
+	std::cout << "Rotating to: (80, 0, 0)" << std::endl;
+
+	Cam_1->SetLocalViewAngles(Vec3(80, 0, 0));
+
+	vy = fwd * Cam_1->GetViewMatrix();
+
+	std::cout << "fwd = " << fwd << " fwd*Cam_Vm: " << vy << std::endl;
+
+	std::cout << "Rotating to: (80, 90, 0)" << std::endl;
+
+	Cam_1->SetLocalViewAngles(Vec3(80, 90, 0));
+
+	vy = fwd * Cam_1->GetViewMatrix();
+
+	std::cout << "fwd = " << fwd << " fwd*Cam_Vm: " << vy << std::endl;
+
 	Matrix W = Cam_1->Transform.Local;
 	Matrix V = Cam_1->GetViewMatrix();
-
 	Matrix I = W * V;
 
 	std::cout << "Cam_World * Cam_Vm: " << I << std::endl;
@@ -727,7 +805,7 @@ int APIENTRY WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance,
 
 	Camera* Cam = new Camera(Vec3(10, 3, -5), aspect, fovY, nearZ, farZ);
 	Matrix TransOnly = Cam->Transform.Local;
-	//Cam->SetLocalViewAngles(Vec3(0, 90, 0));
+	Cam->SetLocalViewAngles(Vec3(10, 90, 0));
 	Matrix LocalMat = Cam->Transform.Local;
 
 	Matrix Rx, Ry, Rz;
