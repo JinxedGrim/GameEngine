@@ -14,6 +14,7 @@ namespace TerraPGE::Renderer
 	float TestNdcW = 1.0f;
 	float TestDepth = 1.0f;
 	bool ConvertToSRGB = true;
+	bool DoShadows = false;
 
 	struct FragmentInfo
 	{
@@ -22,6 +23,7 @@ namespace TerraPGE::Renderer
 		Vec4 NdcPos;
 		float Depth;
 	};
+	
 
 	struct BaryCoords
 	{
@@ -99,8 +101,6 @@ namespace TerraPGE::Renderer
 		BaseArgs->PrepareFragmentShader();
 
 		Triangle* ScreenSpaceTri = BaseArgs->FindShaderResourcePtr<Triangle*>(TPGE_SHDR_TRI);
-		float FarSubNear = Core::FFAR - Core::FNEAR;
-		float FarNear = Core::FFAR * Core::FNEAR;
 		//Matrix Vp = BaseArgs->FindShaderResourceValue<Matrix>(TPGE_SHDR_CAMERA_VIEW_MATRIX) * BaseArgs->FindShaderResourceValue<Matrix>(TPGE_SHDR_CAMERA_PROJ_MATRIX);
 		LightObject** Lights = BaseArgs->FindShaderResourcePtr<LightObject**>(TPGE_SHDR_LIGHT_OBJECTS);
 		ShaderTypes* ShaderType = BaseArgs->FindShaderResourcePtr<ShaderTypes*>(TPGE_SHDR_TYPE);
@@ -150,13 +150,9 @@ namespace TerraPGE::Renderer
 
 				float Depth = Interp.Interpolate(v0.z, v1.z, v2.z);
 
-				//float Depth1 = RemapNonLinearDepth(Depth, TerraPGE::Core::FNEAR, TerraPGE::Core::FFAR);
-
 				if (x == ScreenWidth / 2 && y == ScreenHeight / 2)
 				{
 					TestDepth = Depth;
-					TestNdcZ = Depth;
-					TestClipW = ScreenSpaceTri->ClipSpaceVerts[0].w;
 				}
 
 				// depth test (assumes DepthBuffer init = 1.0f and smaller means closer)
@@ -179,7 +175,7 @@ namespace TerraPGE::Renderer
 					float ShadowDepth = 0.0f;
 					int MapIdx = 0;
 
-					if (Core::DoShadows && HasLight)
+					if (Renderer::DoShadows && HasLight)
 					{
 						// do for all lights
 						//for (int lightIdx = 0; lightIdx < LightCount; lightIdx++)
@@ -483,7 +479,7 @@ namespace TerraPGE::Renderer
 							float ShadowDepth = 0.0f;
 							int MapIdx = 0;
 
-							if (Core::DoShadows)
+							if (Renderer::DoShadows)
 							{
 								// Make this better TODO
 								Vec4 ShadowNdcPos = InterpolatedPos * Lights[0]->VpMatrices[0];
@@ -647,7 +643,7 @@ namespace TerraPGE::Renderer
 							float ShadowDepth = 0.0f;
 							int MapIdx = 0;
 
-							if (Core::DoShadows)
+							if (Renderer::DoShadows)
 							{
 								Vec4 ShadowNdcPos = Lights[0]->CalcNdc(InterpolatedPos);
 								ShadowNdcPos.CorrectPerspective();

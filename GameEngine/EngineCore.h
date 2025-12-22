@@ -52,7 +52,6 @@ namespace TerraPGE::Core
 	bool DoLighting = true;
 	bool WireFrame = false;
 	bool ShowTriLines = false;
-	bool DoShadows = false;
 	bool ShowNormals = false;
 	bool NormalMapping = false;
 

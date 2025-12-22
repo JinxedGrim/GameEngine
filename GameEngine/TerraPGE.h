@@ -10,10 +10,11 @@
 // Direct2D and DirectWrite are justified the same way
 
 //     TO DO 
-//    Fix Rednering
 // 1. Fix Lighting
 // 2. Fix the shadows
 // 3. Add skyboxes 
+// X. Redesign multithreading
+// X. Fix physics ray cast for ground detection (is mesh local space needs to be world)
 // X. Caclulate Vertex norms for all 3 vertices and store them
 // X. Better reosource management
 // X. Fix camera PointAt

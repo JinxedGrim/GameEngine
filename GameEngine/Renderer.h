@@ -20,6 +20,15 @@ namespace TerraPGE::Renderer
 	bool DebugClip = false;
 	bool DoCull = true;
 
+	// Some sort of way to force backend to implement this
+	// Probably this Renderer Becomes a class thats derivable
+	void RenderFormattedText(std::string)
+	{
+
+	}
+
+
+
 	void PrepareRenderingBackend(WndCreator& Wnd)
 	{
 		switch (CurrBackend)
@@ -406,7 +415,7 @@ namespace TerraPGE::Renderer
 					Proj.WorldSpaceVerts[i] = Proj.Points[i];
 				}
 
-				if (Core::DoShadows && HasLight)
+				if (Renderer::DoShadows && HasLight)
 				{
 					for (int i = 0; i < LightCount; i++)
 					{
