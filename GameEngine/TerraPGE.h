@@ -49,23 +49,6 @@ namespace TerraPGE
 		Renderer::RenderMesh(Gdi, Cam, R.mesh, R.Scalar, R.RotationRads, R.Pos, LightSrc.LightPos, LightSrc.Color, LightSrc.AmbientCoeff, LightSrc.DiffuseCoeff, LightSrc.SpecularCoeff, Shader, SHADER_TYPE);
 	}*/
 
-
-	void DrawFpsCounter(WndCreator& Wnd, const SIZE_T CurrMB)
-	{
-#ifdef UNICODE
-		// Draw FPS and some debug info
-		std::wstring Str = Core::FpsWStr + std::to_wstring(Fps) + L" Memory Usage: " + std::to_wstring(CurrMB) + L"/" + std::to_wstring(Core::MaxMemoryMB) + L" MB " + std::to_wstring(Core::GetUsedHeap()) + L"MB (Heap)" + (Core::DoMultiThreading ? L"(MultiThreaded)" : L"");
-		Wnd.SetWndTitle(Str);
-		Renderer::EngineGdi->DrawStringW(20, 20, Str, RGB(255, 0, 0), TRANSPARENT);
-#endif
-#ifndef UNICODE
-		std::string Str = FpsStr + std::to_string(Fps) + " Memory Usage: " + std::to_string(CurrMB) + "/" + std::to_string(Core::MaxMemoryMB) + " MB " + (DoMultiThreading ? "(MultiThreaded)" : "");;
-		Wnd.SetWndTitle(Str);
-		EngineGdi.DrawStringA(20, 20, Str, RGB(255, 0, 0), TRANSPARENT);
-#endif
-	}
-
-
 	void UpdateLoadingScreen()
 	{
 		Renderer::ClearScreen();
@@ -96,9 +79,14 @@ namespace TerraPGE
 		MSG msg = { 0 };
 		double ElapsedTime = 0.0f;
 		double physicsAccumulator = 0.0;
-		std::vector<Renderable*> ToRender;
-		std::vector<LightObject*> Lights;
 		CurrScene = FirstScene;
+
+		Renderable** RenderQueue = nullptr;
+		const std::vector<Renderable*>* SceneRenderQueue = nullptr;
+		LightObject** LightsToRender = nullptr;
+		const std::vector<LightObject*>* SceneLights = nullptr;
+
+		std::vector<Renderable*> Roots;
 
 		Wnd.RegisterRawInput();
 		Renderer::PrepareRenderingBackend(Wnd);
@@ -106,10 +94,8 @@ namespace TerraPGE
 		UpdateLoadingScreen();
 		CurrScene->BeginScene(Wnd);
 		
-		auto FrameStart = std::chrono::system_clock::now();
+		auto FrameStart      = std::chrono::system_clock::now();
 		auto LastPhysicsTime = std::chrono::system_clock::now();
-
-		std::vector<Renderable*> Roots;
 
 		while (!Wnd.Input.IsKeyPressed(VK_RETURN))
 		{
@@ -121,32 +107,35 @@ namespace TerraPGE
 			Core::UpdateWindow(Wnd, &msg);
 
 			Renderer::ClearScreen();
-			ToRender.clear();
-			Lights.clear();
+			CurrScene->ClearRenderQueue();
+			CurrScene->ClearLights();
+
 			Roots.clear();
 
 			// call draw code
-			CurrScene->RunTick(Renderer::EngineGdi, Wnd, (float)ElapsedTime, &ToRender, &Lights);
+			CurrScene->RunTick(Renderer::EngineGdi, Wnd, (float)ElapsedTime);
 
-			LightObject** LightsToRender = DEBUG_NEW LightObject * [Lights.size()];
-			Renderable** ObjectsToRender = DEBUG_NEW Renderable * [ToRender.size()];
+			SceneRenderQueue = CurrScene->GetObjects();
+			SceneLights      = CurrScene->GetLights();
+
+			LightsToRender = DEBUG_NEW LightObject * [CurrScene->GetLights()->size()];
+			RenderQueue    = DEBUG_NEW Renderable * [CurrScene->GetObjects()->size()];
+
+			Roots = CurrScene->GetRoots();
+
 			Renderable* Floor = nullptr;
 			RaycastHit FloorHit;
 
-			for (size_t idx = 0; idx < Lights.size(); idx++)
+			for (size_t idx = 0; idx < SceneLights->size(); idx++)
 			{
-				LightsToRender[idx] = Lights.at(idx);
+				LightsToRender[idx] = SceneLights->at(idx);
 				LightsToRender[idx]->Transform.WalkTransformChain();
 				LightsToRender[idx]->CalcVpMats();
 			}
 
-			for (size_t idx = 0; idx < ToRender.size(); idx++)
+			for (size_t idx = 0; idx < SceneRenderQueue->size(); idx++)
 			{
-				ObjectsToRender[idx] = ToRender.at(idx);
-				if (ObjectsToRender[idx]->Transform.Parent == nullptr)
-				{
-					Roots.push_back(ObjectsToRender[idx]);
-				}
+				RenderQueue[idx] = SceneRenderQueue->at(idx);
 			}
 
 			auto now = std::chrono::system_clock::now();
@@ -161,23 +150,23 @@ namespace TerraPGE
 			// Run fixed update as many times as needed
 			while (physicsAccumulator >= PhysicsTick)
 			{
-				for (size_t idx = 0; idx < ToRender.size(); idx++)
+				for (size_t idx = 0; idx < SceneRenderQueue->size(); idx++)
 				{
 					if(ApplyGravity)
-						for (size_t idx2 = 0; idx2 < ToRender.size(); idx2++)
+						for (size_t idx2 = 0; idx2 < SceneRenderQueue->size(); idx2++)
 						{
-							Ray down(ObjectsToRender[idx]->Transform.GetWorldPosition(), Vec3(0, -1, 0));
+							Ray down(RenderQueue[idx]->Transform.GetWorldPosition(), Vec3(0, -1, 0));
 							RaycastHit Out;
-							if (RaycastMesh(down, ObjectsToRender[idx]->mesh->Triangles, &Out))
+							if (RaycastMesh(down, RenderQueue[idx]->mesh->Triangles, &Out))
 							{
-								Floor = ObjectsToRender[idx];
+								Floor = RenderQueue[idx];
 								FloorHit = Out;
 							}
 						}
 
-					if (ObjectsToRender[idx]->collider.PhysicsEnabled)
+					if (RenderQueue[idx]->collider.PhysicsEnabled)
 					{
-						Physics::Integrate(&((ObjectsToRender[idx])->collider), PhysicsTick, Floor, &FloorHit);
+						Physics::Integrate(&((RenderQueue[idx])->collider), PhysicsTick, Floor, &FloorHit);
 					}
 				}
 
@@ -195,15 +184,15 @@ namespace TerraPGE
 			//Renderer::RenderShadowMaps(ObjectsToRender, LightsToRender, ToRender.size(), Lights.size(), Core::ShadowMap);
 			//Renderer::RenderDepthMap(ObjectsToRender, ToRender.size(), Core::DepthBuffer, CurrScene->MainCamera->ViewMatrix);
 
-			Renderer::RenderMeshes(CurrScene->MainCamera, ObjectsToRender, LightsToRender, ToRender.size(), Lights.size());
+			Renderer::RenderMeshes(CurrScene->MainCamera, RenderQueue, LightsToRender, SceneRenderQueue->size(), SceneLights->size());
 
 			delete[] LightsToRender;
-			delete[] ObjectsToRender;
+			delete[] RenderQueue;
 
 
 			if (Core::FpsEngineCounter)
 			{
-				DrawFpsCounter(Wnd, CurrMB);
+				Renderer::DrawFpsCounter(Wnd, Fps, CurrMB);
 			}
 
 			CurrScene->DrawSceneGUI(Renderer::EngineGdi);

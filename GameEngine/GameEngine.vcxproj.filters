@@ -5,16 +5,16 @@
       <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
       <Extensions>cpp;c;cc;cxx;c++;cppm;ixx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
     </Filter>
-    <Filter Include="Header Files">
-      <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
-      <Extensions>h;hh;hpp;hxx;h++;hm;inl;inc;ipp;xsd</Extensions>
-    </Filter>
     <Filter Include="Resource Files">
       <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
       <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
     </Filter>
     <Filter Include="ObjectFIles">
       <UniqueIdentifier>{7ff05088-d900-49c1-842e-f27d942f0548}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files">
+      <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
+      <Extensions>h;hh;hpp;hxx;h++;hm;inl;inc;ipp;xsd</Extensions>
     </Filter>
     <Filter Include="Header Files\Core">
       <UniqueIdentifier>{8c1c05cb-fe74-414c-979a-ece6e8c46533}</UniqueIdentifier>
@@ -25,14 +25,14 @@
     <Filter Include="Header Files\Core\Libs\Graphics">
       <UniqueIdentifier>{66499fbe-8c85-40dc-8173-18d0a29ffb9c}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Header Files\Core\Libs\Math">
+      <UniqueIdentifier>{101519b7-5152-4313-b8b6-ce8742e3070f}</UniqueIdentifier>
+    </Filter>
     <Filter Include="Header Files\Core\Engine">
       <UniqueIdentifier>{7e220bf5-6641-488e-a76d-84875ad7cea0}</UniqueIdentifier>
     </Filter>
     <Filter Include="Header Files\EngineAPI">
       <UniqueIdentifier>{e9a2c468-0bf7-46ca-a077-1fcf3868c944}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="Header Files\Core\Libs\Math">
-      <UniqueIdentifier>{101519b7-5152-4313-b8b6-ce8742e3070f}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>

@@ -43,6 +43,8 @@ class ExampleScene : public TerraPGE::Scene
 	PointLight sl; // TODO make this ptr
 	DirectionalLight Dl; // TODO make this ptr
 
+	CubeMap* Skybox = nullptr;
+
 	Material* WorldBlockMat = nullptr;
 
 	TerraPGE::Renderable* SlRender = nullptr;
@@ -92,6 +94,7 @@ class ExampleScene : public TerraPGE::Scene
 		CubeMat->Textures.push_back(Txt);
 		this->CubeMsh = DEBUG_NEW Cube(1, 1, 1, CubeMat);
 		this->CubeMesh2 = DEBUG_NEW Cube(1, 1, 1, WorldBlockMat);
+		this->Skybox = CubeMap::LoadCubemapFromDirectory("Skybox_Sky\\");
 
 		this->LoadingMode++;
 		TerraPGE::UpdateLoadingScreen();
@@ -335,21 +338,21 @@ class ExampleScene : public TerraPGE::Scene
 	}
 
 
-	void RunTick(GdiPP* Gdi, WndCreator& Wnd, const float& ElapsedTime, std::vector<TerraPGE::Renderable*>* ToRender, std::vector<LightObject*>* Lights) override
+	void RunTick(GdiPP* Gdi, WndCreator& Wnd, const float& ElapsedTime) override
 	{
 		HandleInput(Wnd, Gdi, ElapsedTime);
 
-		ToRender->push_back(CubeRender);
-		ToRender->push_back(PlaneRender);
-		ToRender->push_back(Ak47Render);
+		this->AddToRenderQueue(CubeRender);
+		this->AddToRenderQueue(PlaneRender);
+		this->AddToRenderQueue(Ak47Render);
 
 		//for (TerraPGE::Renderable* Block : WorldCubes)
 		//{
 			//ToRender->push_back(Block);
 		//}
 
-		Lights->push_back(&Dl);
-		HoveredRend = GetHoveredObj(ToRender);
+		this->AddLight(&Dl);
+		HoveredRend = GetHoveredObj(this->GetObjects());
 	}
 
 
