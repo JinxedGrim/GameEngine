@@ -316,7 +316,7 @@ class Texture
 	}
 
 
-	Texture(const std::string& Filename, WrappingMode Mode = WrappingMode::Clamp)
+	Texture(const std::string& Filename, WrappingMode Mode = WrappingMode::Clamp, const std::string& Prefix = "Assets\\")
 	{
 		if (this->FindTexture(Filename) != nullptr)
 		{
@@ -324,9 +324,10 @@ class Texture
 			return;
 		}
 
-		this->Image = Image2D::Load(Filename);
+		std::cout << "Loading Texture: " << Filename << std::endl;
+		this->Image = Image2D::Load(Prefix + Filename);
 
-		this->Used = this->Image->IsLoaded();
+		this->Used = (this->Image != nullptr && this->Image->IsLoaded());
 		this->Name = Filename;
 		this->WrapMode = Mode;
 		LoadedTextures.push_back(this);

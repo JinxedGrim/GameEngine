@@ -347,57 +347,50 @@ namespace TerraPGE::Renderer
 						Object->Shader(Args);
 					}
 
-					if (!Core::WireFrame)
+
+					if (Core::DoMultiThreading)
+						Renderer::BaryCentricRasterizer(Core::DepthBuffer, Core::sx, Core::sy, EngineGdi, Object->Shader, Args);
+					else
+						Renderer::BaryCentricRasterizer(Core::DepthBuffer, Core::sx, Core::sy, EngineGdi, Object->Shader, Args);
+					
+					// TODO salvage this code for a debug routine?
+					if(false)
 					{
-						if (!Core::ShowTriLines)
+						if (Object->mesh->MeshName != "Ray")
 						{
-							if (Core::DoMultiThreading)
-								Renderer::BaryCentricRasterizer(Core::DepthBuffer, Core::sx, Core::sy, EngineGdi, Object->Shader, Args);
-							else
-								Renderer::BaryCentricRasterizer(Core::DepthBuffer, Core::sx, Core::sy, EngineGdi, Object->Shader, Args);
+							EngineGdi->DrawFilledTriangle(PixelRound(ToDraw.Points[0].x), PixelRound(ToDraw.Points[0].y), PixelRound(ToDraw.Points[1].x), PixelRound(ToDraw.Points[1].y), PixelRound(ToDraw.Points[2].x), PixelRound(ToDraw.Points[2].y), BrushPP(RGB(ToDraw.Col.x, ToDraw.Col.y, ToDraw.Col.z)), PenPP(PS_SOLID, 1, RGB(1, 1, 1)));
+							//if (ShowNormals)
+							//{
+							//	Ray NormalRay = Ray(ToDraw.NormalPositions[0], ToDraw.NormDirections[0]);
+							//	NormalRay.GenerateMesh();
+
+							//	RenderMesh(Gdi, Cam, NormalRay.mesh, Scalar, RotationRads, Pos, Vec3(0, 0, 0), Vec3(1, 1, 1), 0.f, 0.f, 0.f, EngineShaders::Shader_Material);
+
+							//	NormalRay.mesh.UseSingleMat = true;
+
+							//	NormalRay = Ray(ToDraw.NormalPositions[1], ToDraw.NormDirections[0]);
+							//	NormalRay.GenerateMesh();
+							//	NormalRay.mesh.Mat.AmbientColor = Vec3(0, 0, 255);
+
+							//	RenderMesh(Gdi, Cam, NormalRay.mesh, Scalar, RotationRads, Pos, Vec3(0, 0, 0), Vec3(1, 1, 1), 0.f, 0.f, 0.f, EngineShaders::Shader_Material);
+
+							//	NormalRay = Ray(ToDraw.NormalPositions[2], ToDraw.NormDirections[0]);
+							//	NormalRay.GenerateMesh();
+							//	NormalRay.mesh.Mat.AmbientColor = Vec3(0, 0, 255);
+
+							//	RenderMesh(Gdi, Cam, NormalRay.mesh, Scalar, RotationRads, Pos, Vec3(0, 0, 0), Vec3(1, 1, 1), 0.f, 0.f, 0.f, EngineShaders::Shader_Material);
+
+							//	NormalRay = Ray(ToDraw.NormalPositions[3], ToDraw.NormDirections[0]);
+							//	NormalRay.GenerateMesh();
+							//	NormalRay.mesh.Mat.AmbientColor = Vec3(0, 0, 255);
+
+							//	RenderMesh(Gdi, Cam, NormalRay.mesh, Scalar, RotationRads, Pos, Vec3(0, 0, 0), Vec3(1, 1, 1), 0.f, 0.f, 0.f, EngineShaders::Shader_Material);
+							//}
 						}
 						else
 						{
-							if (Object->mesh->MeshName != "Ray")
-							{
-								EngineGdi->DrawFilledTriangle(PixelRound(ToDraw.Points[0].x), PixelRound(ToDraw.Points[0].y), PixelRound(ToDraw.Points[1].x), PixelRound(ToDraw.Points[1].y), PixelRound(ToDraw.Points[2].x), PixelRound(ToDraw.Points[2].y), BrushPP(RGB(ToDraw.Col.x, ToDraw.Col.y, ToDraw.Col.z)), PenPP(PS_SOLID, 1, RGB(1, 1, 1)));
-								//if (ShowNormals)
-								//{
-								//	Ray NormalRay = Ray(ToDraw.NormalPositions[0], ToDraw.NormDirections[0]);
-								//	NormalRay.GenerateMesh();
-
-								//	RenderMesh(Gdi, Cam, NormalRay.mesh, Scalar, RotationRads, Pos, Vec3(0, 0, 0), Vec3(1, 1, 1), 0.f, 0.f, 0.f, EngineShaders::Shader_Material);
-
-								//	NormalRay.mesh.UseSingleMat = true;
-
-								//	NormalRay = Ray(ToDraw.NormalPositions[1], ToDraw.NormDirections[0]);
-								//	NormalRay.GenerateMesh();
-								//	NormalRay.mesh.Mat.AmbientColor = Vec3(0, 0, 255);
-
-								//	RenderMesh(Gdi, Cam, NormalRay.mesh, Scalar, RotationRads, Pos, Vec3(0, 0, 0), Vec3(1, 1, 1), 0.f, 0.f, 0.f, EngineShaders::Shader_Material);
-
-								//	NormalRay = Ray(ToDraw.NormalPositions[2], ToDraw.NormDirections[0]);
-								//	NormalRay.GenerateMesh();
-								//	NormalRay.mesh.Mat.AmbientColor = Vec3(0, 0, 255);
-
-								//	RenderMesh(Gdi, Cam, NormalRay.mesh, Scalar, RotationRads, Pos, Vec3(0, 0, 0), Vec3(1, 1, 1), 0.f, 0.f, 0.f, EngineShaders::Shader_Material);
-
-								//	NormalRay = Ray(ToDraw.NormalPositions[3], ToDraw.NormDirections[0]);
-								//	NormalRay.GenerateMesh();
-								//	NormalRay.mesh.Mat.AmbientColor = Vec3(0, 0, 255);
-
-								//	RenderMesh(Gdi, Cam, NormalRay.mesh, Scalar, RotationRads, Pos, Vec3(0, 0, 0), Vec3(1, 1, 1), 0.f, 0.f, 0.f, EngineShaders::Shader_Material);
-								//}
-							}
-							else
-							{
-								EngineGdi->DrawFilledTriangle(PixelRound(ToDraw.Points[0].x), PixelRound(ToDraw.Points[0].y), PixelRound(ToDraw.Points[1].x), PixelRound(ToDraw.Points[1].y), PixelRound(ToDraw.Points[2].x), PixelRound(ToDraw.Points[2].y), BrushPP(RGB(ToDraw.Col.x, ToDraw.Col.y, ToDraw.Col.z)), PenPP(PS_SOLID, 1, RGB(ToDraw.Col.x, ToDraw.Col.y, ToDraw.Col.z)));
-							}
+							EngineGdi->DrawFilledTriangle(PixelRound(ToDraw.Points[0].x), PixelRound(ToDraw.Points[0].y), PixelRound(ToDraw.Points[1].x), PixelRound(ToDraw.Points[1].y), PixelRound(ToDraw.Points[2].x), PixelRound(ToDraw.Points[2].y), BrushPP(RGB(ToDraw.Col.x, ToDraw.Col.y, ToDraw.Col.z)), PenPP(PS_SOLID, 1, RGB(ToDraw.Col.x, ToDraw.Col.y, ToDraw.Col.z)));
 						}
-					}
-					else
-					{
-						EngineGdi->DrawTriangle(PixelRound(ToDraw.Points[0].x), PixelRound(ToDraw.Points[0].y), PixelRound(ToDraw.Points[1].x), PixelRound(ToDraw.Points[1].y), PixelRound(ToDraw.Points[2].x), PixelRound(ToDraw.Points[2].y), PenPP(PS_SOLID, 1, RGB(ToDraw.Col.x, ToDraw.Col.y, ToDraw.Col.z)));
 					}
 				}
 

@@ -18,6 +18,8 @@ namespace TerraPGE
 		}
 
 
+
+
 		Mesh* mesh = nullptr;
 		std::function<void(ShaderArgs*)> Shader = EngineShaders::Shader_Frag_Phong_Shadows;
 		ShaderTypes SHADER_TYPE = ShaderTypes::SHADER_FRAGMENT;

@@ -10,10 +10,11 @@
 // Direct2D and DirectWrite are justified the same way
 
 //     TO DO 
-// 1. Fix Lighting
-// 2. Fix the shadows
-// 3. Add skyboxes 
+// 1. Fix the shadows
+// 2. Add skyboxes 
+// 3. Fix Lighting
 // X. Redesign multithreading
+// X. implement a prefab system
 // X. Fix physics ray cast for ground detection (is mesh local space needs to be world)
 // X. Caclulate Vertex norms for all 3 vertices and store them
 // X. Better reosource management
@@ -76,15 +77,15 @@ namespace TerraPGE
 
 
 		// Counters
-		MSG msg = { 0 };
-		double ElapsedTime = 0.0f;
+		MSG msg                   = { 0 };
+		double ElapsedTime        = 0.0f;
 		double physicsAccumulator = 0.0;
 		CurrScene = FirstScene;
 
-		Renderable** RenderQueue = nullptr;
+		Renderable** RenderQueue                         = nullptr;
 		const std::vector<Renderable*>* SceneRenderQueue = nullptr;
-		LightObject** LightsToRender = nullptr;
-		const std::vector<LightObject*>* SceneLights = nullptr;
+		LightObject** LightsToRender                     = nullptr;
+		const std::vector<LightObject*>* SceneLights     = nullptr;
 
 		std::vector<Renderable*> Roots;
 

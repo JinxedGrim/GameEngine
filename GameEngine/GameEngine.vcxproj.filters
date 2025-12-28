@@ -125,6 +125,12 @@
     <ClInclude Include="VectorMath.h">
       <Filter>Header Files\Core\Libs\Math</Filter>
     </ClInclude>
+    <ClInclude Include="Skybox.h">
+      <Filter>Header Files\EngineAPI</Filter>
+    </ClInclude>
+    <ClInclude Include="EnvironmentRenderable.h">
+      <Filter>Header Files\EngineAPI</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="TeaPot.obj">

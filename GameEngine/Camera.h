@@ -174,6 +174,12 @@ public:
 	}
 
 
+	Matrix3x3 GetRotationMatrix()
+	{
+		return this->Transform.GetWorldMatrix().GetBasis3x3();
+	}
+
+
 	Vec3 GetWorldViewAngles()
 	{
 		return this->Transform.GetWorldMatrix().ExtractEuler();

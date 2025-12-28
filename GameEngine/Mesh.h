@@ -304,9 +304,9 @@ class Mesh
 		}
 	}
 
-	bool LoadMesh(std::string FnPath)
+	bool LoadMesh(std::string FnPath, std::string Prefix="Assets\\")
 	{
-		std::ifstream ifs = std::ifstream(FnPath);
+		std::ifstream ifs = std::ifstream(Prefix + FnPath);
 
 		if (!ifs.is_open())
 			return false;
@@ -318,7 +318,7 @@ class Mesh
 		std::string MtlLibFn = "";
 		Material* CurrMat = nullptr;
 
-		std::cout << "Loading Mesh: " << FnPath << std::endl;
+		std::cout << "Loading Mesh: " << Prefix + FnPath << std::endl;
 
 		while (!ifs.eof())
 		{
@@ -409,11 +409,10 @@ class Mesh
 
 						Vec3 vertex = VertCache[vertexIndex];
 
-						// Store the texture coordinates for this vertex
 						if (texCoordIndex >= 0)
 							Tmp.TexCoords[i] = TexCache[texCoordIndex];
 						else
-							Tmp.TexCoords[i] = { 0, 0 }; // Default value if no texture coordinates provided
+							Tmp.TexCoords[i] = { 0, 0 }; 
 
 						if (normalIndex >= 0)
 							Tmp.FaceNormal = NormalCache[normalIndex];
@@ -421,8 +420,8 @@ class Mesh
 						Tmp.Points[i] = vertex;
 					}
 
-					Tmp.Material = CurrMat; // Assign the current material to the triangle
-					Tmp.HasTexture = (Tmp.Material->Textures.size() > 0 && Tmp.Material->Textures.at(0)->Used);
+					Tmp.Material = CurrMat; 
+					Tmp.HasTexture = (Tmp.Material != nullptr && Tmp.Material->Textures.size() > 0 && Tmp.Material->Textures.at(0) != nullptr);
 
 					this->Triangles.push_back(Tmp);
 				}
@@ -432,7 +431,7 @@ class Mesh
 				//char Prefix[7];
 				std::string MaterialFn;
 				SS >> Unused >> Unused >> Unused >> Unused >> Unused >> Unused >> MaterialFn;
-				CurrMat = Material::LoadMaterial(MtlLibFn, MaterialFn); // Update the current material
+				CurrMat = Material::LoadMaterial(MtlLibFn, MaterialFn, Prefix);
 				this->MatCount++;
 				this->Materials.push_back(CurrMat);
 			}

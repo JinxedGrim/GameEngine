@@ -8,13 +8,11 @@ namespace TerraPGE::Renderer
 	bool DebugShadows = false;
 	bool DebugShadowMap = false;
 	bool SkipDepthTesting = false;
-	float TestClipZ = 1.0f;
-	float TestNdcZ = 1.0f;
-	float TestClipW = 1.0f;
-	float TestNdcW = 1.0f;
 	float TestDepth = 1.0f;
 	bool ConvertToSRGB = true;
 	bool DoShadows = false;
+	bool WireFrame = false;
+	bool ShowTriLines = false; // TODO make a shader for this
 
 	struct FragmentInfo
 	{
@@ -126,52 +124,37 @@ namespace TerraPGE::Renderer
 				int idx = y * Core::sx + x;
 				if (Depth < DepthBuffer[idx] || SkipDepthTesting)
 				{
-					Vec3 InterpolatedWorldPos;
-					InterpolatedWorldPos.x = Interp.PerspectiveCorrectInterpolate(world0.x, world1.x, world2.x, v0.w, v1.w, v2.w);
-					InterpolatedWorldPos.y = Interp.PerspectiveCorrectInterpolate(world0.y, world1.y, world2.y, v0.w, v1.w, v2.w);
-					InterpolatedWorldPos.z = Interp.PerspectiveCorrectInterpolate(world0.z, world1.z, world2.z, v0.w, v1.w, v2.w);
-
 					DepthBuffer[idx] = Depth;
 
-					float w = uvw0.z;
-					Vec3 uvw;
-					uvw.x = Interp.PerspectiveCorrectInterpolate(uvw0.x, uvw1.x, uvw2.x, v0.w, v1.w, v2.w);
-					uvw.y = Interp.PerspectiveCorrectInterpolate(uvw0.y, uvw1.y, uvw2.y, v0.w, v1.w, v2.w);
-					uvw.z = Interp.PerspectiveCorrectInterpolate(uvw0.z, uvw1.z, uvw2.z, v0.w, v1.w, v2.w);
-
-					//uvw.w = w;
-
-					// Shade
 					float ShadowValue = 0.0f;
 					float ShadowDepth = 0.0f;
 					int MapIdx = 0;
 
-					if (Renderer::DoShadows && HasLight)
-					{
+					//if (Renderer::DoShadows && HasLight)
+					//{
 						// do for all lights
-						//for (int lightIdx = 0; lightIdx < LightCount; lightIdx++)
-						//{
-						//	Vec4 ShadowNdcPos = Lights[0]->CalcNdc(Vec4(InterpolatedPos, 1.0f));
-						//	ShadowNdcPos.CorrectPerspective();
+					//	for (int lightIdx = 0; lightIdx < LightCount; lightIdx++)
+					//	{
+					//		Vec4 ShadowNdcPos = Lights[0]->CalcNdc(Vec4(InterpolatedPos, 1.0f));
+					//		ShadowNdcPos.CorrectPerspective();
 
-						//	ShadowNdcPos *= (Vec3((float)(Core::ShadowMapWidth * 0.5f), (float)(Core::ShadowMapHeight * 0.5f), 1.0f));
-						//	ShadowNdcPos += (Vec3((float)(Core::ShadowMapWidth * 0.5f), (float)(Core::ShadowMapHeight * 0.5f), 0.0f));
+					//		ShadowNdcPos *= (Vec3((float)(Core::ShadowMapWidth * 0.5f), (float)(Core::ShadowMapHeight * 0.5f), 1.0f));
+					//		ShadowNdcPos += (Vec3((float)(Core::ShadowMapWidth * 0.5f), (float)(Core::ShadowMapHeight * 0.5f), 0.0f));
 
-						//	MapIdx = ContIdx(PixelRoundMinMax(ShadowNdcPos.x, 0, Core::ShadowMapWidth - 1), PixelRoundMinMax(ShadowNdcPos.y, 0, Core::ShadowMapHeight - 1), Core::ShadowMapWidth);
+					//		MapIdx = ContIdx(PixelRoundMinMax(ShadowNdcPos.x, 0, Core::ShadowMapWidth - 1), PixelRoundMinMax(ShadowNdcPos.y, 0, Core::ShadowMapHeight - 1), Core::ShadowMapWidth);
 
-						//	ShadowValue = Core::ShadowMap[MapIdx] + ShadowMapBias;
-						//	ShadowDepth = (((FarNear / (Core::FFAR - ShadowNdcPos.z * FarSubNear) - Core::FNEAR) / FarSubNear) + 1.0f) / 2.0f;
+					//		ShadowValue = Core::ShadowMap[MapIdx] + ShadowMapBias;
 
-						//	if (ShadowDepth > ShadowValue)
-						//	{
-						//		BaseArgs->EditShaderDataValue(TPGE_SHDR_IS_IN_SHADOW, true);
-						//	}
-						//	else
-						//	{
-						//		BaseArgs->EditShaderDataValue(TPGE_SHDR_IS_IN_SHADOW, false);
-						//	}
-						//}
-					}
+					//		if (ShadowDepth > ShadowValue)
+					//		{
+					//			BaseArgs->EditShaderDataValue(TPGE_SHDR_IS_IN_SHADOW, true);
+					//		}
+					//		else
+					//		{
+					//			BaseArgs->EditShaderDataValue(TPGE_SHDR_IS_IN_SHADOW, false);
+					//		}
+					//	}
+					//}
 
 					// Debug depth buffer (Grayscale the pixel * depth val)
 					if (DebugDepthBuffer || DebugShadowMap)
@@ -196,17 +179,28 @@ namespace TerraPGE::Renderer
 						
 						BaseArgs->EditShaderDataValue<Color>(TPGE_SHDR_FRAG_COLOR, Color(ColorVal, ColorVal, ColorVal));
 					}
+					else if (WireFrame)
+					{
+						Vec3 BaryCoords = Vec3(alpha, beta, gamma);
+						BaseArgs->EditShaderDataValue<Vec3>(TPGE_SHDR_FRAG_BARY_COORDS, BaryCoords);
+						TerraPGE::EngineShaders::Shader_WireFrame(BaseArgs);
+					}
 					else if (*ShaderType != ShaderTypes::SHADER_FRAGMENT || ScreenSpaceTri->OverrideTextureColor || !Core::DoLighting)
 					{
-						// This entire else if is mainly for debugging clipping
+						// Debug dispatching
 						if (ScreenSpaceTri->OverrideTextureColor)
 						{
 							BaseArgs->EditShaderDataValue<Color>(TPGE_SHDR_FRAG_COLOR, Color(ScreenSpaceTri->Col.x, ScreenSpaceTri->Col.y, ScreenSpaceTri->Col.z));
 						}
 						else if (ScreenSpaceTri->Material->HasUsableTexture())
 						{
-							Vec3 TexturCol = ScreenSpaceTri->Material->Textures.at(0)->GetPixelColor(uvw.x, 1.0f - uvw.y).GetRGB();
-							BaseArgs->EditShaderDataValue<Color>(TPGE_SHDR_FRAG_COLOR, Color(TexturCol.x, TexturCol.y, TexturCol.z));
+							Vec3 uvw;
+							uvw.x = Interp.PerspectiveCorrectInterpolate(uvw0.x, uvw1.x, uvw2.x, v0.w, v1.w, v2.w);
+							uvw.y = Interp.PerspectiveCorrectInterpolate(uvw0.y, uvw1.y, uvw2.y, v0.w, v1.w, v2.w);
+							uvw.z = Interp.PerspectiveCorrectInterpolate(uvw0.z, uvw1.z, uvw2.z, v0.w, v1.w, v2.w);
+
+							BaseArgs->EditShaderDataValue<TextureCoords>(TPGE_SHDR_TEX_UVW, { uvw.x / uvw.z, uvw.y / uvw.z, uvw.z });
+							EngineShaders::Shader_Sample_Texture(BaseArgs);
 						}
 						else
 						{
@@ -215,7 +209,21 @@ namespace TerraPGE::Renderer
 					}
 					else
 					{
-						// Set up some shader args and call fragment shader=
+						// Fragment Shader dispatch
+
+						Vec3 InterpolatedWorldPos;
+						InterpolatedWorldPos.x = Interp.PerspectiveCorrectInterpolate(world0.x, world1.x, world2.x, v0.w, v1.w, v2.w);
+						InterpolatedWorldPos.y = Interp.PerspectiveCorrectInterpolate(world0.y, world1.y, world2.y, v0.w, v1.w, v2.w);
+						InterpolatedWorldPos.z = Interp.PerspectiveCorrectInterpolate(world0.z, world1.z, world2.z, v0.w, v1.w, v2.w);
+
+						float w = uvw0.z;
+						Vec3 uvw;
+						uvw.x = Interp.PerspectiveCorrectInterpolate(uvw0.x, uvw1.x, uvw2.x, v0.w, v1.w, v2.w);
+						uvw.y = Interp.PerspectiveCorrectInterpolate(uvw0.y, uvw1.y, uvw2.y, v0.w, v1.w, v2.w);
+						uvw.z = Interp.PerspectiveCorrectInterpolate(uvw0.z, uvw1.z, uvw2.z, v0.w, v1.w, v2.w);
+
+
+						// Set up some shader args and call fragment shader
 						Vec3 BaryCoords = Vec3(alpha, beta, gamma);
 						BaseArgs->EditShaderDataValue<Vec3>(TPGE_SHDR_FRAG_POS, InterpolatedWorldPos);
 						BaseArgs->EditShaderDataValue<Vec3>(TPGE_SHDR_FRAG_NORMAL, ScreenSpaceTri->FaceNormal);

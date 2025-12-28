@@ -363,3 +363,7 @@ MigrationBackup/
 FodyWeavers.xsd
 /GameEngine/KJW2HWMU79YOI88OSQF6V321J.mtl
 /GameEngine/AssaultRifle_01.mtl
+*.jpg
+*.mtl
+*.bmp
+*.png

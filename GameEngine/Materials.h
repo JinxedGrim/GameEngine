@@ -10,20 +10,20 @@
 #define NULL_MATERIAL_COLOR_VEC3 Vec3(_NULL_MATERIAL_VALUES)
 
 #define SoftUnlitMatAmbient Vec3(0.15f * 255.0f, 0.15f * 255.0f, 0.15f * 255.0f)
-#define SoftUnlitMatDiffuse Vec3(0.2f * 255.0f, 0.2f * 255.0f, 0.2f * 255.0f)
-#define SoftUnlitMatSpecular Vec3(0.2f * 255.0f, 0.2f * 255.0f, 0.2f * 255.0f)
+#define SoftUnlitMatDiffuse Vec3(0.6f * 255.0f, 0.6f * 255.0f, 0.6f * 255.0f)
+#define SoftUnlitMatSpecular Vec3(0.04f * 255.0f, 0.04f * 255.0f, 0.04f * 255.0f)
 
 class Material
 {
 public:
-	Vec3 AmbientColor = Vec3(255.0f * 0.15f, 0, 0);
-	Vec3 DiffuseColor = Vec3(255.0f * 0.25f, 255.0f * 0.25f, 255.0f * 0.25f);
-	Vec3 SpecularColor = Vec3(255.0f * 0.25f, 255.0f * 0.25f, 255.0f * 0.25f);
-	Vec3 EmissiveColor = Vec3(0.0f, 0.0f, 0.0f);
+	Vec3 AmbientColor = Vec3(0.0f, 0.0f, 0.0f);
+	Vec3 DiffuseColor = Vec3(0.0f, 0.0f, 0.0f);
+	Vec3 SpecularColor = Vec3(0.0f, 0.0f, 0.0f);
+	Vec3 EmissiveColor = Vec3(_NULL_MATERIAL_VALUES);
 
 	//Core Blinn Phong
 	float Shininess = 32.0f;
-	float EmissiveStrength = 0.0f;
+	float EmissiveStrength = 1.0f;
 	float Reflectivity = 0.0f;     // For mirror/reflection intensity
 	float Opacity = 1.0f;          // For transparency or alpha blending
 	float RefractiveIndex = 1.0f;  // For refraction (if you add that later)
@@ -66,7 +66,7 @@ public:
 	}
 
 
-	static Material* LoadMaterial(std::string MtlFn, std::string MtlName)
+	static Material* LoadMaterial(std::string MtlFn, std::string MtlName, const std::string& Prefix = "Assets\\")
 	{
 		Material* Mat = FindMaterial(MtlName);
 
@@ -79,15 +79,16 @@ public:
 			Mat = DEBUG_NEW Material();
 		}
 
-		std::ifstream mtlFile(MtlFn);
+		std::ifstream mtlFile(Prefix + MtlFn);
 		if (!mtlFile.is_open())
 		{
-			Mat = DEBUG_NEW Material();
-			return nullptr;
+			std::cout << "Failed to load: " << Prefix + MtlFn << std::endl;
+			Mat = GetNullMaterial();
+			return Mat;
 		}
 
 		std::string line;
-		std::cout << "Loading Material: " << MtlFn << std::endl;
+		std::cout << "Loading Material: " << Prefix + MtlFn << std::endl;
 		while (std::getline(mtlFile, line))
 		{
 			std::stringstream ss(line);
@@ -175,21 +176,10 @@ public:
 	{
 		Material* Mat = FindMaterial(MtlName);
 
-		if (Mat != nullptr)
+		if (Mat == nullptr)
 		{
-			return Mat;
+			Mat = DEBUG_NEW Material(AmbientColor, DiffuseColor, SpecularColor, Shininess, MtlName);
 		}
-		else
-		{
-			Mat = DEBUG_NEW Material();
-		}
-
-		Mat->AmbientColor = AmbientColor;
-		Mat->DiffuseColor = DiffuseColor;
-		Mat->SpecularColor = SpecularColor;
-		Mat->Shininess = Shininess;
-
-		LoadedMaterials.push_back(Mat);
 
 		return Mat;
 	}
@@ -200,11 +190,12 @@ public:
 		Material* RetMat = FindMaterial("NullMat");
 		if (RetMat == nullptr)
 		{
-			RetMat = Material::CreateMaterial(NULL_MATERIAL_COLOR_VEC3, NULL_MATERIAL_COLOR_VEC3, NULL_MATERIAL_COLOR_VEC3, 96.0f, "NullMat");
+			RetMat = DEBUG_NEW Material(Vec3(0,0,0), Vec3(0, 0, 0), Vec3(0, 0, 0), 0.0f, "NullMat");
 
 			if (RetMat == nullptr)
 			{
 				throw;
+				return RetMat;
 			}
 
 			RetMat->EmissiveColor = NULL_MATERIAL_COLOR_VEC3;
@@ -215,7 +206,7 @@ public:
 	}
 
 
-	int GetLoadedMatsSize()
+	size_t GetLoadedMatsSize()
 	{
 		return this->LoadedMaterials.size();
 	}
@@ -253,17 +244,17 @@ protected:
 
 	Material()
 	{
-		this->AmbientColor = Vec3(255.0f * 0.15f, 0, 0);
-		this->DiffuseColor = Vec3(255.0f * 0.25f, 255.0f * 0.25f, 255.0f * 0.25f);
-		this->SpecularColor = Vec3(255.0f * 0.25f, 255.0f * 0.25f, 255.0f * 0.25f);
-		this->EmissiveColor = Vec3(0.0f, 0.0f, 0.0f);
+		this->AmbientColor = Vec3(0.0f, 0.0f, 0.0f);
+		this->DiffuseColor = Vec3(0.0f, 0.0f, 0.0f);
+		this->SpecularColor = Vec3(0.0f, 0.0f, 0.0f);
+		this->EmissiveColor = Vec3(_NULL_MATERIAL_VALUES);
 
 		//Core Blinn Phong
 		this->Shininess = 32.0f;
-		this->EmissiveStrength = 0.0f;
-		this->Reflectivity = 0.0f;     // For mirror/reflection intensity
+		this->EmissiveStrength = 1.0f;
+		this->Reflectivity = 0.0f;     // For mirror/reflection intensity TODO
 		this->Opacity = 1.0f;          // For transparency or alpha blending
-		this->RefractiveIndex = 1.0f;  // For refraction (if you add that later)
+		this->RefractiveIndex = 1.0f;  // For refraction (TODO)
 
 		// Core PBR params
 		this->Metallic = 0.0f;          // 0 = dielectric, 1 = metal
@@ -278,6 +269,21 @@ protected:
 		this->MetallicMap = nullptr;
 		this->AOMap = nullptr;
 		this->HeightMap = nullptr; // (for parallax/displacement)
+	}
+
+	Material(Vec3 AmbientColor, Vec3 DiffuseColor, Vec3 SpecularColor, float Shininess, const std::string& Uri)
+	{
+		this->AmbientColor = AmbientColor;
+		this->DiffuseColor = DiffuseColor;
+		this->SpecularColor = SpecularColor;
+		this->Shininess = Shininess;
+
+		this->EmissiveColor = Vec3(0.0f, 0.0f, 0.0f);
+		this->EmissiveStrength = 0.0f;
+
+		this->MaterialName = Uri;
+
+		LoadedMaterials.push_back(this);
 	}
 
 	~Material()

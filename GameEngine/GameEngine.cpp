@@ -114,10 +114,11 @@ class ExampleScene : public TerraPGE::Scene
 
 		this->LoadingMode++;
 		TerraPGE::UpdateLoadingScreen();
-		CubeRender = DEBUG_NEW TerraPGE::Renderable(CubeMsh, this->MainCamera, Vec3(1.0f, 1.0f, 1.0f), Vec3(0.0f, 0.0f, 0.0f), Vec3(0.0f, 5.f, -4.0f), TerraPGE::EngineShaders::Shader_Texture_Only);
+		CubeRender = DEBUG_NEW TerraPGE::Renderable(CubeMsh, this->MainCamera, Vec3(1.0f, 1.0f, 1.0f), Vec3(0.0f, 0.0f, 0.0f), Vec3(0.0f, 5.f, -4.0f), TerraPGE::EngineShaders::Shader_Gradient);
 		CubeRender->collider.PhysicsEnabled = false;
-		Ak47Render = DEBUG_NEW TerraPGE::Renderable(CubeMesh2, this->MainCamera, Vec3(1.0f, 1.0f, 1.0f), Vec3(0.0f, 0.0f, 0.0f), Vec3(0.0f, 6.f, 4.0f), TerraPGE::EngineShaders::Shader_Frag_Phong_Shadows);
-		PlaneRender = DEBUG_NEW TerraPGE::Renderable(Plane, this->MainCamera, Vec3(2.0f, 2.0f, 1.0f), Vec3(0.0f, 0.0f, 0.0f), Vec3(0.0f, 0.0f, 0.0f), TerraPGE::EngineShaders::Shader_Frag_Phong_Shadows);
+		Ak47Render = DEBUG_NEW TerraPGE::Renderable(CubeMesh2, this->MainCamera, Vec3(1.0f, 1.0f, 1.0f), Vec3(0.0f, 0.0f, 0.0f), Vec3(0.0f, 6.f, 4.0f), TerraPGE::EngineShaders::Shader_Frag_Phong);
+		PlaneRender = DEBUG_NEW TerraPGE::Renderable(Plane, this->MainCamera, Vec3(2.0f, 2.0f, 1.0f), Vec3(0.0f, 0.0f, 0.0f), Vec3(0.0f, 0.0f, 0.0f), TerraPGE::EngineShaders::Shader_Frag_Phong);
+		//TerraPGE::EngineShaders::Shader_Frag_Phong         Shader_Texture_Only
 		CubeRender->mesh->MeshName = "SmileCube";
 
 		AABBColliderParams params = Collider::CalculateAABB(Ak47Render->mesh->Triangles);
@@ -126,7 +127,7 @@ class ExampleScene : public TerraPGE::Scene
 
 		params = Collider::CalculateAABB(PlaneRender->mesh->Triangles);
 		PlaneRender->AddAABBCollider(params, 1000.0f, 0.1f, Vec3(0.0f, 0.0f, 0.0f));
-		PlaneRender->collider.body.KineticFriction = STEEL_KINETIC_FRICTION;
+		PlaneRender->collider.body.KineticFriction = WOOD_KINETIC_FRICTION;
 		PlaneRender->collider.PhysicsEnabled = false;
 
 		//this->SlRender = DEBUG_NEW TerraPGE::Renderable(&(sl.LightMesh), (this->MainCamera), Vec3(1.0f, 1.0f, 1.0f), Vec3(0.0f, 0.0f, 0.0f), sl.Transform.GetLocalPosition(), TerraPGE::EngineShaders::Shader_Frag_Phong, ShaderTypes::SHADER_FRAGMENT);
@@ -446,8 +447,6 @@ class ExampleScene : public TerraPGE::Scene
 			static std::string FilledStr =       "    (F8)  Filled: ";
 			static std::string TriLinesStr =     "    (F9) Show Tri Lines: ";
 			static std::string DepthStr =        "    Depth: ";
-			static std::string ClipStr =         "    Clip: (z, w): ";
-			static std::string NdcStr =          "    Ndc: ";
 
 			Vec3 LocalPos = MainCamera->GetLocalPosition();
 			Vec3 WorldPos = MainCamera->GetWorldPosition();
@@ -461,11 +460,9 @@ class ExampleScene : public TerraPGE::Scene
 			Gdi->DrawStringA(20, 120, Title2, RGB(255, 0, 0), TRANSPARENT);
 			Gdi->DrawStringA(20, 140, CullingStr + std::to_string(TerraPGE::Renderer::DoCull), RGB(255, 0, 0), TRANSPARENT);
 			Gdi->DrawStringA(20, 160, LightingStr + std::to_string(TerraPGE::Core::DoLighting), RGB(255, 0, 0), TRANSPARENT);
-			Gdi->DrawStringA(20, 180, FilledStr + std::to_string(TerraPGE::Core::WireFrame), RGB(255, 0, 0), TRANSPARENT);
-			Gdi->DrawStringA(20, 200, TriLinesStr + std::to_string(TerraPGE::Core::ShowTriLines), RGB(255, 0, 0), TRANSPARENT);
+			Gdi->DrawStringA(20, 180, FilledStr + std::to_string(TerraPGE::Renderer::WireFrame), RGB(255, 0, 0), TRANSPARENT);
+			Gdi->DrawStringA(20, 200, TriLinesStr + std::to_string(TerraPGE::Renderer::ShowTriLines), RGB(255, 0, 0), TRANSPARENT);
 			Gdi->DrawStringA(20, 220, DepthStr + std::to_string(TerraPGE::Renderer::TestDepth), RGB(255, 0, 0), TRANSPARENT);
-			Gdi->DrawStringA(20, 240, ClipStr + std::to_string(TerraPGE::Renderer::TestClipZ) + ", " + std::to_string(TerraPGE::Renderer::TestClipW), RGB(255, 0, 0), TRANSPARENT);
-			Gdi->DrawStringA(20, 260, NdcStr + std::to_string(TerraPGE::Renderer::TestNdcZ), RGB(255, 0, 0), TRANSPARENT);
 		}
 
 		if (this->Paused)
@@ -527,11 +524,11 @@ class ExampleScene : public TerraPGE::Scene
 			}
 			if (GetAsyncKeyState(VK_F6))
 			{
-				TerraPGE::Core::WireFrame = !TerraPGE::Core::WireFrame;
+				TerraPGE::Renderer::WireFrame = !TerraPGE::Renderer::WireFrame;
 			}
 			if (GetAsyncKeyState(VK_F7))
 			{
-				TerraPGE::Core::ShowTriLines = !TerraPGE::Core::ShowTriLines;
+				TerraPGE::Renderer::ShowTriLines = !TerraPGE::Renderer::ShowTriLines;
 			}
 			if (GetAsyncKeyState(VK_F8))
 			{
