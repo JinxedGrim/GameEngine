@@ -1,6 +1,7 @@
 #pragma once
 #include "Rasterizer.h"
 #include "Renderable.h"
+#include "EnvironmentRenderable.h"
 
 namespace TerraPGE::Renderer
 {
@@ -19,6 +20,7 @@ namespace TerraPGE::Renderer
 
 	bool DebugClip = false;
 	bool DoCull = true;
+
 
 	// Some sort of way to force backend to implement this
 	// Probably this Renderer Becomes a class thats derivable
@@ -56,9 +58,11 @@ namespace TerraPGE::Renderer
 			Core::UpdateSystemInfo();
 
 			delete[] Core::DepthBuffer;
+			delete[] Core::FrameBuffer;
 
 			// Create depth buffer
 			Core::DepthBuffer = DEBUG_NEW float[(SIZE_T)(Core::sx * Core::sy)];
+			Core::FrameBuffer = DEBUG_NEW float[(SIZE_T)(Core::sx * Core::sy * 3)];
 
 			// Initial Client Region
 			EngineGdi->UpdateClientRgn();
@@ -90,9 +94,23 @@ namespace TerraPGE::Renderer
 			SetClearColor(BLACK_BRUSH);
 		}
 
-		Renderer::EngineGdi->Clear(GDIPP_PIXELCLEAR, ClearBrush);
 		std::fill(Core::DepthBuffer, Core::DepthBuffer + Core::sx * Core::sy, 1.0f);
 		std::fill(Core::ShadowMap, Core::ShadowMap + Core::ShadowMapWidth * Core::ShadowMapHeight, 1.0f);
+		std::fill(Core::FrameBuffer, Core::FrameBuffer + (Core::sx * Core::sy * 3), 0.0f);
+	}
+
+
+	void SwapFrameBuffer(bool Hdr, bool GammaCorrection)
+	{
+		for (int y = 0; y < Core::sy; y++)
+		{
+			for (int x = 0; x < Core::sx; x++)
+			{
+				int index = ContIdx(x, y, Core::sx);
+				float* ChannelPtr = &Core::FrameBuffer[index];
+				EngineGdi->QuickSetPixel(x, y, RGB(std::clamp<float>(*(ChannelPtr++), 0.0f, 255.0f), std::clamp<float>(*ChannelPtr++, 0.0f, 255.0f), std::clamp<float>(*ChannelPtr, 0.0f, 255.0f)));
+			}
+		}
 	}
 
 
@@ -281,6 +299,111 @@ namespace TerraPGE::Renderer
 	}
 
 
+	void RenderMesh(Camera* Cam, Renderable* Object, LightObject** SceneLights, size_t LightCount)
+	{
+		std::vector<Triangle> ClipSpaceTris = VertexShader(Cam, Object);
+
+		for (const Triangle& ClipSpaceTri : ClipSpaceTris)
+		{
+
+			// Clip Space -> NDC Space
+			Triangle NdcSpaceTri = ClipSpaceTri;
+			NdcSpaceTri.ApplyPerspectiveDivide();
+
+
+			// Offset to viewport space (Ndc -> Screen Space)
+			NdcSpaceTri.Scale(Vec3((float)(Core::sx * 0.5f), (float)(Core::sy * 0.5f), 1.0f));
+			NdcSpaceTri.Translate(Vec3((float)(Core::sx * 0.5f), (float)(Core::sy * 0.5f), 0.0f));
+
+			std::vector<Triangle> ClippedScreenSpace = Clipping(&NdcSpaceTri);
+
+			// sort faces 
+	//		std::sort(TrisToRender.begin(), TrisToRender.end(), [](const Triangle& t1, const Triangle& t2)
+	//		{
+	//			float z1 = (t1.Points[0].z + t1.Points[1].z + t1.Points[2].z) / 3.0f;
+	//			float z2 = (t2.Points[0].z + t2.Points[1].z + t2.Points[2].z) / 3.0f;
+	//			return z1 > z2;
+	//		});
+
+
+			ShaderArgs* Args = DEBUG_NEW ShaderArgs();
+			Args->AddShaderDataByValue(TPGE_SHDR_TYPE, Object->SHADER_TYPE, 0);
+			Args->AddShaderDataByValue<Vec3>(TPGE_SHDR_CAMERA_POS, Cam->Transform.GetWorldPosition(), 0);
+			Args->AddShaderDataByValue<Vec3>(TPGE_SHDR_CAMERA_LDIR, Cam->GetLookDirection(), 0);
+			Args->AddShaderDataPtr(TPGE_SHDR_CAMERA_VIEW_MATRIX, Cam->_GetViewMatrixPtr(), 0);
+			Args->AddShaderDataPtr(TPGE_SHDR_CAMERA_PROJ_MATRIX, Cam->_GetProjectionMatrixPtr(), 0);
+			Args->AddShaderDataPtr(TPGE_SHDR_OBJ_MATRIX, Object->Transform._GetWorldMatrixPtr(), 0);
+			Args->AddShaderDataPtr(TPGE_SHDR_LIGHT_OBJECTS, SceneLights, 0);
+			Args->AddShaderDataByValue<size_t>(TPGE_SHDR_LIGHT_COUNT, LightCount, 0);
+			Args->AddShaderDataByValue<bool>(TPGE_SHDR_DEBUG_SHADOWS, DebugShadows);
+			Args->AddShaderDataByValue<bool>(TPGE_SHDR_IS_IN_SHADOW, false);
+			Args->AddShaderDataPtr(TPGE_SHDR_TRI, nullptr, 0);
+
+			for (auto& ToDraw : ClippedScreenSpace)
+			{
+				//SceneLights, LightCount
+				Args->EditShaderData(TPGE_SHDR_TRI, &ToDraw, 0);
+
+
+
+				// Calc lighting (only if lighting is applied at a tri level)
+				if ((Core::DoLighting) && Object->SHADER_TYPE == ShaderTypes::SHADER_TRIANGLE)
+				{
+					Object->Shader(Args);
+				}
+
+
+				if (Core::DoMultiThreading)
+					Renderer::BaryCentricRasterizer(Core::DepthBuffer, Core::sx, Core::sy, EngineGdi, Object->Shader, Args);
+				else
+					Renderer::BaryCentricRasterizer(Core::DepthBuffer, Core::sx, Core::sy, EngineGdi, Object->Shader, Args);
+
+				// TODO salvage this code for a debug routine?
+				if (false)
+				{
+					if (Object->mesh->MeshName != "Ray")
+					{
+						EngineGdi->DrawFilledTriangle(PixelRound(ToDraw.Points[0].x), PixelRound(ToDraw.Points[0].y), PixelRound(ToDraw.Points[1].x), PixelRound(ToDraw.Points[1].y), PixelRound(ToDraw.Points[2].x), PixelRound(ToDraw.Points[2].y), BrushPP(RGB(ToDraw.Col.x, ToDraw.Col.y, ToDraw.Col.z)), PenPP(PS_SOLID, 1, RGB(1, 1, 1)));
+						//if (ShowNormals)
+						//{
+						//	Ray NormalRay = Ray(ToDraw.NormalPositions[0], ToDraw.NormDirections[0]);
+						//	NormalRay.GenerateMesh();
+
+						//	RenderMesh(Gdi, Cam, NormalRay.mesh, Scalar, RotationRads, Pos, Vec3(0, 0, 0), Vec3(1, 1, 1), 0.f, 0.f, 0.f, EngineShaders::Shader_Material);
+
+						//	NormalRay.mesh.UseSingleMat = true;
+
+						//	NormalRay = Ray(ToDraw.NormalPositions[1], ToDraw.NormDirections[0]);
+						//	NormalRay.GenerateMesh();
+						//	NormalRay.mesh.Mat.AmbientColor = Vec3(0, 0, 255);
+
+						//	RenderMesh(Gdi, Cam, NormalRay.mesh, Scalar, RotationRads, Pos, Vec3(0, 0, 0), Vec3(1, 1, 1), 0.f, 0.f, 0.f, EngineShaders::Shader_Material);
+
+						//	NormalRay = Ray(ToDraw.NormalPositions[2], ToDraw.NormDirections[0]);
+						//	NormalRay.GenerateMesh();
+						//	NormalRay.mesh.Mat.AmbientColor = Vec3(0, 0, 255);
+
+						//	RenderMesh(Gdi, Cam, NormalRay.mesh, Scalar, RotationRads, Pos, Vec3(0, 0, 0), Vec3(1, 1, 1), 0.f, 0.f, 0.f, EngineShaders::Shader_Material);
+
+						//	NormalRay = Ray(ToDraw.NormalPositions[3], ToDraw.NormDirections[0]);
+						//	NormalRay.GenerateMesh();
+						//	NormalRay.mesh.Mat.AmbientColor = Vec3(0, 0, 255);
+
+						//	RenderMesh(Gdi, Cam, NormalRay.mesh, Scalar, RotationRads, Pos, Vec3(0, 0, 0), Vec3(1, 1, 1), 0.f, 0.f, 0.f, EngineShaders::Shader_Material);
+						//}
+					}
+					else
+					{
+						EngineGdi->DrawFilledTriangle(PixelRound(ToDraw.Points[0].x), PixelRound(ToDraw.Points[0].y), PixelRound(ToDraw.Points[1].x), PixelRound(ToDraw.Points[1].y), PixelRound(ToDraw.Points[2].x), PixelRound(ToDraw.Points[2].y), BrushPP(RGB(ToDraw.Col.x, ToDraw.Col.y, ToDraw.Col.z)), PenPP(PS_SOLID, 1, RGB(ToDraw.Col.x, ToDraw.Col.y, ToDraw.Col.z)));
+					}
+				}
+			}
+
+			Args->Delete();
+		}
+	}
+
+
 	// Render function for rendering entire meshes
 	// Rendering Pipeline: Recieve call with mesh info including positions & lights sources -> Calc and apply matrices + normals -> backface culling	
 	// -> Clipping + Frustum culling -> Call Draw Triangle from graphics API with shader supplied -> Shader called from triangle routine with pixel info + normals -> SetPixel
@@ -294,109 +417,19 @@ namespace TerraPGE::Renderer
 
 		for (int i = 0; i < ObjectCount; i++)
 		{
-			Renderable* Object = SceneObjects[i];
-
-			std::vector<Triangle> ClipSpaceTris = VertexShader(Cam, Object);
-
-			for (const Triangle& ClipSpaceTri : ClipSpaceTris)
-			{
-
-				// Clip Space -> NDC Space
-				Triangle NdcSpaceTri = ClipSpaceTri;
-				NdcSpaceTri.ApplyPerspectiveDivide();
-
-
-				// Offset to viewport space (Ndc -> Screen Space)
-				NdcSpaceTri.Scale(Vec3((float)(Core::sx * 0.5f), (float)(Core::sy * 0.5f), 1.0f));
-				NdcSpaceTri.Translate(Vec3((float)(Core::sx * 0.5f), (float)(Core::sy * 0.5f), 0.0f));
-
-				std::vector<Triangle> ClippedScreenSpace = Clipping(&NdcSpaceTri);
-
-				// sort faces 
-		//		std::sort(TrisToRender.begin(), TrisToRender.end(), [](const Triangle& t1, const Triangle& t2)
-		//		{
-		//			float z1 = (t1.Points[0].z + t1.Points[1].z + t1.Points[2].z) / 3.0f;
-		//			float z2 = (t2.Points[0].z + t2.Points[1].z + t2.Points[2].z) / 3.0f;
-		//			return z1 > z2;
-		//		});
-
-
-				ShaderArgs* Args = DEBUG_NEW ShaderArgs();
-				Args->AddShaderDataByValue(TPGE_SHDR_TYPE, Object->SHADER_TYPE, 0);
-				Args->AddShaderDataByValue<Vec3>(TPGE_SHDR_CAMERA_POS, Cam->Transform.GetWorldPosition(), 0);
-				Args->AddShaderDataByValue<Vec3>(TPGE_SHDR_CAMERA_LDIR, Cam->GetLookDirection(), 0);
-				Args->AddShaderDataPtr(TPGE_SHDR_CAMERA_VIEW_MATRIX, Cam->_GetViewMatrixPtr(), 0);
-				Args->AddShaderDataPtr(TPGE_SHDR_CAMERA_PROJ_MATRIX, Cam->_GetProjectionMatrixPtr(), 0);
-				Args->AddShaderDataPtr(TPGE_SHDR_OBJ_MATRIX, Object->Transform._GetWorldMatrixPtr(), 0);
-				Args->AddShaderDataPtr(TPGE_SHDR_LIGHT_OBJECTS, SceneLights, 0);
-				Args->AddShaderDataByValue<size_t>(TPGE_SHDR_LIGHT_COUNT, LightCount, 0);
-				Args->AddShaderDataByValue<bool>(TPGE_SHDR_DEBUG_SHADOWS, DebugShadows);
-				Args->AddShaderDataByValue<bool>(TPGE_SHDR_IS_IN_SHADOW, false);
-				Args->AddShaderDataPtr(TPGE_SHDR_TRI, nullptr, 0);
-
-				for (auto& ToDraw : ClippedScreenSpace)
-				{
-					//SceneLights, LightCount
-					Args->EditShaderData(TPGE_SHDR_TRI, &ToDraw, 0);
-
-
-
-					// Calc lighting (only if lighting is applied at a tri level)
-					if ((Core::DoLighting) && Object->SHADER_TYPE == ShaderTypes::SHADER_TRIANGLE)
-					{
-						Object->Shader(Args);
-					}
-
-
-					if (Core::DoMultiThreading)
-						Renderer::BaryCentricRasterizer(Core::DepthBuffer, Core::sx, Core::sy, EngineGdi, Object->Shader, Args);
-					else
-						Renderer::BaryCentricRasterizer(Core::DepthBuffer, Core::sx, Core::sy, EngineGdi, Object->Shader, Args);
-					
-					// TODO salvage this code for a debug routine?
-					if(false)
-					{
-						if (Object->mesh->MeshName != "Ray")
-						{
-							EngineGdi->DrawFilledTriangle(PixelRound(ToDraw.Points[0].x), PixelRound(ToDraw.Points[0].y), PixelRound(ToDraw.Points[1].x), PixelRound(ToDraw.Points[1].y), PixelRound(ToDraw.Points[2].x), PixelRound(ToDraw.Points[2].y), BrushPP(RGB(ToDraw.Col.x, ToDraw.Col.y, ToDraw.Col.z)), PenPP(PS_SOLID, 1, RGB(1, 1, 1)));
-							//if (ShowNormals)
-							//{
-							//	Ray NormalRay = Ray(ToDraw.NormalPositions[0], ToDraw.NormDirections[0]);
-							//	NormalRay.GenerateMesh();
-
-							//	RenderMesh(Gdi, Cam, NormalRay.mesh, Scalar, RotationRads, Pos, Vec3(0, 0, 0), Vec3(1, 1, 1), 0.f, 0.f, 0.f, EngineShaders::Shader_Material);
-
-							//	NormalRay.mesh.UseSingleMat = true;
-
-							//	NormalRay = Ray(ToDraw.NormalPositions[1], ToDraw.NormDirections[0]);
-							//	NormalRay.GenerateMesh();
-							//	NormalRay.mesh.Mat.AmbientColor = Vec3(0, 0, 255);
-
-							//	RenderMesh(Gdi, Cam, NormalRay.mesh, Scalar, RotationRads, Pos, Vec3(0, 0, 0), Vec3(1, 1, 1), 0.f, 0.f, 0.f, EngineShaders::Shader_Material);
-
-							//	NormalRay = Ray(ToDraw.NormalPositions[2], ToDraw.NormDirections[0]);
-							//	NormalRay.GenerateMesh();
-							//	NormalRay.mesh.Mat.AmbientColor = Vec3(0, 0, 255);
-
-							//	RenderMesh(Gdi, Cam, NormalRay.mesh, Scalar, RotationRads, Pos, Vec3(0, 0, 0), Vec3(1, 1, 1), 0.f, 0.f, 0.f, EngineShaders::Shader_Material);
-
-							//	NormalRay = Ray(ToDraw.NormalPositions[3], ToDraw.NormDirections[0]);
-							//	NormalRay.GenerateMesh();
-							//	NormalRay.mesh.Mat.AmbientColor = Vec3(0, 0, 255);
-
-							//	RenderMesh(Gdi, Cam, NormalRay.mesh, Scalar, RotationRads, Pos, Vec3(0, 0, 0), Vec3(1, 1, 1), 0.f, 0.f, 0.f, EngineShaders::Shader_Material);
-							//}
-						}
-						else
-						{
-							EngineGdi->DrawFilledTriangle(PixelRound(ToDraw.Points[0].x), PixelRound(ToDraw.Points[0].y), PixelRound(ToDraw.Points[1].x), PixelRound(ToDraw.Points[1].y), PixelRound(ToDraw.Points[2].x), PixelRound(ToDraw.Points[2].y), BrushPP(RGB(ToDraw.Col.x, ToDraw.Col.y, ToDraw.Col.z)), PenPP(PS_SOLID, 1, RGB(ToDraw.Col.x, ToDraw.Col.y, ToDraw.Col.z)));
-						}
-					}
-				}
-
-				Args->Delete();
-			}
+			TerraPGE::Renderer::RenderMesh(Cam, SceneObjects[i], SceneLights, LightCount);
 		}
+	}
+
+
+	void RenderEnvironment(EnvironmentRenderable** Objects, size_t Count)
+	{
+		//Vertex Shading
+
+		//for (int i = 0; i < Count; i++)
+		//{
+		//	Objects[i]->;
+		//}
 	}
 
 
@@ -471,6 +504,37 @@ namespace TerraPGE::Renderer
 				}
 			}
 		}
+	}
+
+
+	void ApplyHDRToneMapping(bool GammaCorrection)
+	{
+		// Reinhard tone amapping
+
+		for (int y = 0; y < Core::sy; y++)
+		{
+			for (int x = 0; x < Core::sx; x++)
+			{
+
+			}
+		}
+
+		//color = color / (color + 1.0);
+
+		// Gamm correction
+	}
+
+
+	void RenderScene(Camera* Cam, Renderable** SceneObjects, LightObject** SceneLights, size_t ObjectCount, size_t LightCount)
+	{
+		//Renderer::RenderShadowMaps(ObjectsToRender, LightsToRender, ToRender.size(), Lights.size(), Core::ShadowMap);
+		//Renderer::RenderDepthMap(ObjectsToRender, ToRender.size(), Core::DepthBuffer, CurrScene->MainCamera->ViewMatrix);
+
+		Renderer::RenderMeshes(Cam, SceneObjects, SceneLights, ObjectCount, LightCount);
+
+		//Renderer::RenderEnvironment();
+
+		SwapFrameBuffer(Renderer::UseHDR, Renderer::DoGammaCorrection);
 	}
 
 

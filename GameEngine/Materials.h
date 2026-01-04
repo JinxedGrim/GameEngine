@@ -66,7 +66,7 @@ public:
 	}
 
 
-	static Material* LoadMaterial(std::string MtlFn, std::string MtlName, const std::string& Prefix = "Assets\\")
+	static Material* LoadMaterialFile(std::string MtlFn, std::string MtlName, const std::string& Prefix = "Assets\\")
 	{
 		Material* Mat = FindMaterial(MtlName);
 
@@ -76,13 +76,14 @@ public:
 		}
 		else
 		{
-			Mat = DEBUG_NEW Material();
+			Mat = DEBUG_NEW Material(MtlName);
 		}
 
 		std::ifstream mtlFile(Prefix + MtlFn);
 		if (!mtlFile.is_open())
 		{
 			std::cout << "Failed to load: " << Prefix + MtlFn << std::endl;
+			delete Mat;
 			Mat = GetNullMaterial();
 			return Mat;
 		}
@@ -140,7 +141,7 @@ public:
 #ifdef _DEBUG
 								std::cout << "Loading Texture (ka): " << textureFilePath << std::endl;
 #endif
-								Mat->Textures.push_back(DEBUG_NEW Texture(textureFilePath));
+								Mat->Textures.push_back(Texture::Create(textureFilePath));
 							}
 						}
 						else if (propKeyword == "map_Kd")
@@ -152,7 +153,7 @@ public:
 #ifdef _DEBUG
 								std::cout << "Loading Texture (kd): " << textureFilePath << std::endl;
 #endif
-								Mat->Textures.push_back(DEBUG_NEW Texture(textureFilePath));
+								Mat->Textures.push_back(Texture::Create(textureFilePath));
 							}
 						}
 
@@ -167,7 +168,6 @@ public:
 
 		LoadedMaterials.push_back(Mat);
 		mtlFile.close();
-
 		return Mat;
 	}
 
@@ -195,7 +195,6 @@ public:
 			if (RetMat == nullptr)
 			{
 				throw;
-				return RetMat;
 			}
 
 			RetMat->EmissiveColor = NULL_MATERIAL_COLOR_VEC3;
@@ -240,9 +239,9 @@ public:
 		delete this;
 	}
 
-protected:
+private:
 
-	Material()
+	Material(const std::string& Uri)
 	{
 		this->AmbientColor = Vec3(0.0f, 0.0f, 0.0f);
 		this->DiffuseColor = Vec3(0.0f, 0.0f, 0.0f);
@@ -260,6 +259,8 @@ protected:
 		this->Metallic = 0.0f;          // 0 = dielectric, 1 = metal
 		this->Roughness = 0.5f;         // Microfacet roughness
 		this->AO = 1.0f;                // Ambient occlusion multiplier
+
+		this->MaterialName = Uri;
 
 		this->DiffuseMap = nullptr;
 		this->SpecularMap = nullptr;

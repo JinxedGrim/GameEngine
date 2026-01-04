@@ -72,7 +72,8 @@ namespace TerraPGE::Core
 	int ShadowMapWidth = 1024;
 
 	float* DepthBuffer = DEBUG_NEW float[sx * sy];
-	float* ShadowMap = DEBUG_NEW float[ShadowMapWidth * ShadowMapHeight];
+	float* FrameBuffer = DEBUG_NEW float[sx * sy];
+	float* ShadowMap = DEBUG_NEW float[ShadowMapWidth * ShadowMapHeight * 3];
 
 
 	SIZE_T GetUsedMemory()
@@ -166,6 +167,15 @@ namespace TerraPGE::Core
 			}
 		}
 
+	}
+
+
+	__inline void SetPixelFrameBuffer(int x, int y, float R, float G, float B)
+	{
+		int index = ContIdx(x, y, Core::sx);
+		Core::FrameBuffer[index] = R;
+		Core::FrameBuffer[index++] = G;
+		Core::FrameBuffer[index++] = B;
 	}
 
 

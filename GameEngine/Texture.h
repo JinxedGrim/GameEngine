@@ -305,9 +305,6 @@ class Texture
 		}
 	}
 
-	public:
-	bool Used = false;
-
 
 	Texture()
 	{
@@ -318,12 +315,6 @@ class Texture
 
 	Texture(const std::string& Filename, WrappingMode Mode = WrappingMode::Clamp, const std::string& Prefix = "Assets\\")
 	{
-		if (this->FindTexture(Filename) != nullptr)
-		{
-			*this = *FindTexture(Filename);
-			return;
-		}
-
 		std::cout << "Loading Texture: " << Filename << std::endl;
 		this->Image = Image2D::Load(Prefix + Filename);
 
@@ -332,6 +323,9 @@ class Texture
 		this->WrapMode = Mode;
 		LoadedTextures.push_back(this);
 	}
+
+	public:
+	bool Used = false;
 
 
 	void SetWrapMode(WrappingMode WrapMode)
@@ -343,7 +337,18 @@ class Texture
 	std::string Name = "";
 
 
-	Texture* FindTexture(std::string Name) const
+	static Texture* Create(const std::string& Filename, WrappingMode Mode = WrappingMode::Clamp, const std::string& Prefix = "Assets\\")
+	{
+		if (Texture::FindTexture(Filename) != nullptr)
+		{
+			return FindTexture(Filename);
+		}
+
+		return DEBUG_NEW Texture(Filename, Mode, Prefix);
+	}
+
+
+	static Texture* FindTexture(std::string Name)
 	{
 		for (Texture* T : LoadedTextures)
 		{

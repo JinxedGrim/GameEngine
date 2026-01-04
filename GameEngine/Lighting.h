@@ -50,9 +50,11 @@ public:
 		this->SpecularCoeff = SpecularCoeff;
 
 		this->LightMesh = CubeMesh;
-		this->LightMesh.Materials.at(0)->AmbientColor = LightColor;
-		this->LightMesh.Materials.at(0)->DiffuseColor = LightColor;
-		this->LightMesh.Materials.at(0)->SpecularColor = LightColor;
+		
+		// TODO Fix this
+		//this->LightMesh.Materials.at(0)->AmbientColor = LightColor;
+		//this->LightMesh.Materials.at(0)->DiffuseColor = LightColor;
+		//this->LightMesh.Materials.at(0)->SpecularColor = LightColor;
 
 		this->Far = Far;
 		this->Near = Near;

@@ -86,7 +86,7 @@ class ExampleScene : public TerraPGE::Scene
 
 		this->LoadingMode++;
 		TerraPGE::UpdateLoadingScreen();
-		this->Txt = DEBUG_NEW Texture("Test.bmp");
+		this->Txt = Texture::Create("Test.bmp");
 		this->AK47 = DEBUG_NEW Mesh("AK47.obj");
 		this->Plane = DEBUG_NEW Mesh("FlatTerrain.obj");
 		this->WorldBlockMat = Material::CreateMaterial(SoftUnlitMatAmbient, SoftUnlitMatDiffuse, SoftUnlitMatSpecular, 16.0f, "Unlit");

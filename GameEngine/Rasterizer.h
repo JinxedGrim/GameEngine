@@ -9,10 +9,13 @@ namespace TerraPGE::Renderer
 	bool DebugShadowMap = false;
 	bool SkipDepthTesting = false;
 	float TestDepth = 1.0f;
-	bool ConvertToSRGB = true;
 	bool DoShadows = false;
 	bool WireFrame = false;
 	bool ShowTriLines = false; // TODO make a shader for this
+	float TestHdrExposure = 1.0f;
+	bool UseHDR = false;
+	bool DoGammaCorrection = true;
+
 
 	struct FragmentInfo
 	{
@@ -236,15 +239,10 @@ namespace TerraPGE::Renderer
 					// Set pixel in pixel buffer
 					Color* FragmentColor = BaseArgs->FindShaderResourcePtr<Color*>(TPGE_SHDR_FRAG_COLOR);
 
-					if (ConvertToSRGB)
-					{
-						FragmentColor->Normalize();
-						FragmentColor->TosRGB();
-						FragmentColor->Denormalize();
-					}
+					TerraPGE::Core::SetPixelFrameBuffer(x, y, FragmentColor->R, FragmentColor->G, FragmentColor->B);
 
-					COLORREF PixelClr = RGB(PixelRoundFloor(FragmentColor->R), PixelRoundFloor(FragmentColor->G), PixelRoundFloor(FragmentColor->B));
-					Gdi->QuickSetPixel(x, y, PixelClr);
+					//COLORREF PixelClr = RGB(PixelRoundFloor(FragmentColor->R), PixelRoundFloor(FragmentColor->G), PixelRoundFloor(FragmentColor->B));
+					//Gdi->QuickSetPixel(x, y, PixelClr);
 				}
 			}
 		}

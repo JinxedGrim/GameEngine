@@ -1,7 +1,8 @@
 #pragma once
+#include "Renderable.h"
 
-class EnvironmentRenderable
+class EnvironmentRenderable : public TerraPGE::Renderable
 {
 public:
-	virtual void Render(int x, int y) = 0;
+	virtual void Render() = 0;
 };

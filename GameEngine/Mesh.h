@@ -431,7 +431,7 @@ class Mesh
 				//char Prefix[7];
 				std::string MaterialFn;
 				SS >> Unused >> Unused >> Unused >> Unused >> Unused >> Unused >> MaterialFn;
-				CurrMat = Material::LoadMaterial(MtlLibFn, MaterialFn, Prefix);
+				CurrMat = Material::LoadMaterialFile(MtlLibFn, MaterialFn, Prefix);
 				this->MatCount++;
 				this->Materials.push_back(CurrMat);
 			}
