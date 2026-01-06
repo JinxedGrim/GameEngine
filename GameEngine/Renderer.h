@@ -12,10 +12,10 @@ namespace TerraPGE::Renderer
 		GPU = 2
 	};
 
-	RenderingBackend CurrBackend = RenderingBackend::CPU;
+	static RenderingBackend CurrBackend = RenderingBackend::CPU;
 	static GdiPP* EngineGdi = nullptr;
 
-	BrushPP ClearBrush = -1;
+	static BrushPP ClearBrush = -1;
 	static const Vec3 PlaneNormal = { 0.0f, 0.0f, 1.0f };
 
 	bool DebugClip = false;
@@ -102,13 +102,50 @@ namespace TerraPGE::Renderer
 
 	void SwapFrameBuffer(bool Hdr, bool GammaCorrection)
 	{
-		for (int y = 0; y < Core::sy; y++)
+		for (int x = 0; x < Core::sx; x++)
 		{
-			for (int x = 0; x < Core::sx; x++)
+			for (int y = 0; y < Core::sy; y++)
 			{
-				int index = ContIdx(x, y, Core::sx);
-				float* ChannelPtr = &Core::FrameBuffer[index];
-				EngineGdi->QuickSetPixel(x, y, RGB(std::clamp<float>(*(ChannelPtr++), 0.0f, 255.0f), std::clamp<float>(*ChannelPtr++, 0.0f, 255.0f), std::clamp<float>(*ChannelPtr, 0.0f, 255.0f)));
+				int index = ContIdx(x, y, Core::sx) * 3;
+				float* ChannelPtr = Core::FrameBuffer + index;
+
+				float Rf, Gf, Bf = 0.0f;
+				int R, G, B = 0;
+
+				Rf = ChannelPtr[0];
+				Gf = ChannelPtr[1];
+				Bf = ChannelPtr[2];
+
+				if (!Renderer::UseHDR)
+				{
+					// Clamp 0-1
+					Rf = std::clamp<float>(Rf, 0, 1.0f);
+					Gf = std::clamp<float>(Gf, 0, 1.0f);
+					Bf = std::clamp<float>(Bf, 0, 1.0f);
+				}
+				else
+				{
+					// Reinhard mapping
+					Rf /= (1.0f + Rf);
+					Gf /= (1.0f + Gf);
+					Bf /= (1.0f + Bf);
+				}
+
+				if (Renderer::DoGammaCorrection)
+				{
+					// Gamma Correction
+					Rf = Color::LinearToSRGB_Channel(Rf);
+					Gf = Color::LinearToSRGB_Channel(Gf);
+					Bf = Color::LinearToSRGB_Channel(Bf);
+				}
+
+				// Final transformation to RGB Space
+				R = Rf * 255.0f;
+				G = Gf * 255.0f;
+				B = Bf * 255.0f;
+
+				// Write to out buffer
+				EngineGdi->QuickSetPixel(x, y, RGB(R, G, B));
 			}
 		}
 	}

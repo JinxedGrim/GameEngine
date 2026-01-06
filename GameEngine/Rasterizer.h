@@ -13,7 +13,7 @@ namespace TerraPGE::Renderer
 	bool WireFrame = false;
 	bool ShowTriLines = false; // TODO make a shader for this
 	float TestHdrExposure = 1.0f;
-	bool UseHDR = false;
+	bool UseHDR = true;
 	bool DoGammaCorrection = true;
 
 

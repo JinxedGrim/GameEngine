@@ -527,26 +527,29 @@ namespace TerraPGE
 
 				Light = *Args->FindShaderResourcePtr<LightObject**>(TPGE_SHDR_LIGHT_OBJECTS);
 
-				Vec3 LDir = Light->Transform.GetLocalPosition().GetDirectionToVector(*FragPos);
+				Vec3 LDir = Light->GetLightDirection().Normalized();
+
+				// for point light
+				//Vec3 LDir = Light->Transform.GetLocalPosition().GetDirectionToVector(*FragPos);
 				float Li = FragNormal->Dot(LDir);
 
 				float Intensity = std::max<float>(0.0f, Li);
 				Vec3 RDir = (-LDir).GetReflectection(*FragNormal);
 
-				float SpecularIntensity = pow(std::max<float>(0.0f, (-RDir).Dot(*CamLookDir)), Mat->Shininess);
+				float SpecularIntensity = pow(std::max<float>(0.0f, (-RDir).Dot((*CamLookDir).Normalized())), Mat->Shininess);
 
 				Vec3 AmbientCol = (Mat->AmbientColor / 255.0f) * Light->AmbientCoeff;
-				Vec3 DiffuseCol = (((Light->Color / 255.0f) * Intensity) * ((Mat->DiffuseColor / 255.0f) * Intensity)) * Light->DiffuseCoeff;
-				Vec3 SpecularClr = (((Light->Color / 255.0f) * Light->SpecularCoeff) * ((Mat->SpecularColor / 255.0f)) * Light->SpecularCoeff) * SpecularIntensity;
+				Vec3 DiffuseCol =  (((Light->Color / 255.0f) * Light->DiffuseCoeff) * (Mat->DiffuseColor / 255.0f)) * Intensity;
+				Vec3 SpecularClr = (((Light->Color / 255.0f) * Light->SpecularCoeff) * (Mat->SpecularColor / 255.0f)) * SpecularIntensity;
 
 				float glow = Mat->EmissiveStrength * pow(1.0 - FragNormal->Dot(*CamLookDir), 4.0f);
 				Vec3 EmissiveCol = (Mat->EmissiveColor / 255.0f) * glow;
 
-				Vec3 FinalColor = (((AmbientCol + DiffuseCol + SpecularClr)) + EmissiveCol) * 255.0f;
+				Vec3 FinalColor = (((AmbientCol + DiffuseCol + SpecularClr)) + EmissiveCol);
 
-				FragColor->R = std::clamp(FinalColor.x, 0.0f, 255.0f);
-				FragColor->G = std::clamp(FinalColor.y, 0.0f, 255.0f);
-				FragColor->B = std::clamp(FinalColor.z, 0.0f, 255.0f);
+				FragColor->R = FinalColor.x;
+				FragColor->G = FinalColor.y;
+				FragColor->B = FinalColor.z;
 				FragColor->A = 255.0f;
 			};
 
@@ -696,11 +699,10 @@ namespace TerraPGE
 
 			Light = *Args->FindShaderResourcePtr<LightObject**>(TPGE_SHDR_LIGHT_OBJECTS);
 
-			float Intensity = 1.0f;
-			Vec3 LDir = (Light->Transform.GetLocalPosition() - *FragPos).Normalized();
+			Vec3 LDir = Light->GetLightDirection();
 			float Li = FragNormal->Dot(LDir);
 
-			Intensity = std::max<float>(0.0f, Li);
+			float Intensity = std::max<float>(0.0f, Li);
 
 			FragColor->R = std::clamp<float>(((255.0f * BaryCoords->x) * Intensity), 0.0f, 255.0f);
 			FragColor->G = std::clamp<float>(((255.0f * BaryCoords->y) * Intensity), 0.0f, 255.0f);

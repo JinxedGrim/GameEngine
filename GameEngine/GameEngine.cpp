@@ -40,6 +40,7 @@ class ExampleScene : public TerraPGE::Scene
 	Mesh* CubeMesh2 = nullptr;
 	Material* CubeMat = nullptr;
 	Vec3 LightSrcPos = Vec3();
+	Vec3 PointLightPos = Vec3();
 	PointLight sl; // TODO make this ptr
 	DirectionalLight Dl; // TODO make this ptr
 
@@ -81,8 +82,10 @@ class ExampleScene : public TerraPGE::Scene
 	void BeginScene(WndCreator& Wnd) override
 	{
 		Vec3 InitialVelocity = Vec3(4.0f, 1.5f, 0.0f);
-		this->LightSrcPos = { 0, 6, 0 };
-		Vec3 dir = { 0.918234f, -0.390731f, 0.064190f };
+		this->LightSrcPos = { 0, 60, -60 };
+		this->PointLightPos = { 0, 1, 0 };
+
+		Vec3 dir = LightSrcPos.GetDirectionToVector(Vec3(0.0f, 0.0f, 0.0f));
 
 		this->LoadingMode++;
 		TerraPGE::UpdateLoadingScreen();
@@ -100,10 +103,10 @@ class ExampleScene : public TerraPGE::Scene
 		TerraPGE::UpdateLoadingScreen();
 
 
-		sl = PointLight(LightSrcPos, { 0, 0, 0 }, Vec3(253, 255, 255), 1.0f, 0.02f, 0.002f, 0.5f, 0.15f, 0.5f);
+		sl = PointLight(this->PointLightPos, { 0, 0, 0 }, Vec3(253, 255, 255), 1.0f, 0.02f, 0.002f, 0.5f, 0.15f, 0.5f);
 		sl.CastsShadows = true;
 		sl.Render = true;
-		Dl = DirectionalLight({0, 30, -60}, dir, Vec3(253, 251, 211), 0.15f, 0.3f, 0.2f);
+		Dl = DirectionalLight(this->LightSrcPos, dir, Vec3(253, 251, 211), 0.2f, 0.4f, 0.3f);
 		Dl.CastsShadows = true;
 
 		this->MainCamera = DEBUG_NEW Camera(Vec3(0, 3, 0), (float)((float)TerraPGE::Core::sy / (float)TerraPGE::Core::sx), TerraPGE::Core::FOV, TerraPGE::Core::FNEAR, TerraPGE::Core::FFAR);
@@ -114,7 +117,7 @@ class ExampleScene : public TerraPGE::Scene
 
 		this->LoadingMode++;
 		TerraPGE::UpdateLoadingScreen();
-		CubeRender = DEBUG_NEW TerraPGE::Renderable(CubeMsh, this->MainCamera, Vec3(1.0f, 1.0f, 1.0f), Vec3(0.0f, 0.0f, 0.0f), Vec3(0.0f, 5.f, -4.0f), TerraPGE::EngineShaders::Shader_Gradient);
+		CubeRender = DEBUG_NEW TerraPGE::Renderable(CubeMsh, this->MainCamera, Vec3(1.0f, 1.0f, 1.0f), Vec3(0.0f, 0.0f, 0.0f), Vec3(0.0f, 5.f, -4.0f), TerraPGE::EngineShaders::Shader_Frag_Phong);
 		CubeRender->collider.PhysicsEnabled = false;
 		Ak47Render = DEBUG_NEW TerraPGE::Renderable(CubeMesh2, this->MainCamera, Vec3(1.0f, 1.0f, 1.0f), Vec3(0.0f, 0.0f, 0.0f), Vec3(0.0f, 6.f, 4.0f), TerraPGE::EngineShaders::Shader_Frag_Phong);
 		PlaneRender = DEBUG_NEW TerraPGE::Renderable(Plane, this->MainCamera, Vec3(2.0f, 2.0f, 1.0f), Vec3(0.0f, 0.0f, 0.0f), Vec3(0.0f, 0.0f, 0.0f), TerraPGE::EngineShaders::Shader_Frag_Phong);
@@ -123,7 +126,7 @@ class ExampleScene : public TerraPGE::Scene
 
 		AABBColliderParams params = Collider::CalculateAABB(Ak47Render->mesh->Triangles);
 		Ak47Render->AddAABBCollider(params, 1.0f, 0.2f, InitialVelocity);
-		Ak47Render->collider.body.KineticFriction = WOOD_KINETIC_FRICTION;
+		Ak47Render->collider.body.KineticFriction = RUBBER_KINETIC_FRICTION;
 
 		params = Collider::CalculateAABB(PlaneRender->mesh->Triangles);
 		PlaneRender->AddAABBCollider(params, 1000.0f, 0.1f, Vec3(0.0f, 0.0f, 0.0f));
@@ -175,7 +178,7 @@ class ExampleScene : public TerraPGE::Scene
 	}
 
 
-	void HandleInput(WndCreator& Wnd, GdiPP* Gdi, const float& ElapsedTime)
+	void HandleMovement(WndCreator& Wnd, const float& ElapsedTime)
 	{
 		Vec3 Euler = this->MainCamera->GetLocalViewAngles();
 
@@ -240,16 +243,80 @@ class ExampleScene : public TerraPGE::Scene
 			this->MainCamera->SetLocalPosition(MainCamera->GetLocalPosition() + (-MainCamera->GetNewVelocity(MainCamera->Transform.GetWorldMatrix().GetForward())) * ElapsedTime);
 		}
 
+		if (!LockCamera)
+		{
+			Euler -= Vec3((float)Wnd.Input.Current.DeltaY * TerraPGE::Sensitivity, 0, 0);
+			Euler += Vec3(0, (float)Wnd.Input.Current.DeltaX * TerraPGE::Sensitivity, 0);
+		}
+
+		if (Euler.x > 89)
+			Euler.x = 89;
+		if (Euler.x < -89)
+			Euler.x = -89;
+		Euler.z = 0;
+
+		this->MainCamera->SetLocalViewAngles(Euler);
+	}
+
+
+	void HandleInput(WndCreator& Wnd, GdiPP* Gdi, const float& ElapsedTime)
+	{
 		if (Wnd.Input.IsKeyDown('C'))
 		{
 			CubeRender->Transform.WalkTransformChain();
 			//Cam->Transform.PointAt(CubeRender->Transform.GetWorldPosition(), Cam->CamUp);
 		}
 
-		if (!LockCamera)
+		if (GetAsyncKeyState(VK_F1))
 		{
-			Euler -= Vec3((float)Wnd.Input.Current.DeltaY * TerraPGE::Sensitivity, 0, 0);
-			Euler += Vec3(0, (float)Wnd.Input.Current.DeltaX * TerraPGE::Sensitivity, 0);
+			TerraPGE::Core::FpsEngineCounter = !TerraPGE::Core::FpsEngineCounter;
+		}
+
+		if (GetAsyncKeyState(VK_F2))
+		{
+			TerraPGE::Core::FOV += 30;
+			this->MainCamera->SetFov(TerraPGE::Core::FOV);
+			if (TerraPGE::Core::FOV > 120)
+			{
+				TerraPGE::Core::FOV = 60;
+				this->MainCamera->SetFov(TerraPGE::Core::FOV);
+			}
+		}
+
+		if (GetAsyncKeyState(VK_F3))
+		{
+			TerraPGE::Core::DoMultiThreading = !TerraPGE::Core::DoMultiThreading;
+		}
+
+		if (Wnd.Input.IsKeyPressed(VK_F5))
+		{
+			TerraPGE::Core::DoLighting = !TerraPGE::Core::DoLighting;
+		}
+		
+		if (Wnd.Input.IsKeyPressed(VK_F6))
+		{
+			TerraPGE::Renderer::WireFrame = !TerraPGE::Renderer::WireFrame;
+		}
+		
+		if (Wnd.Input.IsKeyPressed(VK_F7))
+		{
+			TerraPGE::Renderer::ShowTriLines = !TerraPGE::Renderer::ShowTriLines;
+		}
+		
+		if (Wnd.Input.IsKeyPressed(VK_F8))
+		{
+			TerraPGE::Renderer::DebugClip = !TerraPGE::Renderer::DebugClip;
+		}
+		
+		if (Wnd.Input.IsKeyPressed(VK_F9))
+		{
+			TerraPGE::Renderer::UseHDR = !TerraPGE::Renderer::UseHDR;
+			TerraPGE::Renderer::DoGammaCorrection = !TerraPGE::Renderer::DoGammaCorrection;
+		}
+
+		if (Wnd.Input.IsKeyPressed(VK_F10))
+		{
+			ShowStrs = !ShowStrs;
 		}
 
 		if (Wnd.Input.IsKeyPressed(VK_INSERT))
@@ -303,13 +370,7 @@ class ExampleScene : public TerraPGE::Scene
 			}
 		}
 
-		if (Euler.x > 89)
-			Euler.x = 89;
-		if (Euler.x < -89)
-			Euler.x = -89;
-		Euler.z = 0;
-
-		this->MainCamera->SetLocalViewAngles(Euler);
+		HandleMovement(Wnd, ElapsedTime);
 	}
 
 
@@ -492,24 +553,6 @@ class ExampleScene : public TerraPGE::Scene
 	{
 		while (!Scene->EndSettings)
 		{
-			if (GetAsyncKeyState(VK_F1))
-			{
-				TerraPGE::Core::FpsEngineCounter = !TerraPGE::Core::FpsEngineCounter;
-			}
-			if (GetAsyncKeyState(VK_F2))
-			{
-				TerraPGE::Core::FOV += 30;
-				Scene->MainCamera->SetFov(TerraPGE::Core::FOV);
-				if (TerraPGE::Core::FOV > 120)
-				{
-					TerraPGE::Core::FOV = 60;
-					Scene->MainCamera->SetFov(TerraPGE::Core::FOV);
-				}
-			}
-			if (GetAsyncKeyState(VK_F3))
-			{
-				TerraPGE::Core::DoMultiThreading = !TerraPGE::Core::DoMultiThreading;
-			}
 			if (GetAsyncKeyState(VK_F4))
 			{
 				static bool ca = false;
@@ -517,26 +560,6 @@ class ExampleScene : public TerraPGE::Scene
 				if (!ca)
 					Scene->Txt->Delete();
 				ca = true;
-			}
-			if (GetAsyncKeyState(VK_F5))
-			{
-				TerraPGE::Core::DoLighting = !TerraPGE::Core::DoLighting;
-			}
-			if (GetAsyncKeyState(VK_F6))
-			{
-				TerraPGE::Renderer::WireFrame = !TerraPGE::Renderer::WireFrame;
-			}
-			if (GetAsyncKeyState(VK_F7))
-			{
-				TerraPGE::Renderer::ShowTriLines = !TerraPGE::Renderer::ShowTriLines;
-			}
-			if (GetAsyncKeyState(VK_F8))
-			{
-				TerraPGE::Renderer::DebugClip = !TerraPGE::Renderer::DebugClip;
-			}
-			if (GetAsyncKeyState(VK_F10))
-			{
-				ShowStrs = !ShowStrs;
 			}
 			std::this_thread::sleep_for(std::chrono::milliseconds(300));
 		}

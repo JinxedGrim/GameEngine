@@ -396,7 +396,7 @@ public:
 		}
 	}
 
-	inline float LinearToSRGB_Channel(float c)
+	static __inline float LinearToSRGB_Channel(float c)
 	{
 		c = std::clamp(c, 0.0f, 1.0f);
 

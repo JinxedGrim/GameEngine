@@ -125,8 +125,8 @@ public:
 		this->Near = NewNear;
 	}
 
-	float Far = 0.1f;
-	float Near = 150.0f;
+	float Far = 100.0f;
+	float Near = 0.1f;
 };
 
 
@@ -140,6 +140,10 @@ public:
 		float Top = 40.0f;
 		float Bottom = -40.0f;
 		Vec3 CenterPoint = Vec3();
+		this->LightDirection = Vec3(0, 0, 0);
+		this->Type = LightTypes::DirectionalLight;
+		this->IsVpDirty = true;
+		this->CalcVpMats();
 	}
 
 
@@ -150,6 +154,7 @@ public:
 		this->Top = Bottom;
 		this->Bottom = Top;
 		this->CenterPoint = CenterPoint;
+		this->LightDirection = LightDir;
 		this->Type = LightTypes::DirectionalLight;
 		this->IsVpDirty = true;
 		this->CalcVpMats();
@@ -164,6 +169,7 @@ public:
 		this->Top = Bottom;
 		this->Bottom = Top;
 		this->CenterPoint = CenterPoint;
+		this->LightDirection = LightDir;
 		this->Type = LightTypes::DirectionalLight;
 		this->CalcVpMats();
 	}
@@ -177,19 +183,21 @@ public:
 		this->Top = 40.0f;
 		this->Bottom = -40.0f;
 		this->CenterPoint = CenterPoint;
+		this->LightDirection = LightDir;
 		this->Type = LightTypes::DirectionalLight;
 		this->CalcVpMats();
 	}
 
 
-	DirectionalLight(Vec3 Pos, Vec3 LightDir, Vec3 LightColor, float AmbientCoeff, float DiffuseCoeff, float SpecularCoeff, Vec3 CenterPoint = Vec3()) : LightObject(Pos, LightDir, LightColor, AmbientCoeff, DiffuseCoeff, SpecularCoeff)
+	DirectionalLight(Vec3 Pos, Vec3 LightDir, Vec3 LightColor, float AmbientCoeff, float DiffuseCoeff, float SpecularCoeff, Vec3 CenterPoint = Vec3(0.0f, 0.0f, 0.0f)) : LightObject(Pos, LightDir, LightColor, AmbientCoeff, DiffuseCoeff, SpecularCoeff)
 	{
 		this->IsVpDirty = true;
-		this->Left = -40.0f;
-		this->Right = 40.0f;
-		this->Top = 40.0f;
-		this->Bottom = -40.0f;
+		this->Left = -60.0f;
+		this->Right = 60.0f;
+		this->Top = 60.0f;
+		this->Bottom = -60.0f;
 		this->CenterPoint = CenterPoint;
+		this->LightDirection = LightDir;
 		this->Type = LightTypes::DirectionalLight;
 		this->CalcVpMats();
 	}
@@ -202,6 +210,12 @@ public:
 		this->VpMatrices[0] = LightViewMatrix * LightProjectionMat;
 		this->IsVpDirty = false;
 	}
+
+	virtual Vec3 GetLightDirection() override
+	{
+		return this->LightDirection;
+	}
+
 
 	__inline int SelectVpMat(Vec3 FragPos) override
 	{
@@ -220,6 +234,7 @@ private:
 	float Right = 40.0f;
 	float Top = 40.0f;
 	float Bottom = -40.0f;
+	Vec3 LightDirection = Vec3();
 	Vec3 CenterPoint = Vec3();
 
 };

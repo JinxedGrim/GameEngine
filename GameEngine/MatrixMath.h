@@ -460,6 +460,7 @@ public:
 
 	static Matrix CalcViewMatrix(const Vec3& Pos, const Vec3& Target, const Vec3& Up);
 
+
 	Matrix CalcInverseView(const Vec3& Up);
 
 
