@@ -117,10 +117,10 @@ class ExampleScene : public TerraPGE::Scene
 
 		this->LoadingMode++;
 		TerraPGE::UpdateLoadingScreen();
-		CubeRender = DEBUG_NEW TerraPGE::Renderable(CubeMsh, this->MainCamera, Vec3(1.0f, 1.0f, 1.0f), Vec3(0.0f, 0.0f, 0.0f), Vec3(0.0f, 5.f, -4.0f), TerraPGE::EngineShaders::Shader_Frag_Phong);
+		CubeRender = DEBUG_NEW TerraPGE::Renderable(CubeMsh, this->MainCamera, Vec3(1.0f, 1.0f, 1.0f), Vec3(0.0f, 0.0f, 0.0f), Vec3(0.0f, 5.f, -4.0f), TerraPGE::EngineShaders::DefaultShader);
 		CubeRender->collider.PhysicsEnabled = false;
-		Ak47Render = DEBUG_NEW TerraPGE::Renderable(CubeMesh2, this->MainCamera, Vec3(1.0f, 1.0f, 1.0f), Vec3(0.0f, 0.0f, 0.0f), Vec3(0.0f, 6.f, 4.0f), TerraPGE::EngineShaders::Shader_Frag_Phong);
-		PlaneRender = DEBUG_NEW TerraPGE::Renderable(Plane, this->MainCamera, Vec3(2.0f, 2.0f, 1.0f), Vec3(0.0f, 0.0f, 0.0f), Vec3(0.0f, 0.0f, 0.0f), TerraPGE::EngineShaders::Shader_Frag_Phong);
+		Ak47Render = DEBUG_NEW TerraPGE::Renderable(CubeMesh2, this->MainCamera, Vec3(1.0f, 1.0f, 1.0f), Vec3(0.0f, 0.0f, 0.0f), Vec3(0.0f, 6.f, 4.0f), TerraPGE::EngineShaders::DefaultShader);
+		PlaneRender = DEBUG_NEW TerraPGE::Renderable(Plane, this->MainCamera, Vec3(2.0f, 2.0f, 1.0f), Vec3(0.0f, 0.0f, 0.0f), Vec3(0.0f, 0.0f, 0.0f), TerraPGE::EngineShaders::DefaultShader);
 		//TerraPGE::EngineShaders::Shader_Frag_Phong         Shader_Texture_Only
 		CubeRender->mesh->MeshName = "SmileCube";
 
@@ -267,9 +267,9 @@ class ExampleScene : public TerraPGE::Scene
 			//Cam->Transform.PointAt(CubeRender->Transform.GetWorldPosition(), Cam->CamUp);
 		}
 
-		if (GetAsyncKeyState(VK_F1))
+		if (Wnd.Input.IsKeyPressed(VK_F1))
 		{
-			TerraPGE::Core::FpsEngineCounter = !TerraPGE::Core::FpsEngineCounter;
+			ShowStrs = !ShowStrs;
 		}
 
 		if (GetAsyncKeyState(VK_F2))
@@ -311,12 +311,11 @@ class ExampleScene : public TerraPGE::Scene
 		if (Wnd.Input.IsKeyPressed(VK_F9))
 		{
 			TerraPGE::Renderer::UseHDR = !TerraPGE::Renderer::UseHDR;
-			TerraPGE::Renderer::DoGammaCorrection = !TerraPGE::Renderer::DoGammaCorrection;
 		}
 
 		if (Wnd.Input.IsKeyPressed(VK_F10))
 		{
-			ShowStrs = !ShowStrs;
+			TerraPGE::Renderer::DoGammaCorrection = !TerraPGE::Renderer::DoGammaCorrection;
 		}
 
 		if (Wnd.Input.IsKeyPressed(VK_INSERT))

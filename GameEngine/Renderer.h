@@ -190,13 +190,13 @@ namespace TerraPGE::Renderer
 	}
 
 
-	__inline bool ShouldCulltriangle(const Triangle& tri, const Camera* Cam)
+	__inline bool ShouldCulltriangle(const Triangle& tri, const Vec3& CamPos)
 	{
 		//if ((TriNormal.Dot(WorldSpaceTri.Points[0] - Cam->Pos) < 0.0f) || !TerraPGE::DoCull || !MeshToRender->BackfaceCulling) // backface culling
 		if (!Renderer::DoCull)
 			return false;
 		Vec3 normal = tri.FaceNormal;
-		float facing = normal.Dot(tri.Points[0] - Cam->Transform.GetWorldPosition());
+		float facing = normal.Dot(tri.Points[0] - CamPos);
 		return facing >= 0.0f;
 	}
 
@@ -249,7 +249,7 @@ namespace TerraPGE::Renderer
 
 			WorldSpaceTri.FaceNormal = TriNormal;
 
-			if (!ShouldCulltriangle(WorldSpaceTri, Cam)) // backface culling
+			if (!ShouldCulltriangle(WorldSpaceTri, Cam->GetWorldPosition())) // backface culling
 			{
 				Triangle ViewSpaceTri = ProjectToViewSpace(&WorldSpaceTri, Cam);
 
@@ -501,15 +501,30 @@ namespace TerraPGE::Renderer
 
 				if (Renderer::DoShadows && HasLight)
 				{
-					for (int i = 0; i < LightCount; i++)
+					// TODO Add more maps for supporting more lights
+					LightObject* Light = SceneLights[0];
+					// 3D Space -> Viewed Space -> Clipped Space
+
+					if (Light->Type == LightTypes::DirectionalLight)
 					{
-						LightObject* Light = SceneLights[i];
-						// 3D Space -> Viewed Space -> Clipped Space
 
-						if (Light->Type == LightTypes::DirectionalLight)
+						const Matrix VpMatrix = Light->VpMatrices[0];
+						Proj.ApplyMatrix(VpMatrix);
+						// Clipped Space -> NDC Space
+						Proj.ApplyPerspectiveDivide();
+
+						// Offset to viewport space (Ndc -> Screen Space)
+						Proj.Scale(Vec3((float)(Core::ShadowMapWidth * 0.5f), (float)(Core::ShadowMapHeight * 0.5f), 1.0f));
+						Proj.Translate(Vec3((float)(Core::ShadowMapWidth * 0.5f), (float)(Core::ShadowMapHeight * 0.5f), 0.0f));
+
+
+						Renderer::BaryCentricRasterizerDepth(&Proj, Core::ShadowMap, (SIZE_T)Core::ShadowMapWidth, (SIZE_T)Core::ShadowMapHeight, VpMatrix);
+					}
+					else if (SceneLights[i]->Type == LightTypes::PointLight)
+					{
+						for (int face = 0; face < 6; face++)
 						{
-
-							const Matrix VpMatrix = Light->VpMatrices[0];
+							Matrix VpMatrix = SceneLights[i]->VpMatrices[face];
 							Proj.ApplyMatrix(VpMatrix);
 							// Clipped Space -> NDC Space
 							Proj.ApplyPerspectiveDivide();
@@ -518,24 +533,7 @@ namespace TerraPGE::Renderer
 							Proj.Scale(Vec3((float)(Core::ShadowMapWidth * 0.5f), (float)(Core::ShadowMapHeight * 0.5f), 1.0f));
 							Proj.Translate(Vec3((float)(Core::ShadowMapWidth * 0.5f), (float)(Core::ShadowMapHeight * 0.5f), 0.0f));
 
-
 							Renderer::BaryCentricRasterizerDepth(&Proj, Core::ShadowMap, (SIZE_T)Core::ShadowMapWidth, (SIZE_T)Core::ShadowMapHeight, VpMatrix);
-						}
-						else if (SceneLights[i]->Type == LightTypes::PointLight)
-						{
-							for (int face = 0; face < 6; face++)
-							{
-								Matrix VpMatrix = SceneLights[i]->VpMatrices[face];
-								Proj.ApplyMatrix(VpMatrix);
-								// Clipped Space -> NDC Space
-								Proj.ApplyPerspectiveDivide();
-
-								// Offset to viewport space (Ndc -> Screen Space)
-								Proj.Scale(Vec3((float)(Core::ShadowMapWidth * 0.5f), (float)(Core::ShadowMapHeight * 0.5f), 1.0f));
-								Proj.Translate(Vec3((float)(Core::ShadowMapWidth * 0.5f), (float)(Core::ShadowMapHeight * 0.5f), 0.0f));
-
-								Renderer::BaryCentricRasterizerDepth(&Proj, Core::ShadowMap, (SIZE_T)Core::ShadowMapWidth, (SIZE_T)Core::ShadowMapHeight, VpMatrix);
-							}
 						}
 					}
 				}
@@ -544,28 +542,9 @@ namespace TerraPGE::Renderer
 	}
 
 
-	void ApplyHDRToneMapping(bool GammaCorrection)
-	{
-		// Reinhard tone amapping
-
-		for (int y = 0; y < Core::sy; y++)
-		{
-			for (int x = 0; x < Core::sx; x++)
-			{
-
-			}
-		}
-
-		//color = color / (color + 1.0);
-
-		// Gamm correction
-	}
-
-
 	void RenderScene(Camera* Cam, Renderable** SceneObjects, LightObject** SceneLights, size_t ObjectCount, size_t LightCount)
 	{
-		//Renderer::RenderShadowMaps(ObjectsToRender, LightsToRender, ToRender.size(), Lights.size(), Core::ShadowMap);
-		//Renderer::RenderDepthMap(ObjectsToRender, ToRender.size(), Core::DepthBuffer, CurrScene->MainCamera->ViewMatrix);
+		Renderer::RenderShadowMaps(SceneObjects, SceneLights, ObjectCount, LightCount, Core::ShadowMap);
 
 		Renderer::RenderMeshes(Cam, SceneObjects, SceneLights, ObjectCount, LightCount);
 
