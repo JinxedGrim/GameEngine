@@ -64,7 +64,7 @@ namespace TerraPGE::Renderer
 
 
 	template<typename T>
-	void __fastcall BaryCentricRasterizer(float* DepthBuffer, int ScreenWidth, int ScreenHeight, GdiPP* Gdi, T&& Shader, ShaderArgs* BaseArgs1)
+	void __fastcall BaryCentricRasterizer(float* DepthBuffer, const int ScreenWidth, const int ScreenHeight, GdiPP* Gdi, T&& Shader, ShaderArgs* BaseArgs1)
 	{
 		ShaderArgs* BaseArgs = DEBUG_NEW ShaderArgs(BaseArgs1);
 
@@ -92,6 +92,11 @@ namespace TerraPGE::Renderer
 		Vec4 world0 = ScreenSpaceTri->WorldSpaceVerts[0];
 		Vec4 world1 = ScreenSpaceTri->WorldSpaceVerts[1];
 		Vec4 world2 = ScreenSpaceTri->WorldSpaceVerts[2];
+		
+		const float v1y_Sub_v2y = v1.y - v2.y;
+		const float v2y_Sub_v0y = v2.y - v0.y;
+		const float v0x_Sub_v2x = v0.x - v2.x;
+		const float v2x_Sub_v1x = v2.x - v1.x;
 
 		// --- 2. Compute triangle bounding box ---
 		int minX = std::max(0, (int)std::floor(std::min({ v0.x, v1.x, v2.x })));
@@ -99,7 +104,8 @@ namespace TerraPGE::Renderer
 		int minY = std::max(0, (int)std::floor(std::min({ v0.y, v1.y, v2.y })));
 		int maxY = std::min(Core::sy - 1, (int)std::ceil(std::max({ v0.y, v1.y, v2.y })));
 
-		float denom = (v1.y - v2.y) * (v0.x - v2.x) + (v2.x - v1.x) * (v0.y - v2.y);
+		float denom = (v1y_Sub_v2y) * (v0x_Sub_v2x) + (v2.x - v1.x) * (v0.y - v2.y);
+
 		if (denom == 0.0f) return; // Degenerate triangle
 
 		for (int y = minY; y <= maxY; y++)
@@ -107,8 +113,8 @@ namespace TerraPGE::Renderer
 			for (int x = minX; x <= maxX; x++)
 			{
 				// Compute barycentric coordinates
-				float alpha = ((v1.y - v2.y) * (x - v2.x) + (v2.x - v1.x) * (y - v2.y)) / denom;
-				float beta = ((v2.y - v0.y) * (x - v2.x) + (v0.x - v2.x) * (y - v2.y)) / denom;
+				float alpha = (v1y_Sub_v2y * (x - v2.x) + (v2x_Sub_v1x) * (y - v2.y)) / denom;
+				float beta = (v2y_Sub_v0y * (x - v2.x) + (v0x_Sub_v2x) * (y - v2.y)) / denom;
 				float gamma = 1.0f - alpha - beta;
 
 				// --- Check if pixel is inside triangle ---
@@ -133,31 +139,32 @@ namespace TerraPGE::Renderer
 					float ShadowDepth = 0.0f;
 					int MapIdx = 0;
 
-					//if (Renderer::DoShadows && HasLight)
-					//{
-						// do for all lights
-					//	for (int lightIdx = 0; lightIdx < LightCount; lightIdx++)
-					//	{
-					//		Vec4 ShadowNdcPos = Lights[0]->CalcNdc(Vec4(InterpolatedPos, 1.0f));
-					//		ShadowNdcPos.CorrectPerspective();
+					Vec3 InterpolatedWorldPos;
+					InterpolatedWorldPos.x = Interp.PerspectiveCorrectInterpolate(world0.x, world1.x, world2.x, v0.w, v1.w, v2.w);
+					InterpolatedWorldPos.y = Interp.PerspectiveCorrectInterpolate(world0.y, world1.y, world2.y, v0.w, v1.w, v2.w);
+					InterpolatedWorldPos.z = Interp.PerspectiveCorrectInterpolate(world0.z, world1.z, world2.z, v0.w, v1.w, v2.w);
 
-					//		ShadowNdcPos *= (Vec3((float)(Core::ShadowMapWidth * 0.5f), (float)(Core::ShadowMapHeight * 0.5f), 1.0f));
-					//		ShadowNdcPos += (Vec3((float)(Core::ShadowMapWidth * 0.5f), (float)(Core::ShadowMapHeight * 0.5f), 0.0f));
+					if (Renderer::DoShadows && HasLight)
+					{
+						Vec4 ShadowNdcPos = Lights[0]->CalcNdc(Vec4(InterpolatedWorldPos, 1.0f));
+						ShadowNdcPos.CorrectPerspective();
 
-					//		MapIdx = ContIdx(PixelRoundMinMax(ShadowNdcPos.x, 0, Core::ShadowMapWidth - 1), PixelRoundMinMax(ShadowNdcPos.y, 0, Core::ShadowMapHeight - 1), Core::ShadowMapWidth);
+						ShadowNdcPos *= (Vec3((float)(Core::ShadowMapWidth * 0.5f), (float)(Core::ShadowMapHeight * 0.5f), 1.0f));
+						ShadowNdcPos += (Vec3((float)(Core::ShadowMapWidth * 0.5f), (float)(Core::ShadowMapHeight * 0.5f), 0.0f));
 
-					//		ShadowValue = Core::ShadowMap[MapIdx] + ShadowMapBias;
+					    MapIdx = ContIdx(PixelRoundMinMax(ShadowNdcPos.x, 0, Core::ShadowMapWidth - 1), PixelRoundMinMax(ShadowNdcPos.y, 0, Core::ShadowMapHeight - 1), Core::ShadowMapWidth);
 
-					//		if (ShadowDepth > ShadowValue)
-					//		{
-					//			BaseArgs->EditShaderDataValue(TPGE_SHDR_IS_IN_SHADOW, true);
-					//		}
-					//		else
-					//		{
-					//			BaseArgs->EditShaderDataValue(TPGE_SHDR_IS_IN_SHADOW, false);
-					//		}
-					//	}
-					//}
+						ShadowValue = Core::ShadowMap[MapIdx] + ShadowMapBias;
+
+						if (ShadowDepth > ShadowValue)
+						{
+							BaseArgs->EditShaderDataValue(TPGE_SHDR_IS_IN_SHADOW, true);
+						}
+						else
+						{
+							BaseArgs->EditShaderDataValue(TPGE_SHDR_IS_IN_SHADOW, false);
+						}
+					}
 
 					// Debug depth buffer (Grayscale the pixel * depth val)
 					if (DebugDepthBuffer || DebugShadowMap)
@@ -213,12 +220,6 @@ namespace TerraPGE::Renderer
 					else
 					{
 						// Fragment Shader dispatch
-
-						Vec3 InterpolatedWorldPos;
-						InterpolatedWorldPos.x = Interp.PerspectiveCorrectInterpolate(world0.x, world1.x, world2.x, v0.w, v1.w, v2.w);
-						InterpolatedWorldPos.y = Interp.PerspectiveCorrectInterpolate(world0.y, world1.y, world2.y, v0.w, v1.w, v2.w);
-						InterpolatedWorldPos.z = Interp.PerspectiveCorrectInterpolate(world0.z, world1.z, world2.z, v0.w, v1.w, v2.w);
-
 						float w = uvw0.z;
 						Vec3 uvw;
 						uvw.x = Interp.PerspectiveCorrectInterpolate(uvw0.x, uvw1.x, uvw2.x, v0.w, v1.w, v2.w);
@@ -253,27 +254,39 @@ namespace TerraPGE::Renderer
 
 	void __fastcall BaryCentricRasterizerDepth(Triangle* ScreenSpaceTri, float* Buffer, const SIZE_T BufferWidth, const SIZE_T BufferHeight, const Matrix& Vp)
 	{
-		// --- Compute triangle bounding box ---
-		int minX = std::max(0, (int)std::floor(std::min({ ScreenSpaceTri->Points[0].x, ScreenSpaceTri->Points[1].x, ScreenSpaceTri->Points[2].x})));
-		int maxX = std::min(BufferWidth - 1, (SIZE_T)std::ceil(std::max({ ScreenSpaceTri->Points[0].x, ScreenSpaceTri->Points[1].x, ScreenSpaceTri->Points[2].x })));
-		int minY = std::max(0, (int)std::floor(std::min({ ScreenSpaceTri->Points[0].y, ScreenSpaceTri->Points[1].y, ScreenSpaceTri->Points[2].y })));
-		int maxY = std::min(BufferHeight - 1, (SIZE_T)std::ceil(std::max({ ScreenSpaceTri->Points[0].y, ScreenSpaceTri->Points[1].y, ScreenSpaceTri->Points[2].y })));
-
-		float denom = (ScreenSpaceTri->Points[1].y - ScreenSpaceTri->Points[2].y) * (ScreenSpaceTri->Points[0].x - ScreenSpaceTri->Points[2].x) + (ScreenSpaceTri->Points[2].x - ScreenSpaceTri->Points[1].x) * (ScreenSpaceTri->Points[0].y - ScreenSpaceTri->Points[2].y);
-		if (denom == 0.0f) return; // Degenerate triangle
-
-		BaryCoords Interp;
-
+		// Screen Space
 		Vec4 v0 = ScreenSpaceTri->Points[0];
 		Vec4 v1 = ScreenSpaceTri->Points[1];
 		Vec4 v2 = ScreenSpaceTri->Points[2];
+
+		Vec4 world0 = ScreenSpaceTri->WorldSpaceVerts[0];
+		Vec4 world1 = ScreenSpaceTri->WorldSpaceVerts[1];
+		Vec4 world2 = ScreenSpaceTri->WorldSpaceVerts[2];
+
+		const float v1y_Sub_v2y = v1.y - v2.y;
+		const float v2y_Sub_v0y = v2.y - v0.y;
+		const float v0x_Sub_v2x = v0.x - v2.x;
+		const float v2x_Sub_v1x = v2.x - v1.x;
+
+		BaryCoords Interp;
+
+		// --- 2. Compute triangle bounding box ---
+		int minX = std::max(0, (int)std::floor(std::min({ v0.x, v1.x, v2.x })));
+		int maxX = std::min(Core::sx - 1, (int)std::ceil(std::max({ v0.x, v1.x, v2.x })));
+		int minY = std::max(0, (int)std::floor(std::min({ v0.y, v1.y, v2.y })));
+		int maxY = std::min(Core::sy - 1, (int)std::ceil(std::max({ v0.y, v1.y, v2.y })));
+
+		float denom = (v1y_Sub_v2y) * (v0x_Sub_v2x)+(v2.x - v1.x) * (v0.y - v2.y);
+
+		if (denom == 0.0f) return; // Degenerate triangle
 
 		for (int y = minY; y <= maxY; y++)
 		{
 			for (int x = minX; x <= maxX; x++)
 			{
-				float alpha = ((ScreenSpaceTri->Points[1].y - ScreenSpaceTri->Points[2].y) * (x - ScreenSpaceTri->Points[2].x) + (ScreenSpaceTri->Points[2].x - ScreenSpaceTri->Points[1].x) * (y - ScreenSpaceTri->Points[2].y)) / denom;
-				float beta = ((ScreenSpaceTri->Points[2].y - ScreenSpaceTri->Points[0].y) * (x - ScreenSpaceTri->Points[2].x) + (ScreenSpaceTri->Points[0].x - ScreenSpaceTri->Points[2].x) * (y - ScreenSpaceTri->Points[2].y)) / denom;
+				// Compute barycentric coordinates
+				float alpha = (v1y_Sub_v2y * (x - v2.x) + (v2x_Sub_v1x) * (y - v2.y)) / denom;
+				float beta = (v2y_Sub_v0y * (x - v2.x) + (v0x_Sub_v2x) * (y - v2.y)) / denom;
 				float gamma = 1.0f - alpha - beta;
 
 
@@ -285,6 +298,7 @@ namespace TerraPGE::Renderer
 				float Depth = Interp.PerspectiveCorrectInterpolate(v0.z, v0.z, v0.z, v0.w, v1.w, v2.w);
 
 				int idx = y * BufferWidth + x;
+
 				if (Depth < Buffer[idx])
 				{
 					Buffer[idx] = Depth;

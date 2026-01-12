@@ -110,7 +110,7 @@ class ShaderArgs
 		Payload.reserve(B->Payload.size());
 
 		// Iterate through the hash table
-		for (ShaderData* BData : B->Payload)
+		for (const ShaderData* BData : B->Payload)
 		{
 			ShaderData* AData = DEBUG_NEW ShaderData(BData); // copy constructor  
 			AData->FreeOnDelete = false; // Set this because we are a child of the original args and it will do cleanup / the user will

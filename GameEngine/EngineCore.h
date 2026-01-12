@@ -45,7 +45,7 @@ namespace TerraPGE::Core
 
 	float FOV = 90.0f;
 	float FNEAR = 0.1f;
-	float FFAR = 50.0f;
+	float FFAR = 100.0f;
 
 	bool FpsEngineCounter = true;
 	bool DoMultiThreading = false;

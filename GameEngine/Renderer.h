@@ -102,51 +102,48 @@ namespace TerraPGE::Renderer
 
 	void SwapFrameBuffer(bool Hdr, bool GammaCorrection)
 	{
-		for (int x = 0; x < Core::sx; x++)
+		for (int i = 0; i < Core::sx * Core::sy; i++)
 		{
-			for (int y = 0; y < Core::sy; y++)
+			int index = i * 3;
+			float* ChannelPtr = Core::FrameBuffer + index;
+
+			float Rf, Gf, Bf = 0.0f;
+			int R, G, B = 0;
+
+			Rf = ChannelPtr[0];
+			Gf = ChannelPtr[1];
+			Bf = ChannelPtr[2];
+
+			if (!Renderer::UseHDR)
 			{
-				int index = ContIdx(x, y, Core::sx) * 3;
-				float* ChannelPtr = Core::FrameBuffer + index;
-
-				float Rf, Gf, Bf = 0.0f;
-				int R, G, B = 0;
-
-				Rf = ChannelPtr[0];
-				Gf = ChannelPtr[1];
-				Bf = ChannelPtr[2];
-
-				if (!Renderer::UseHDR)
-				{
-					// Clamp 0-1
-					Rf = std::clamp<float>(Rf, 0, 1.0f);
-					Gf = std::clamp<float>(Gf, 0, 1.0f);
-					Bf = std::clamp<float>(Bf, 0, 1.0f);
-				}
-				else
-				{
-					// Reinhard mapping
-					Rf /= (1.0f + Rf);
-					Gf /= (1.0f + Gf);
-					Bf /= (1.0f + Bf);
-				}
-
-				if (Renderer::DoGammaCorrection)
-				{
-					// Gamma Correction
-					Rf = Color::LinearToSRGB_Channel(Rf);
-					Gf = Color::LinearToSRGB_Channel(Gf);
-					Bf = Color::LinearToSRGB_Channel(Bf);
-				}
-
-				// Final transformation to RGB Space
-				R = Rf * 255.0f;
-				G = Gf * 255.0f;
-				B = Bf * 255.0f;
-
-				// Write to out buffer
-				EngineGdi->QuickSetPixel(x, y, RGB(R, G, B));
+				// Clamp 0-1
+				Rf = std::clamp<float>(Rf, 0, 1.0f);
+				Gf = std::clamp<float>(Gf, 0, 1.0f);
+				Bf = std::clamp<float>(Bf, 0, 1.0f);
 			}
+
+			Rf /= (1.0f + Rf) * Renderer::UseHDR;
+			Gf /= (1.0f + Gf) * Renderer::UseHDR;
+			Bf /= (1.0f + Bf) * Renderer::UseHDR;
+
+			if (Renderer::DoGammaCorrection)
+			{
+				// Gamma Correction
+				Rf = Color::LinearToSRGB_Channel(Rf);
+				Gf = Color::LinearToSRGB_Channel(Gf);
+				Bf = Color::LinearToSRGB_Channel(Bf);
+			}
+
+			// Final transformation to RGB Space
+			R = Rf * 255.0f;
+			G = Gf * 255.0f;
+			B = Bf * 255.0f;
+
+			int y = i / Core::sx;
+			int x = i % Core::sx;
+
+			// Write to out buffer
+			EngineGdi->QuickSetPixel(x, y, RGB(R, G, B));
 		}
 	}
 

@@ -4,6 +4,12 @@
 
 //GameObject(Vec3(1.0f, 1.0f, 1.0f), DirToEuler(LightDir)
 
+enum class CameraStyles
+{
+	FirstPerson = 0,
+	Orthographic = 1
+};
+
 class Camera: public GameObject
 {
 private:
@@ -15,12 +21,23 @@ private:
 
 	bool IsViewDirty = true;
 	bool IsProjectionDirty = true;
-
+	bool ForceViewMatrix = false;
+	bool ForceProjectionMatrix = false;
+	// Projection Data
 	float Fov = 90.0f;
 	float AspectRatio = 0.f;
 	float Near = 0.1f;
 	float Far = 50.f;
 
+	// For orthographic projection
+	float Top = 0.0f;
+	float Bottom = 0.0f;
+	float Left = 0.0f;
+	float Right = 0.0f;
+
+	Vec3 CenterPoint = Vec3(0.0f, 0.0f, 0.0f);
+
+	CameraStyles _cameraStyle = CameraStyles::FirstPerson;
 
 	void __inline __fastcall CalcCamViewMatrix(const Vec3& TargetPos)
 	{
@@ -43,13 +60,90 @@ public:
 		this->NearPlane = { 0.0f, 0.0f, Near };
 		this->CamUp = {0.0f, 1.0f, 0.0f};
 
-		this->SetLocalPosition(Position);
+		this->_cameraStyle = CameraStyles::FirstPerson;
+
+		this->Transform.SetLocalPosition(Position);
 
 		this->IsViewDirty = true;
 		this->IsProjectionDirty = true;
 
 		this->GetViewMatrix();
 		this->GetProjectionMatrix();
+	}
+
+	Camera(float Top, float Bottom, float Left, float Right, float AspectRatio, float Fov, float Near, float Far) : GameObject(Vec3(0, 0, 0))
+	{
+		this->AspectRatio = AspectRatio;
+		this->Fov = Fov;
+		this->Near = Near;
+		this->Far = Far;
+		this->NearPlane = { 0.0f, 0.0f, Near };
+		this->CamUp = { 0.0f, 1.0f, 0.0f };
+
+		this->Top = Top;
+		this->Bottom = Bottom;
+		this->Left = Left;
+		this->Right = Right;
+
+		this->_cameraStyle = CameraStyles::FirstPerson;
+
+		this->IsViewDirty = true;
+		this->IsProjectionDirty = true;
+
+		this->GetViewMatrix();
+		this->GetProjectionMatrix();
+	}
+
+
+	void SetViewMatrix(const Matrix& ViewMat)
+	{
+		this->ViewMatrix = ViewMat;
+	}
+
+
+	void SetProjectionMatrix(const Matrix& Projection)
+	{
+		this->ProjectionMatrix = Projection;
+		this->IsProjectionDirty = false;
+		this->IsViewDirty = false;
+	}
+
+
+	void SetLeft(float left)
+	{
+		this->Left = left;
+		this->IsViewDirty = true;
+	}
+
+
+	void SetTop(float top)
+	{
+		this->IsViewDirty = true;
+		this->Top = top;
+	}
+
+
+	void SetRight(float right)
+	{
+		this->Right = right;
+		this->IsViewDirty = true;
+
+	}
+
+
+	void SetBottom(float bottom)
+	{
+		this->Bottom = bottom;
+		this->IsViewDirty = true;
+
+	}
+
+
+	void ChangeStyle(CameraStyles NewStyle)
+	{
+		this->_cameraStyle = NewStyle;
+		this->IsProjectionDirty = true;
+		this->IsViewDirty = true;
 	}
 
 
@@ -117,7 +211,18 @@ public:
 	{
 		if (IsViewDirty)
 		{
-			this->ViewMatrix = this->Transform.Local.CalcInverseView(this->CamUp);
+			switch (this->_cameraStyle)
+			{
+			case CameraStyles::FirstPerson:
+				this->ViewMatrix = this->Transform.Local.CalcInverseView(this->CamUp);
+				break;
+			case CameraStyles::Orthographic:
+				this->ViewMatrix = Matrix::CalcViewMatrix(((this->CenterPoint - this->Transform.GetLocalPosition()).Normalized()) * 50.0f, Vec3(0.0f, 0.0f, 0.0f), Vec3(0, 1, 0));
+				break;
+			default:
+				throw;
+				break;
+			}
 			IsViewDirty = false;
 		}
 
@@ -129,7 +234,16 @@ public:
 	{
 		if (this->IsProjectionDirty)
 		{
-			this->ProjectionMatrix = Matrix::CalcPerspectiveMatrix(this->Fov, this->AspectRatio, this->Near, this->Far);
+			switch (this->_cameraStyle)
+			{
+			case CameraStyles::FirstPerson:
+				this->ProjectionMatrix = Matrix::CalcPerspectiveMatrix(this->Fov, this->AspectRatio, this->Near, this->Far);
+				break;
+			case CameraStyles::Orthographic:
+				this->ProjectionMatrix = Matrix::CalcOrthoMatrix(this->Left, this->Right, this->Bottom, this->Top, this->Near, this->Far);
+				break;
+			}
+
 			IsProjectionDirty = false;
 		}
 

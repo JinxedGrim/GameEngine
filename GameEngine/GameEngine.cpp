@@ -85,7 +85,7 @@ class ExampleScene : public TerraPGE::Scene
 		this->LightSrcPos = { 0, 60, -60 };
 		this->PointLightPos = { 0, 1, 0 };
 
-		Vec3 dir = LightSrcPos.GetDirectionToVector(Vec3(0.0f, 0.0f, 0.0f));
+		Vec3 dir = LightSrcPos.GetDirectionToVector(Vec3(0.0f, 0.0f, 0.0f)).Normalized();
 
 		this->LoadingMode++;
 		TerraPGE::UpdateLoadingScreen();
@@ -106,7 +106,7 @@ class ExampleScene : public TerraPGE::Scene
 		sl = PointLight(this->PointLightPos, { 0, 0, 0 }, Vec3(253, 255, 255), 1.0f, 0.02f, 0.002f, 0.5f, 0.15f, 0.5f);
 		sl.CastsShadows = true;
 		sl.Render = true;
-		Dl = DirectionalLight(this->LightSrcPos, dir, Vec3(253, 251, 211), 0.2f, 0.4f, 0.3f);
+		Dl = DirectionalLight(dir, 10.0f, Vec3(253, 251, 211), 0.15f, 0.4f, 0.2f);
 		Dl.CastsShadows = true;
 
 		this->MainCamera = DEBUG_NEW Camera(Vec3(0, 3, 0), (float)((float)TerraPGE::Core::sy / (float)TerraPGE::Core::sx), TerraPGE::Core::FOV, TerraPGE::Core::FNEAR, TerraPGE::Core::FFAR);
@@ -243,6 +243,7 @@ class ExampleScene : public TerraPGE::Scene
 			this->MainCamera->SetLocalPosition(MainCamera->GetLocalPosition() + (-MainCamera->GetNewVelocity(MainCamera->Transform.GetWorldMatrix().GetForward())) * ElapsedTime);
 		}
 
+
 		if (!LockCamera)
 		{
 			Euler -= Vec3((float)Wnd.Input.Current.DeltaY * TerraPGE::Sensitivity, 0, 0);
@@ -370,6 +371,17 @@ class ExampleScene : public TerraPGE::Scene
 		}
 
 		HandleMovement(Wnd, ElapsedTime);
+
+		if (Wnd.Input.IsKeyDown('V'))
+		{
+			//this->MainCamera->ChangeStyle(CameraStyles::Orthographic);
+			//this->MainCamera->SetLeft(40);
+			//this->MainCamera->SetRight(40);
+			//this->MainCamera->SetTop(40);
+			//this->MainCamera->SetBottom(40);
+			this->MainCamera->SetViewMatrix(this->Dl.GetViewMatrix());
+			this->MainCamera->SetProjectionMatrix(this->Dl.GetProjectionMatrix());
+		}
 	}
 
 
