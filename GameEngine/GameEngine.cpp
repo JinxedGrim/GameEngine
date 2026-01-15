@@ -13,12 +13,6 @@
 // gonna add a opengl version
 #endif
 
-#ifdef _DEBUG
-BOOL _ = AllocConsole();
-FILE* new_stdout;
-auto __ = freopen_s(&new_stdout, "CONOUT$", "w", stdout);
-#endif
-
 static bool ShowStrs = true;
 static float FTheta = 0;
 static int CurrMesh = 0;
@@ -82,10 +76,16 @@ class ExampleScene : public TerraPGE::Scene
 	void BeginScene(WndCreator& Wnd) override
 	{
 		Vec3 InitialVelocity = Vec3(4.0f, 1.5f, 0.0f);
-		this->LightSrcPos = { 0, 60, -60 };
-		this->PointLightPos = { 0, 1, 0 };
+		this->LightSrcPos = { 0, 50, -10 };
+		Vec3 dir = -(LightSrcPos.GetDirectionToVector(Vec3(0.0f, 0.0f, 0.0f)).Normalized());
 
-		Vec3 dir = LightSrcPos.GetDirectionToVector(Vec3(0.0f, 0.0f, 0.0f)).Normalized();
+		Dl = DirectionalLight(dir, 20.0f, Vec3(253, 251, 211), 0.15f, 0.4f, 0.2f);
+		Dl.CastsShadows = true;
+
+		this->PointLightPos = { 0, 1, 0 };
+		sl = PointLight(this->PointLightPos, { 0, 0, 0 }, Vec3(253, 255, 255), 1.0f, 0.02f, 0.002f, 0.5f, 0.15f, 0.5f);
+		sl.CastsShadows = true;
+		sl.Render = true;
 
 		this->LoadingMode++;
 		TerraPGE::UpdateLoadingScreen();
@@ -101,13 +101,6 @@ class ExampleScene : public TerraPGE::Scene
 
 		this->LoadingMode++;
 		TerraPGE::UpdateLoadingScreen();
-
-
-		sl = PointLight(this->PointLightPos, { 0, 0, 0 }, Vec3(253, 255, 255), 1.0f, 0.02f, 0.002f, 0.5f, 0.15f, 0.5f);
-		sl.CastsShadows = true;
-		sl.Render = true;
-		Dl = DirectionalLight(dir, 10.0f, Vec3(253, 251, 211), 0.15f, 0.4f, 0.2f);
-		Dl.CastsShadows = true;
 
 		this->MainCamera = DEBUG_NEW Camera(Vec3(0, 3, 0), (float)((float)TerraPGE::Core::sy / (float)TerraPGE::Core::sx), TerraPGE::Core::FOV, TerraPGE::Core::FNEAR, TerraPGE::Core::FFAR);
 
@@ -381,6 +374,7 @@ class ExampleScene : public TerraPGE::Scene
 			//this->MainCamera->SetBottom(40);
 			this->MainCamera->SetViewMatrix(this->Dl.GetViewMatrix());
 			this->MainCamera->SetProjectionMatrix(this->Dl.GetProjectionMatrix());
+			this->LockCamera = true;
 		}
 	}
 
@@ -534,7 +528,7 @@ class ExampleScene : public TerraPGE::Scene
 			Gdi->DrawStringA(20, 160, LightingStr + std::to_string(TerraPGE::Core::DoLighting), RGB(255, 0, 0), TRANSPARENT);
 			Gdi->DrawStringA(20, 180, FilledStr + std::to_string(TerraPGE::Renderer::WireFrame), RGB(255, 0, 0), TRANSPARENT);
 			Gdi->DrawStringA(20, 200, TriLinesStr + std::to_string(TerraPGE::Renderer::ShowTriLines), RGB(255, 0, 0), TRANSPARENT);
-			Gdi->DrawStringA(20, 220, DepthStr + std::to_string(TerraPGE::Renderer::TestDepth), RGB(255, 0, 0), TRANSPARENT);
+			Gdi->DrawStringA(20, 220, DepthStr + std::to_string(TerraPGE::Renderer::TestDepth) + " Mapped: " + std::to_string(TerraPGE::Renderer::TestDepthMapped), RGB(255, 0, 0), TRANSPARENT);
 		}
 
 		if (this->Paused)
@@ -587,19 +581,14 @@ int APIENTRY WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance,
 	WndCreatorW Wnd = WndCreatorW(CS_OWNDC, L"GameEngine", L"Game Engine", LoadCursorW(NULL, IDC_ARROW), NULL, ClearBrush, (DWORD)WndExModes::BorderLessEx, (DWORD)WndModes::BorderLess | (DWORD)WndModes::ClipChildren, 0, 0, TerraPGE::Core::sx, TerraPGE::Core::sy);
 
 #ifdef _DEBUG
-	WndCreatorA Console = GetConsoleWindow();
+	TerraPGE::Core::OpenConsole();
 #endif
-
-	//Console.Hide();
 
 	ExampleScene* ExScene = new ExampleScene();
 
 	TerraPGE::Run(Wnd, ExScene);
 
-	//Console.Show();
-
 #ifdef _DEBUG
-	//system("pause");
-	Console.Destroy();
+	system("pause");
 #endif
 }

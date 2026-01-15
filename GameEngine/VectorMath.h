@@ -591,6 +591,12 @@ public:
 	}
 
 
+	float Dot(const Vec4& B) const
+	{
+		return x * B.x + y * B.y + z * B.z + w * B.w;
+	}
+
+
 	Vec4 CalculateIntersectionPoint(const Vec4& LineEnd, const Vec3& PointOnPlane, const Vec3& PlaneNormal, float* OutT = nullptr) const
 	{
 		const Vec4& LineStart = *this;
@@ -725,6 +731,11 @@ public:
 		this->x *= b.x;
 		this->y *= b.y;
 		this->z *= b.z;
+	}
+
+	bool operator==(const Vec4& b) const
+	{
+		return this->x == b.x && this->y == b.y && this->z == b.z && this->w == b.w;
 	}
 
 

@@ -10,12 +10,13 @@
 // Direct2D and DirectWrite are justified the same way
 
 //     TO DO 
+// T. Fix Lighting (fix interpolation)
 // 1. Fix the shadows
 // 2. Add skyboxes 
-// 3. Fix Lighting
 // X. Redesign multithreading
 // X. implement a prefab system
 // X. Fix physics ray cast for ground detection (is mesh local space needs to be world)
+// X. Bloom
 // X. Caclulate Vertex norms for all 3 vertices and store them
 // X. Better reosource management
 // X. Fix camera PointAt
@@ -52,7 +53,7 @@ namespace TerraPGE
 
 	void UpdateLoadingScreen()
 	{
-		Renderer::ClearScreen();
+		Renderer::RenderingCore::ClearScreen();
 		CurrScene->DrawLoadingScreen(Renderer::EngineGdi);
 		Renderer::EngineGdi->DrawDoubleBufferPO();
 	}
@@ -90,7 +91,7 @@ namespace TerraPGE
 		std::vector<Renderable*> Roots;
 
 		Wnd.RegisterRawInput();
-		Renderer::PrepareRenderingBackend(Wnd);
+		Renderer::RenderingCore::PrepareRenderingBackend(Wnd);
 		Core::UpdateWindow(Wnd, &msg);
 		UpdateLoadingScreen();
 		CurrScene->BeginScene(Wnd);
@@ -107,7 +108,7 @@ namespace TerraPGE
 
 			Core::UpdateWindow(Wnd, &msg);
 
-			Renderer::ClearScreen();
+			Renderer::RenderingCore::ClearScreen();
 			CurrScene->ClearRenderQueue();
 			CurrScene->ClearLights();
 

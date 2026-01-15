@@ -85,24 +85,41 @@ class Triangle
 		this->Points[2].CorrectPerspective();
 	}
 
+
+	const bool IsWindingCCW(const Vec4& a, const Vec4& b, const Vec4& c) const
+	{
+		Vec3 ab = (b / b.w).GetVec3() - (a / a.w).GetVec3();
+		Vec3 ac = (c / c.w).GetVec3() - (a / a.w).GetVec3();
+		Vec3 n = ab.Cross(ac);
+
+		return n.z >= 0;  // CCW in LH DX
+	}
+
+
+
 	int ClipAgainstPlane(const Vec3& PointOnPlane, const Vec3& PlaneNormalized, Triangle& Out1, Triangle& Out2, bool DebugClip = false)
 	{
+		// Attributes
 		Vec4 p0 = this->Points[0];
 		Vec4 p1 = this->Points[1];
 		Vec4 p2 = this->Points[2];
+
 		TextureCoords& t0 = this->TexCoords[0];
 		TextureCoords& t1 = this->TexCoords[1];
 		TextureCoords& t2 = this->TexCoords[2];
+		//
+
+		// Attribute storage
+		Vec4* InsidePoints[3] = {};
+		Vec4* OutsidePoints[3] = {};
+		TextureCoords* InsideTex[3] = {};
+		TextureCoords* OutsideTex[3] = {};
+		//
 
 		float PlanePointDot = PlaneNormalized.Dot(PointOnPlane);
 		float dist0 = PlaneNormalized.Dot(p0) - PlanePointDot;
 		float dist1 = PlaneNormalized.Dot(p1) - PlanePointDot;
 		float dist2 = PlaneNormalized.Dot(p2) - PlanePointDot;
-
-		Vec4* InsidePoints[3] = {};
-		Vec4* OutsidePoints[3] = {};
-		TextureCoords* InsideTex[3] = {};
-		TextureCoords* OutsideTex[3] = {};
 		int InsideCount = 0;
 		int OutsideCount = 0;
 		int InsideTexCount = 0;
@@ -110,29 +127,35 @@ class Triangle
 
 		if (dist0 >= 0)
 		{
-			InsidePoints[InsideCount++] = &p0; InsideTex[InsideTexCount++] = &t0;
+			InsidePoints[InsideCount++] = &p0; 
+			InsideTex[InsideTexCount++] = &t0;
 		}
 		else
 		{
-			OutsidePoints[OutsideCount++] = &p0; OutsideTex[OutsideTexCount++] = &t0;
+			OutsidePoints[OutsideCount++] = &p0; 
+			OutsideTex[OutsideTexCount++] = &t0;
 		}
 
 		if (dist1 >= 0)
 		{
-			InsidePoints[InsideCount++] = &p1; InsideTex[InsideTexCount++] = &t1;
+			InsidePoints[InsideCount++] = &p1; 
+			InsideTex[InsideTexCount++] = &t1;
 		}
 		else
 		{
-			OutsidePoints[OutsideCount++] = &p1; OutsideTex[OutsideTexCount++] = &t1;
+			OutsidePoints[OutsideCount++] = &p1; 
+			OutsideTex[OutsideTexCount++] = &t1;
 		}
 
 		if (dist2 >= 0)
 		{
-			InsidePoints[InsideCount++] = &p2; InsideTex[InsideTexCount++] = &t2;
+			InsidePoints[InsideCount++] = &p2; 
+			InsideTex[InsideTexCount++] = &t2;
 		}
 		else
 		{
-			OutsidePoints[OutsideCount++] = &p2; OutsideTex[OutsideTexCount++] = &t2;
+			OutsidePoints[OutsideCount++] = &p2; 
+			OutsideTex[OutsideTexCount++] = &t2;
 		}
 
 		int Count = 0;
@@ -200,6 +223,104 @@ class Triangle
 
 		return Count;
 	}
+
+
+	int ClipAgainstPlane(const Vec4& plane, Triangle& Out1, Triangle& Out2, bool DebugClip) const
+	{
+		Vec4 in[3] = { Points[0], Points[1], Points[2] };
+		float w[3] = { Points[0].w, Points[1].w, Points[2].w }; // store original w
+		float d[3];
+		bool inside[3];
+
+		int inCount = 0;
+		for (int i = 0; i < 3; i++)
+		{
+			d[i] = plane.Dot(in[i]);
+			inside[i] = d[i] >= 0.0f;
+			if (inside[i]) inCount++;
+		}
+
+		if (inCount == 0) return 0;
+
+		auto Intersect = [&](int a, int b)
+		{
+			float t = d[a] / (d[a] - d[b]);
+			Vec4 pos = in[a] + (in[b] - in[a]) * t;
+
+			// Interpolate w
+			pos.w = w[a] + (w[b] - w[a]) * t;
+			return pos;
+		};
+
+		std::vector<Vec4> out;
+
+		for (int i = 0; i < 3; i++)
+		{
+			int j = (i + 1) % 3;
+
+			if (inside[i])
+				out.push_back(in[i]);
+
+			if (inside[i] ^ inside[j])
+				out.push_back(Intersect(i, j));
+		}
+
+		if (out.size() == 3)
+		{
+			Out1 = *this;
+			Out1.Points[0] = out[0];
+			Out1.Points[1] = out[1];
+			Out1.Points[2] = out[2];
+
+			if (DebugClip && this->OverrideTextureColor != true)
+			{
+				bool Same = true;
+
+				for (int i = 0; i < 3; i++)
+				{
+					if (!(Points[i].GetVec3() == Out1.Points[i].GetVec3()))
+					{
+						Same = false;
+						break;
+					}
+				}
+
+				if (!Same)
+				{
+					Out1.Col = Vec3(0, 255, 0);
+					Out1.OverrideTextureColor = true;
+				}
+			}
+
+			return 1;
+		}
+
+		if (out.size() == 4)
+		{
+			Out1 = *this;
+			Out1.Points[0] = out[0];
+			Out1.Points[1] = out[1];
+			Out1.Points[2] = out[2];
+
+			Out2 = *this;
+			Out2.Points[0] = out[0];
+			Out2.Points[1] = out[2];
+			Out2.Points[2] = out[3];
+
+			if (DebugClip)
+			{
+				Out1.Col = Vec3(255, 0, 0);
+				Out1.OverrideTextureColor = true;
+				Out2.Col = Vec3(0, 0, 255);
+				Out2.OverrideTextureColor = true;
+			}
+
+			return 2;
+		}
+
+		return 0;
+	}
+
 
 	Vec4 Points[3] = {};
 

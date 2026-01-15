@@ -34,6 +34,7 @@
 #endif
 
 #define FLOAT_LOWEST 0.0000001f
+#define FLOAT_LOWEST_BIAS 0.0000003f
 
 namespace TerraPGE::Core
 {
@@ -74,6 +75,21 @@ namespace TerraPGE::Core
 	float* DepthBuffer = DEBUG_NEW float[sx * sy];
 	float* FrameBuffer = DEBUG_NEW float[sx * sy * 3];
 	float* ShadowMap = DEBUG_NEW float[ShadowMapWidth * ShadowMapHeight];
+
+	void Log(std::string Message)
+	{
+		std::cout << Message << std::endl;
+	}
+
+	void LogInfo(std::string CallerTag, std::string Message)
+	{
+		Core::Log("[I] (" + CallerTag + ") " + Message);
+	}
+
+	void LogError(std::string CallerTag, std::string Message, int Level)
+	{
+		Core::Log("[W] (" + CallerTag + ") " + Message);
+	}
 
 
 	SIZE_T GetUsedMemory()
@@ -120,6 +136,17 @@ namespace TerraPGE::Core
 				TerraPGE::Core::PrimaryGPUDevName = DispDev.DeviceString;
 		}
 
+	}
+
+
+	void OpenConsole()
+	{
+		AllocConsole();
+
+		FILE* fp;
+		freopen_s(&fp, "CONOUT$", "w", stdout);
+		freopen_s(&fp, "CONOUT$", "w", stderr);
+		freopen_s(&fp, "CONIN$", "r", stdin);
 	}
 
 

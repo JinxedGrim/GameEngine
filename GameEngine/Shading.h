@@ -519,6 +519,8 @@ namespace TerraPGE
 				Vec3* FragPos = Args->FindShaderResourcePtr<Vec3*>(TPGE_SHDR_FRAG_POS);
 				Vec3* FragNormal = Args->FindShaderResourcePtr<Vec3*>(TPGE_SHDR_FRAG_NORMAL);
 				Color* FragColor = Args->FindShaderResourcePtr<Color*>(TPGE_SHDR_FRAG_COLOR);
+				bool IsInShadow = Args->FindShaderResourceValue<bool>(TPGE_SHDR_IS_IN_SHADOW);
+				float shadowMul = 1.0f - IsInShadow * (1.0f - 0.5f);
 				FragColor->A = 255.0f;
 				FragColor->R = 0.0f;
 				FragColor->G = 0.0f;
@@ -537,7 +539,7 @@ namespace TerraPGE
 				{
 					Light = Args->FindShaderResourcePtr<LightObject**>(TPGE_SHDR_LIGHT_OBJECTS)[i];
 
-					Vec3 LightDir = Light->GetLightDirection().Normalized();
+					Vec3 LightDir = -Light->GetLightDirection().Normalized();
 					Vec3 ReflectedDir = (-LightDir).GetReflectection(*FragNormal);
 
 					float Li = FragNormal->Dot(LightDir); // Light intensity
@@ -545,13 +547,15 @@ namespace TerraPGE
 					float SpecularIntensity = pow(std::max<float>(0.0f, (-ReflectedDir).Dot((*CamLookDir).Normalized())), Mat->Shininess);
 
 					Vec3 AmbientCol = (Mat->AmbientColor / 255.0f) * Light->AmbientCoeff;
-					Vec3 DiffuseCol = (((Light->Color / 255.0f) * Light->DiffuseCoeff) * (Mat->DiffuseColor / 255.0f)) * Intensity;
-					Vec3 SpecularClr = (((Light->Color / 255.0f) * Light->SpecularCoeff) * (Mat->SpecularColor / 255.0f)) * SpecularIntensity;
-					FinalColor += (((AmbientCol + DiffuseCol + SpecularClr)));
+					Vec3 DiffuseCol = ((((Light->Color / 255.0f) * Light->DiffuseCoeff) * (Mat->DiffuseColor / 255.0f)) * Intensity);
+					Vec3 SpecularClr = ((((Light->Color / 255.0f) * Light->SpecularCoeff) * (Mat->SpecularColor / 255.0f)) * SpecularIntensity);
+					FinalColor += AmbientCol + ((DiffuseCol + SpecularClr) * shadowMul);
 
 					// for point light
 					//Vec3 LDir = Light->Transform.GetLocalPosition().GetDirectionToVector(*FragPos);
 				}
+
+				FinalColor = FinalColor;
 				
 				float glow = Mat->EmissiveStrength; /* * pow(1.0 - FragNormal->Dot(*CamLookDir), 4.0f)*/;
 				Vec3 EmissiveCol = (Mat->EmissiveColor / 255.0f) * glow;

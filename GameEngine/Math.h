@@ -279,7 +279,7 @@ Matrix Matrix::CalcOrthoMatrix(const float& Left, const float& Right, const floa
 
 	OrthoMat.fMatrix[0][0] = 2.0f / (Right - Left);
 	OrthoMat.fMatrix[1][1] = 2.0f / (Top - Bottom);
-	OrthoMat.fMatrix[2][2] = 1.0f / (Far - Near);;
+	OrthoMat.fMatrix[2][2] = 1.0f / (Far - Near);
 	OrthoMat.fMatrix[3][3] = 1.0f;
 
 	OrthoMat.fMatrix[3][0] = -(Right + Left) / (Right - Left);

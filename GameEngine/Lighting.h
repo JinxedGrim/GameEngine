@@ -24,14 +24,14 @@ public:
 	bool IsVpDirty = false;
 
 
-	static Vec3 DirToEuler(const Vec3& d_raw)
-	{
-		Vec3 d = d_raw.Normalized();
-		float pitch = asinf(d.y);
-		float yaw = atan2f(d.x, d.z);
-		float roll = 0.0f;
-		return Vec3(pitch, yaw, roll);
-	}
+//	static Vec3 DirToEuler(const Vec3& d_raw)
+//	{
+//		Vec3 d = d_raw.Normalized();
+//		float pitch = asinf(d.y);
+//		float yaw = atan2f(d.x, d.z);
+//		float roll = 0.0f;
+//		return Vec3(pitch, yaw, roll);
+//	}
 
 	virtual Vec3 GetLightDirection()
 	{
@@ -41,7 +41,7 @@ public:
 	}
 
 
-	LightObject(Vec3 Pos, Vec3 LightDir, Vec3 LightColor, float AmbientCoeff, float DiffuseCoeff, float SpecularCoeff, float Near = 0.1f, float Far = 50.0f) : GameObject(Vec3(1.0f, 1.0f, 1.0f), DirToEuler(LightDir.Normalized()), Pos)
+	LightObject(Vec3 Pos, Vec3 LightDir, Vec3 LightColor, float AmbientCoeff, float DiffuseCoeff, float SpecularCoeff, float Near = 0.1f, float Far = 100.0f) : GameObject(Vec3(1.0f, 1.0f, 1.0f), Vec3(0.0f, 0.0f, 0.0f), Pos)
 	{
 		this->Color = LightColor;
 
@@ -63,7 +63,7 @@ public:
 		this->IsVpDirty = true;
 	}
 
-	LightObject(Vec3 Pos, Vec3 LightDir, Vec3 LightColor, float AmbientCoeff, float DiffuseCoeff, float SpecularCoeff, Mesh LightMesh, float Near = 0.1f, float Far = 150.0f) : GameObject(Vec3(1.0f, 1.0f, 1.0f), DirToEuler(LightDir.Normalized()), Pos)
+	LightObject(Vec3 Pos, Vec3 LightDir, Vec3 LightColor, float AmbientCoeff, float DiffuseCoeff, float SpecularCoeff, Mesh LightMesh, float Near = 0.1f, float Far = 150.0f) : GameObject(Vec3(1.0f, 1.0f, 1.0f), Vec3(0, 0, 0), Pos)
 	{
 		this->Color = LightColor;
 
@@ -118,11 +118,13 @@ public:
 	__inline void SetFar(const float& NewFar)
 	{
 		this->Far = NewFar;
+		this->IsVpDirty = true;
 	}
 
 	__inline void SetNear(const float& NewNear)
 	{
 		this->Near = NewNear;
+		this->IsVpDirty = true;
 	}
 
 	float Far = 100.0f;
@@ -149,7 +151,7 @@ public:
 	}
 
 
-	DirectionalLight(Vec3 Pos, Vec3 LightDir, Vec3 LightColor, float Left, float Right, float Bottom, float Top, float AmbientCoeff, float DiffuseCoeff, float SpecularCoeff, Vec3 CenterPoint = Vec3()) : LightObject(Pos, LightDir, LightColor, AmbientCoeff, DiffuseCoeff, SpecularCoeff)
+	DirectionalLight(Vec3 LightDir, float LightDistance, Vec3 LightColor, float Left, float Right, float Bottom, float Top, float AmbientCoeff, float DiffuseCoeff, float SpecularCoeff, Vec3 CenterPoint = Vec3()) : LightObject(CenterPoint, LightDir, LightColor, AmbientCoeff, DiffuseCoeff, SpecularCoeff)
 	{
 		this->Left = Left;
 		this->Right = Right;
@@ -163,7 +165,7 @@ public:
 	}
 
 
-	DirectionalLight(Vec3 Pos, Vec3 LightDir, Vec3 LightColor, float Left, float Right, float Bottom, float Top, float AmbientCoeff, float DiffuseCoeff, float SpecularCoeff, Mesh LightMesh, Vec3 CenterPoint = Vec3()) : LightObject(Pos, LightDir, LightColor, AmbientCoeff, DiffuseCoeff, SpecularCoeff, LightMesh)
+	DirectionalLight(Vec3 LightDir, float LightDistance, Vec3 LightColor, float Left, float Right, float Bottom, float Top, float AmbientCoeff, float DiffuseCoeff, float SpecularCoeff, Mesh LightMesh, Vec3 CenterPoint = Vec3()) : LightObject(CenterPoint, LightDir, LightColor, AmbientCoeff, DiffuseCoeff, SpecularCoeff, LightMesh)
 	{
 		this->IsVpDirty = true;
 		this->Left = Left;
@@ -177,7 +179,7 @@ public:
 	}
 
 
-	DirectionalLight(Vec3 Pos, Vec3 LightDir, Vec3 LightColor, float AmbientCoeff, float DiffuseCoeff, float SpecularCoeff, Mesh LightMesh, Vec3 CenterPoint = Vec3()) : LightObject(Pos, LightDir, LightColor, AmbientCoeff, DiffuseCoeff, SpecularCoeff, LightMesh)
+	DirectionalLight(Vec3 LightDir, float LightDistance, Vec3 LightColor, float AmbientCoeff, float DiffuseCoeff, float SpecularCoeff, Mesh LightMesh, Vec3 CenterPoint = Vec3()) : LightObject(CenterPoint, LightDir, LightColor, AmbientCoeff, DiffuseCoeff, SpecularCoeff, LightMesh)
 	{
 		this->IsVpDirty = true;
 		this->Left = -40.0f;
@@ -208,7 +210,7 @@ public:
 
 	__inline void CalcVpMats() override
 	{
-		Vec3 lightPos = this->CenterPoint - this->LightDirection * this->_lightDistane;
+		Vec3 lightPos = this->CenterPoint - this->LightDirection.Normalized() * this->_lightDistane;
 		Matrix LightViewMatrix = Matrix::CalcViewMatrix(lightPos, CenterPoint, Vec3(0, 1, 0));
 		Matrix LightProjectionMat = Matrix::CalcOrthoMatrix(Left, Right, Bottom, Top, Near, Far);
 
@@ -224,7 +226,7 @@ public:
 
 	Matrix GetViewMatrix()
 	{
-		Vec3 lightPos = this->CenterPoint - this->LightDirection * this->_lightDistane;
+		Vec3 lightPos = this->CenterPoint - this->LightDirection.Normalized() * this->_lightDistane;
 		return Matrix::CalcViewMatrix(lightPos, CenterPoint, Vec3(0, 1, 0));
 	}
 
@@ -243,7 +245,10 @@ public:
 	{
 		int idx = this->SelectVpMat(InterpolatedPos);
 
-		return InterpolatedPos * this->VpMatrices[idx];
+	    InterpolatedPos *= this->VpMatrices[idx];
+		InterpolatedPos.CorrectPerspective();
+
+		return InterpolatedPos;
 	}
 
 private:

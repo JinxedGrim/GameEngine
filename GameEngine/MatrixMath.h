@@ -374,15 +374,6 @@ public:
 		M._43 =  B;
 		M._44 =  0.0f;
 
-		//Projection.fMatrix[0][0] = 1.0f / (tanHalf * aspect);
-		//Projection.fMatrix[1][1] = 1.0f / tanHalf;
-
-		//Projection.fMatrix[2][2] = A;
-		//Projection.fMatrix[2][3] = B;
-
-		//Projection.fMatrix[3][2] = 1.0f;
-		//Projection.fMatrix[3][3] = 0.0f;
-
 		return M;
 	}
 
