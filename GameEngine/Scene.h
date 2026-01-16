@@ -1,6 +1,14 @@
 #pragma once
 #include "Renderable.h"
 
+// TODO:
+// Cahnge MainCamera to something that specifys that its the camera being rendered
+//
+//
+//
+
+
+
 namespace TerraPGE
 {
 	typedef void(__fastcall* BeginScene_T)(WndCreator&);
@@ -19,7 +27,7 @@ namespace TerraPGE
 
 		Scene()
 		{
-
+			this->MainCamera = nullptr;
 		}
 
 		void AddToRenderQueue(Renderable* Object)

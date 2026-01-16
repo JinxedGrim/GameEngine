@@ -423,6 +423,113 @@ namespace TerraPGE
 {
 	namespace EngineShaders
 	{
+		namespace DebugShaders
+		{
+			const auto Shader_Gradient = [](ShaderArgs* Args)
+			{
+				const Triangle* Tri = Args->FindShaderResourcePtr<Triangle*>(TPGE_SHDR_TRI);
+				const size_t LightCount = Args->FindShaderResourceValue<size_t>(TPGE_SHDR_LIGHT_COUNT);
+				const Material* Mat = Tri->Material;
+				const Vec3* CamLookDir = Args->FindShaderResourcePtr<Vec3*>(TPGE_SHDR_CAMERA_LDIR);
+				const Vec3* FragPos = Args->FindShaderResourcePtr<Vec3*>(TPGE_SHDR_FRAG_POS);
+				const Vec3* FragNormal = Args->FindShaderResourcePtr<Vec3*>(TPGE_SHDR_FRAG_NORMAL);
+				const Vec3* BaryCoords = Args->FindShaderResourcePtr<Vec3*>(TPGE_SHDR_FRAG_BARY_COORDS);
+				Color* FragColor = Args->FindShaderResourcePtr<Color*>(TPGE_SHDR_FRAG_COLOR);
+
+				LightObject* Light = nullptr;
+				if (LightCount <= 0)
+				{
+					return;
+				}
+
+				Light = *Args->FindShaderResourcePtr<LightObject**>(TPGE_SHDR_LIGHT_OBJECTS);
+
+				Vec3 LDir = Light->GetLightDirection();
+				float Li = FragNormal->Dot(LDir);
+
+				float Intensity = std::max<float>(0.0f, Li);
+
+				FragColor->R = std::clamp<float>(((255.0f * BaryCoords->x) * Intensity), 0.0f, 255.0f);
+				FragColor->G = std::clamp<float>(((255.0f * BaryCoords->y) * Intensity), 0.0f, 255.0f);
+				FragColor->B = std::clamp<float>(((255.0f * BaryCoords->z) * Intensity), 0.0f, 255.0f);
+				FragColor->A = 255.0f;			const auto Shader_Normal = [](ShaderArgs* Args)
+			{
+				const Triangle* Tri = Args->FindShaderResourcePtr<Triangle*>(TPGE_SHDR_TRI);
+				const Vec3* FragNormal = Args->FindShaderResourcePtr<Vec3*>(TPGE_SHDR_FRAG_NORMAL);
+				Color* FragColor = Args->FindShaderResourcePtr<Color*>(TPGE_SHDR_FRAG_COLOR);
+
+				Vec3 n = FragNormal->Normalized();
+
+				FragColor->R = std::clamp<float>((n.x * 0.5f + 0.5f) * 255.0f, 0.0f, 255.0f);
+				FragColor->G = std::clamp<float>((n.y * 0.5f + 0.5f) * 255.0f, 0.0f, 255.0f);
+				FragColor->B = std::clamp<float>((n.z * 0.5f + 0.5f) * 255.0f, 0.0f, 255.0f);
+				FragColor->A = 255.0f;
+			};
+			};
+
+
+			const auto Shader_WireFrame = [](ShaderArgs* Args)
+			{
+				const Vec3* BaryCoords = Args->FindShaderResourcePtr<Vec3*>(TPGE_SHDR_FRAG_BARY_COORDS);
+				Color* FragColor = Args->FindShaderResourcePtr<Color*>(TPGE_SHDR_FRAG_COLOR);
+
+				//TODO:
+				//add these to shader system
+				float WireThickness = 0.01;
+				Vec3 WireColor = Vec3(255, 255, 255);
+
+				// Basic idea: 
+				// each bary coord represents distance from an edge
+				// so if edge distance < thickness of the wire frame 
+				// we set the pixel to the wire frame color
+
+				float Dist = std::min({ BaryCoords->x, BaryCoords->y, BaryCoords->z });
+
+				if (Dist < WireThickness)
+				{
+					*FragColor = WireColor;
+				}
+				else
+				{
+					*FragColor = Vec3(0, 0, 0);
+				}
+			};
+
+
+			const auto Shader_Gradient_Centroid = [](ShaderArgs* Args)
+			{
+				const Triangle* Tri = Args->FindShaderResourcePtr<Triangle*>(TPGE_SHDR_TRI);
+				const size_t LightCount = Args->FindShaderResourceValue<size_t>(TPGE_SHDR_LIGHT_COUNT);
+				const Vec3* FragPos = Args->FindShaderResourcePtr<Vec3*>(TPGE_SHDR_FRAG_POS);
+				const Vec3* FragNormal = Args->FindShaderResourcePtr<Vec3*>(TPGE_SHDR_FRAG_NORMAL);
+				Color* FragColor = Args->FindShaderResourcePtr<Color*>(TPGE_SHDR_FRAG_COLOR);
+				Vec2* PixelCoords = Args->FindShaderResourcePtr<Vec2*>(TPGE_SHDR_PIXEL_COORDS);
+				LightObject* Light = nullptr;
+				if (LightCount <= 0)
+				{
+					return;
+				}
+
+				Light = *Args->FindShaderResourcePtr<LightObject**>(TPGE_SHDR_LIGHT_OBJECTS);
+
+				Vec3 Centroid = ((Tri->Points[0] + Tri->Points[1] + Tri->Points[2]) / 3.0f);
+				Vec3 BaryCoords = CalculateBarycentricCoordinatesScreenSpace(*PixelCoords, Vec2(Centroid.x, Centroid.y), Vec2(Tri->Points[1].x, Tri->Points[1].y), Vec2(Tri->Points[2].x, Tri->Points[2].y));
+				Vec3 BaryCoords2 = CalculateBarycentricCoordinatesScreenSpace(*PixelCoords, Vec2(Tri->Points[0].x, Tri->Points[0].y), Vec2(Tri->Points[1].x, Tri->Points[1].y), Vec2(Centroid.x, Centroid.y));
+
+				float Intensity = 1.0f;
+				Vec3 LDir = (Light->Transform.GetLocalPosition() - *FragPos).Normalized();
+				float Li = FragNormal->Dot(LDir);
+
+				Intensity = std::max<float>(0.0f, Li);
+
+				FragColor->R = std::clamp<float>(((255.0f * BaryCoords2.x) * Intensity), 0.0f, 255.0f);
+				FragColor->G = std::clamp<float>(((255.0f * BaryCoords.y) * Intensity), 0.0f, 255.0f);
+				FragColor->B = std::clamp<float>(((255.0f * BaryCoords.z) * Intensity), 0.0f, 255.0f);
+				FragColor->A = 255.0f;
+			};
+
+		}
+
 		const auto WHACK_SHADER = [](ShaderArgs* Args)
 			{
 				Triangle* Tri = Args->FindShaderResourcePtr<Triangle*>(TPGE_SHDR_TRI);
@@ -691,98 +798,6 @@ namespace TerraPGE
 				FragColor->B = 255.0f;
 				FragColor->A = 255.0f;
 			}
-		};
-
-
-		const auto Shader_Gradient = [](ShaderArgs* Args)
-		{
-			const Triangle* Tri = Args->FindShaderResourcePtr<Triangle*>(TPGE_SHDR_TRI);
-			const size_t LightCount = Args->FindShaderResourceValue<size_t>(TPGE_SHDR_LIGHT_COUNT);
-			const Material* Mat = Tri->Material;
-			const Vec3* CamLookDir = Args->FindShaderResourcePtr<Vec3*>(TPGE_SHDR_CAMERA_LDIR);
-			const Vec3* FragPos = Args->FindShaderResourcePtr<Vec3*>(TPGE_SHDR_FRAG_POS);
-			const Vec3* FragNormal = Args->FindShaderResourcePtr<Vec3*>(TPGE_SHDR_FRAG_NORMAL);
-			const Vec3* BaryCoords = Args->FindShaderResourcePtr<Vec3*>(TPGE_SHDR_FRAG_BARY_COORDS);
-			Color* FragColor = Args->FindShaderResourcePtr<Color*>(TPGE_SHDR_FRAG_COLOR);
-
-			LightObject* Light = nullptr;
-			if (LightCount <= 0)
-			{
-				return;
-			}
-
-			Light = *Args->FindShaderResourcePtr<LightObject**>(TPGE_SHDR_LIGHT_OBJECTS);
-
-			Vec3 LDir = Light->GetLightDirection();
-			float Li = FragNormal->Dot(LDir);
-
-			float Intensity = std::max<float>(0.0f, Li);
-
-			FragColor->R = std::clamp<float>(((255.0f * BaryCoords->x) * Intensity), 0.0f, 255.0f);
-			FragColor->G = std::clamp<float>(((255.0f * BaryCoords->y) * Intensity), 0.0f, 255.0f);
-			FragColor->B = std::clamp<float>(((255.0f * BaryCoords->z) * Intensity), 0.0f, 255.0f);
-			FragColor->A = 255.0f;
-		};
-
-
-		const auto Shader_WireFrame = [](ShaderArgs* Args)
-		{
-			const Vec3* BaryCoords = Args->FindShaderResourcePtr<Vec3*>(TPGE_SHDR_FRAG_BARY_COORDS);
-			Color* FragColor = Args->FindShaderResourcePtr<Color*>(TPGE_SHDR_FRAG_COLOR);
-
-			//TODO:
-			//add these to shader system
-			float WireThickness = 0.01;
-			Vec3 WireColor = Vec3(255, 255, 255);
-
-			// Basic idea: 
-			// each bary coord represents distance from an edge
-			// so if edge distance < thickness of the wire frame 
-			// we set the pixel to the wire frame color
-
-			float Dist = std::min({ BaryCoords->x, BaryCoords->y, BaryCoords->z });
-
-			if (Dist < WireThickness)
-			{
-				*FragColor = WireColor;
-			}
-			else
-			{
-				*FragColor = Vec3(0, 0, 0);
-			}
-		};
-
-
-		const auto Shader_Gradient_Centroid = [](ShaderArgs* Args)
-		{
-			const Triangle* Tri = Args->FindShaderResourcePtr<Triangle*>(TPGE_SHDR_TRI);
-			const size_t LightCount = Args->FindShaderResourceValue<size_t>(TPGE_SHDR_LIGHT_COUNT);
-			const Vec3* FragPos = Args->FindShaderResourcePtr<Vec3*>(TPGE_SHDR_FRAG_POS);
-			const Vec3* FragNormal = Args->FindShaderResourcePtr<Vec3*>(TPGE_SHDR_FRAG_NORMAL);
-			Color* FragColor = Args->FindShaderResourcePtr<Color*>(TPGE_SHDR_FRAG_COLOR);
-			Vec2* PixelCoords = Args->FindShaderResourcePtr<Vec2*>(TPGE_SHDR_PIXEL_COORDS);
-			LightObject* Light = nullptr;
-			if (LightCount <= 0)
-			{
-				return;
-			}
-
-			Light = *Args->FindShaderResourcePtr<LightObject**>(TPGE_SHDR_LIGHT_OBJECTS);
-
-			Vec3 Centroid = ((Tri->Points[0] + Tri->Points[1] + Tri->Points[2]) / 3.0f);
-			Vec3 BaryCoords = CalculateBarycentricCoordinatesScreenSpace(*PixelCoords, Vec2(Centroid.x, Centroid.y), Vec2(Tri->Points[1].x, Tri->Points[1].y), Vec2(Tri->Points[2].x, Tri->Points[2].y));
-			Vec3 BaryCoords2 = CalculateBarycentricCoordinatesScreenSpace(*PixelCoords, Vec2(Tri->Points[0].x, Tri->Points[0].y), Vec2(Tri->Points[1].x, Tri->Points[1].y), Vec2(Centroid.x, Centroid.y));
-
-			float Intensity = 1.0f;
-			Vec3 LDir = (Light->Transform.GetLocalPosition() - *FragPos).Normalized();
-			float Li = FragNormal->Dot(LDir);
-
-			Intensity = std::max<float>(0.0f, Li);
-
-			FragColor->R = std::clamp<float>(((255.0f * BaryCoords2.x) * Intensity), 0.0f, 255.0f);
-			FragColor->G = std::clamp<float>(((255.0f * BaryCoords.y) * Intensity), 0.0f, 255.0f);
-			FragColor->B = std::clamp<float>(((255.0f * BaryCoords.z) * Intensity), 0.0f, 255.0f);
-			FragColor->A = 255.0f;
 		};
 	}
 }

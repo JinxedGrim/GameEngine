@@ -185,6 +185,9 @@ public:
 	}
 
 
+	// Need to copy the mat instead of returning it somehow or block modifications to this? 
+	// But honestly if a user is grabbing the null mat they can change it if they want i guess
+	// Not sure on the correct solution TODO
 	static Material* GetNullMaterial()
 	{
 		Material* RetMat = FindMaterial("NullMat");

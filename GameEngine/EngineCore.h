@@ -50,7 +50,6 @@ namespace TerraPGE::Core
 
 	bool FpsEngineCounter = true;
 	bool DoMultiThreading = false;
-	bool DoLighting = true;
 	bool ShowNormals = false;
 	bool NormalMapping = false;
 

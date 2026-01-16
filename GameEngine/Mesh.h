@@ -242,13 +242,18 @@ class Triangle
 
 		if (inCount == 0) return 0;
 
-		auto Intersect = [&](int a, int b)
+		auto IntersectPos = [&](int a, int b)
 		{
-			float t = d[a] / (d[a] - d[b]);
-			Vec4 pos = in[a] + (in[b] - in[a]) * t;
+			return d[a] / (d[a] - d[b]);
+		};
+
+		auto InterpolatePos = [&](int a, int b, Vec4* Inside, float t)
+		{
+			Vec4 pos = Inside[a] + (Inside[b] - Inside[a]) * t;
 
 			// Interpolate w
 			pos.w = w[a] + (w[b] - w[a]) * t;
+
 			return pos;
 		};
 
@@ -262,7 +267,10 @@ class Triangle
 				out.push_back(in[i]);
 
 			if (inside[i] ^ inside[j])
-				out.push_back(Intersect(i, j));
+			{
+				float t = IntersectPos(i, j);
+				out.push_back(InterpolatePos(i, j, in, t));
+			}
 		}
 
 		if (out.size() == 3)

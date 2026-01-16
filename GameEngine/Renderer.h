@@ -18,7 +18,7 @@ namespace TerraPGE::Renderer
 	static BrushPP ClearBrush = -1;
 	static const Vec3 PlaneNormal = { 0.0f, 0.0f, 1.0f };
 
-	bool DebugClip = true;
+	bool DebugClip = false;
 	bool DoCull = true;
 
 
@@ -185,6 +185,162 @@ namespace TerraPGE::Renderer
 		}
 
 
+		std::vector<Triangle> VertexShader(Camera* Cam, Renderable* Object)
+		{
+			std::vector<Triangle> ClipSpaceTris = {};
+			ClipSpaceTris.reserve(Object->mesh->Triangles.size());
+
+			Vec3 NormPos = Vec3(0, 0, 0);
+			Vec3 NormDir = Vec3(0, 0, 0);
+			Vec3 TriNormal;
+
+			for (const Triangle& Tri : Object->mesh->Triangles)
+			{
+				// 3D Space / World Space
+				Triangle WorldSpaceTri = RenderingUtils::TransformToWorld(Tri, Object->Transform.GetWorldMatrix());
+
+				//TODO Fix this whole damn thing calc normals at mesh gen or at vertex shade time fuck the rest
+				TriNormal = Tri.FaceNormal;
+				if (Object->mesh->Normals.size() == 0)
+				{
+					NormPos = ((Tri.Points[0] + Tri.Points[1] + Tri.Points[2]) / 3.0f);
+					NormDir = (Tri.Points[1] - Tri.Points[0]).GetVec3().CrossNormalized((Tri.Points[2] - Tri.Points[0])).Normalized();
+					TriNormal = -(WorldSpaceTri.Points[1] - WorldSpaceTri.Points[0]).GetVec3().CrossNormalized((WorldSpaceTri.Points[2] - WorldSpaceTri.Points[0])).Normalized(); // this line and the if statement is used for culling
+
+					for (int i = 0; i < 3; i++)
+					{
+						WorldSpaceTri.VertexNormals[i] *= Object->Transform.Normal;
+					}
+
+					WorldSpaceTri.NormalPositions[0] = NormPos;
+					WorldSpaceTri.NormalPositions[1] = Tri.Points[0];
+					WorldSpaceTri.NormalPositions[2] = Tri.Points[1];
+					WorldSpaceTri.NormalPositions[3] = Tri.Points[2];
+					WorldSpaceTri.NormDirections[0] = NormDir;
+				}
+				else
+				{
+					TriNormal *= Object->Transform.Normal;
+					for (int i = 0; i < 3; i++)
+					{
+						WorldSpaceTri.VertexNormals[i] *= Object->Transform.Normal;
+					}
+
+					NormDir = WorldSpaceTri.FaceNormal;
+					NormPos = WorldSpaceTri.NormalPositions[0];
+				}
+
+				if (!RenderingUtils::ShouldCulltriangle(WorldSpaceTri.Points[0], TriNormal, Cam->GetWorldPosition()) || !DoCull) // backface culling
+				{
+					WorldSpaceTri.FaceNormal = TriNormal;
+					Triangle ViewSpaceTri = RenderingUtils::ProjectToViewSpace(&WorldSpaceTri, Cam);
+
+					ViewSpaceTri.ApplyMatrix(Cam->GetProjectionMatrix());
+
+					for (int p = 0; p < 3; p++)
+					{
+						ViewSpaceTri.ViewSpaceVerts[p] = ViewSpaceTri.Points[p];
+					}
+
+					ClipSpaceTris.push_back(ViewSpaceTri);
+				}
+			}
+			return ClipSpaceTris;
+		}
+
+
+		std::vector<Triangle> Clipping(const Triangle* Tri)
+		{
+			Triangle Clipped[2];
+
+			std::vector<Triangle> ListTris;
+			ListTris.push_back(*Tri);
+			int NewTris = 1;
+
+			for (int p = 0; p < 4; p++)
+			{
+				int NewTrisToAdd = 0;
+				while (NewTris > 0)
+				{
+					Triangle Test = ListTris.front();
+					ListTris.erase(ListTris.begin());
+					NewTris--;
+
+					switch (p)
+					{
+						case 0:
+						{
+							NewTrisToAdd = Test.ClipAgainstPlane({ 0.0f, 0.0f, 0.0f }, { 0.0f, 1.0f, 0.0f }, Clipped[0], Clipped[1], Renderer::DebugClip);
+							break;
+						}
+						case 1:
+						{
+							NewTrisToAdd = Test.ClipAgainstPlane({ 0.0f, (float)Core::sy - 1, 0.0f }, { 0.0f, -1.0f, 0.0f }, Clipped[0], Clipped[1], Renderer::DebugClip);
+							break;
+						}
+						case 2:
+						{
+							NewTrisToAdd = Test.ClipAgainstPlane({ 0.0f, 0.0f, 0.0f }, { 1.0f, 0.0f, 0.0f }, Clipped[0], Clipped[1], Renderer::DebugClip);
+							break;
+						}
+						case 3:
+						{
+							NewTrisToAdd = Test.ClipAgainstPlane({ (float)Core::sx - 1, 0.0f, 0.0f }, { -1.0f, 0.0f, 0.0f }, Clipped[0], Clipped[1], Renderer::DebugClip);
+							break;
+						}
+					}
+
+					for (int w = 0; w < NewTrisToAdd; w++)
+					{
+						ListTris.push_back(Clipped[w]);
+					}
+				}
+				NewTris = (int)ListTris.size();
+			}
+
+			return ListTris;
+		}
+
+
+		std::vector<Triangle> ClippingClipSpace(const Triangle* Tri)
+		{
+			std::vector<Triangle> Tris;
+			Tris.push_back(*Tri);
+
+			Vec4 planes[6] = {
+				{  0,  0,  1,  0 }, // z >= 0
+				{  1,  0,  0,  1 }, // x >= -w
+				{ -1,  0,  0,  1 }, // x <=  w
+				{  0,  1,  0,  1 }, // y >= -w
+				{  0, -1,  0,  1 }, // y <=  w
+				{  0,  0, -1,  1 }  // z <=  w
+			};
+
+			for (int p = 0; p < 6; ++p)
+			{
+				std::vector<Triangle> Next;
+
+				for (const Triangle& T : Tris)
+				{
+					Triangle O1, O2;
+					int count = T.ClipAgainstPlane(planes[p], O1, O2, DebugClip);
+
+					if (count >= 1)
+						Next.push_back(O1);
+					if (count == 2)
+						Next.push_back(O2);
+				}
+
+				Tris.swap(Next);
+
+				if (Tris.empty())
+					break;
+			}
+
+			return Tris;
+		}
+
+
 		void BuildRenderQueue(const Renderable** Renderables, int Sz)
 		{
 			// This is where i can do filtering and checking for transparency and stuff TODO
@@ -216,199 +372,15 @@ namespace TerraPGE::Renderer
 	}
 
 
-	std::vector<Triangle> VertexShader(Camera* Cam, Renderable* Object)
-	{
-		std::vector<Triangle> ClipSpaceTris = {};
-		ClipSpaceTris.reserve(Object->mesh->Triangles.size());
-
-		Triangle Clipped[2];
-		Vec3 NormPos = Vec3(0, 0, 0);
-		Vec3 NormDir = Vec3(0, 0, 0);
-		Vec3 TriNormal;
-
-		for (const Triangle& Tri : Object->mesh->Triangles)
-		{
-			// 3D Space / World Space
-			Triangle WorldSpaceTri = RenderingUtils::TransformToWorld(Tri, Object->Transform.GetWorldMatrix());
-
-			//TODO Fix this whole damn thing calc normals at mesh gen or at vertex shade time fuck the rest
-			TriNormal = Tri.FaceNormal;
-			if (Object->mesh->Normals.size() == 0)
-			{
-				NormPos = ((Tri.Points[0] + Tri.Points[1] + Tri.Points[2]) / 3.0f);
-				NormDir = (Tri.Points[1] - Tri.Points[0]).GetVec3().CrossNormalized((Tri.Points[2] - Tri.Points[0])).Normalized();
-				TriNormal = -(WorldSpaceTri.Points[1] - WorldSpaceTri.Points[0]).GetVec3().CrossNormalized((WorldSpaceTri.Points[2] - WorldSpaceTri.Points[0])).Normalized(); // this line and the if statement is used for culling
-
-				for (int i = 0; i < 3; i++)
-				{
-					WorldSpaceTri.VertexNormals[i] *= Object->Transform.Normal;
-				}
-
-				WorldSpaceTri.NormalPositions[0] = NormPos;
-				WorldSpaceTri.NormalPositions[1] = Tri.Points[0];
-				WorldSpaceTri.NormalPositions[2] = Tri.Points[1];
-				WorldSpaceTri.NormalPositions[3] = Tri.Points[2];
-				WorldSpaceTri.NormDirections[0] = NormDir;
-			}
-			else
-			{
-				TriNormal *= Object->Transform.Normal;
-				for (int i = 0; i < 3; i++)
-				{
-					WorldSpaceTri.VertexNormals[i] *= Object->Transform.Normal;
-				}
-
-				NormDir = WorldSpaceTri.FaceNormal;
-				NormPos = WorldSpaceTri.NormalPositions[0];
-			}
-
-			if (!RenderingUtils::ShouldCulltriangle(WorldSpaceTri.Points[0], TriNormal, Cam->GetWorldPosition()) || !DoCull) // backface culling
-			{
-				WorldSpaceTri.FaceNormal = TriNormal;
-				Triangle ViewSpaceTri = RenderingUtils::ProjectToViewSpace(&WorldSpaceTri, Cam);
-
-				ViewSpaceTri.ApplyMatrix(Cam->GetProjectionMatrix());
-
-				for (int p = 0; p < 3; p++)
-				{
-					ViewSpaceTri.ClipSpaceVerts[p] = ViewSpaceTri.Points[p];
-				}
-
-				ClipSpaceTris.push_back(ViewSpaceTri);
-
-
-//				int Count = ViewSpaceTri.ClipAgainstPlane(Cam->GetNearPLane(), PlaneNormal, Clipped[0], Clipped[1], Renderer::DebugClip);
-
-//				if (Count == 0)
-//					continue;
-
-//				for (int i = 0; i < Count; i++)
-//				{
-					// Viewed Space -> clip space
-//					Clipped[i].ApplyMatrix(Cam->GetProjectionMatrix());
-
-//					for (int p = 0; p < 3; p++)
-//					{
-//						Clipped[i].ClipSpaceVerts[p] = Clipped[i].Points[p];
-//					}
-
-					// Add Triangle to render list
-//					ClipSpaceTris.push_back(Clipped[i]);
-			}
-		}
-		return ClipSpaceTris;
-	}
-
-
-	std::vector<Triangle> Clipping(const Triangle* Tri)
-		{
-			Triangle Clipped[2];
-
-			std::vector<Triangle> ListTris;
-			ListTris.push_back(*Tri);
-			int NewTris = 1;
-
-			for (int p = 0; p < 4; p++)
-			{
-				int NewTrisToAdd = 0;
-				while (NewTris > 0)
-				{
-					Triangle Test = ListTris.front();
-					ListTris.erase(ListTris.begin());
-					NewTris--;
-
-					switch (p)
-					{
-					case 0:
-					{
-						NewTrisToAdd = Test.ClipAgainstPlane({ 0.0f, 0.0f, 0.0f }, { 0.0f, 1.0f, 0.0f }, Clipped[0], Clipped[1], Renderer::DebugClip);
-						break;
-					}
-					case 1:
-					{
-						NewTrisToAdd = Test.ClipAgainstPlane({ 0.0f, (float)Core::sy - 1, 0.0f }, { 0.0f, -1.0f, 0.0f }, Clipped[0], Clipped[1], Renderer::DebugClip);
-						break;
-					}
-					case 2:
-					{
-						NewTrisToAdd = Test.ClipAgainstPlane({ 0.0f, 0.0f, 0.0f }, { 1.0f, 0.0f, 0.0f }, Clipped[0], Clipped[1], Renderer::DebugClip);
-						break;
-					}
-					case 3:
-					{
-						NewTrisToAdd = Test.ClipAgainstPlane({ (float)Core::sx - 1, 0.0f, 0.0f }, { -1.0f, 0.0f, 0.0f }, Clipped[0], Clipped[1], Renderer::DebugClip);
-						break;
-					}
-					}
-
-					for (int w = 0; w < NewTrisToAdd; w++)
-					{
-						ListTris.push_back(Clipped[w]);
-					}
-				}
-				NewTris = (int)ListTris.size();
-			}
-
-			return ListTris;
-		}
-
-
-	std::vector<Triangle> ClippingClipSpace(const Triangle* Tri)
-	{
-	   std::vector<Triangle> Tris;
-		Tris.push_back(*Tri);
-
-		Vec4 planes[6] = {
-			{  0,  0,  1,  0 }, // z >= 0
-			{  1,  0,  0,  1 }, // x >= -w
-			{ -1,  0,  0,  1 }, // x <=  w
-			{  0,  1,  0,  1 }, // y >= -w
-			{  0, -1,  0,  1 }, // y <=  w
-			{  0,  0, -1,  1 }  // z <=  w
-		};
-
-		for (int p = 0; p < 6; ++p)
-		{
-			std::vector<Triangle> Next;
-
-			for (const Triangle& T : Tris)
-			{
-				Triangle O1, O2;
-				int count = T.ClipAgainstPlane(planes[p], O1, O2, DebugClip);
-
-				if (count >= 1)
-					Next.push_back(O1);
-				if (count == 2)
-					Next.push_back(O2);
-			}
-
-			Tris.swap(Next);
-
-			if (Tris.empty())
-				break;
-		}
-
-		return Tris;
-	}
-
-
 	void RenderMesh(Camera* Cam, Renderable* Object, LightObject** SceneLights, size_t LightCount)
 	{
-		std::vector<Triangle> ClipSpaceTris = VertexShader(Cam, Object);
+		std::vector<Triangle> ClipSpaceTris = RenderingUtils::VertexShader(Cam, Object);
 
 		for (const Triangle& ClipSpaceTri : ClipSpaceTris)
 		{
-			std::vector<Triangle> Clipped = ClippingClipSpace(&ClipSpaceTri);
+			std::vector<Triangle> Clipped = RenderingUtils::ClippingClipSpace(&ClipSpaceTri);
 
-			// sort faces 
-	//		std::sort(TrisToRender.begin(), TrisToRender.end(), [](const Triangle& t1, const Triangle& t2)
-	//		{
-	//			float z1 = (t1.Points[0].z + t1.Points[1].z + t1.Points[2].z) / 3.0f;
-	//			float z2 = (t2.Points[0].z + t2.Points[1].z + t2.Points[2].z) / 3.0f;
-	//			return z1 > z2;
-	//		});
-
-
+			// initialize shader
 			ShaderArgs* Args = DEBUG_NEW ShaderArgs();
 			Args->AddShaderDataByValue(TPGE_SHDR_TYPE, Object->SHADER_TYPE, 0);
 			Args->AddShaderDataByValue<Vec3>(TPGE_SHDR_CAMERA_POS, Cam->Transform.GetWorldPosition(), 0);
@@ -422,6 +394,7 @@ namespace TerraPGE::Renderer
 			Args->AddShaderDataByValue<bool>(TPGE_SHDR_IS_IN_SHADOW, false);
 			Args->AddShaderDataPtr(TPGE_SHDR_TRI, nullptr, 0);
 
+			// Draw each tri
 			for (Triangle& ToDraw : Clipped)
 			{
 				// Clip Space -> NDC Space
@@ -437,7 +410,7 @@ namespace TerraPGE::Renderer
 
 
 				// Calc lighting (only if lighting is applied at a tri level)
-				if ((Core::DoLighting) && Object->SHADER_TYPE == ShaderTypes::SHADER_TRIANGLE)
+				if ((Renderer::DoLighting) && Object->SHADER_TYPE == ShaderTypes::SHADER_TRIANGLE)
 				{
 					Object->Shader(Args);
 				}
@@ -447,48 +420,6 @@ namespace TerraPGE::Renderer
 					Renderer::BaryCentricRasterizer(Core::DepthBuffer, Core::sx, Core::sy, EngineGdi, Object->Shader, Args);
 				else
 					Renderer::BaryCentricRasterizer(Core::DepthBuffer, Core::sx, Core::sy, EngineGdi, Object->Shader, Args);
-
-
-
-				// TODO salvage this code for a debug routine?
-				if (false)
-				{
-					if (Object->mesh->MeshName != "Ray")
-					{
-						EngineGdi->DrawFilledTriangle(PixelRound(ToDraw.Points[0].x), PixelRound(ToDraw.Points[0].y), PixelRound(ToDraw.Points[1].x), PixelRound(ToDraw.Points[1].y), PixelRound(ToDraw.Points[2].x), PixelRound(ToDraw.Points[2].y), BrushPP(RGB(ToDraw.Col.x, ToDraw.Col.y, ToDraw.Col.z)), PenPP(PS_SOLID, 1, RGB(1, 1, 1)));
-						//if (ShowNormals)
-						//{
-						//	Ray NormalRay = Ray(ToDraw.NormalPositions[0], ToDraw.NormDirections[0]);
-						//	NormalRay.GenerateMesh();
-
-						//	RenderMesh(Gdi, Cam, NormalRay.mesh, Scalar, RotationRads, Pos, Vec3(0, 0, 0), Vec3(1, 1, 1), 0.f, 0.f, 0.f, EngineShaders::Shader_Material);
-
-						//	NormalRay.mesh.UseSingleMat = true;
-
-						//	NormalRay = Ray(ToDraw.NormalPositions[1], ToDraw.NormDirections[0]);
-						//	NormalRay.GenerateMesh();
-						//	NormalRay.mesh.Mat.AmbientColor = Vec3(0, 0, 255);
-
-						//	RenderMesh(Gdi, Cam, NormalRay.mesh, Scalar, RotationRads, Pos, Vec3(0, 0, 0), Vec3(1, 1, 1), 0.f, 0.f, 0.f, EngineShaders::Shader_Material);
-
-						//	NormalRay = Ray(ToDraw.NormalPositions[2], ToDraw.NormDirections[0]);
-						//	NormalRay.GenerateMesh();
-						//	NormalRay.mesh.Mat.AmbientColor = Vec3(0, 0, 255);
-
-						//	RenderMesh(Gdi, Cam, NormalRay.mesh, Scalar, RotationRads, Pos, Vec3(0, 0, 0), Vec3(1, 1, 1), 0.f, 0.f, 0.f, EngineShaders::Shader_Material);
-
-						//	NormalRay = Ray(ToDraw.NormalPositions[3], ToDraw.NormDirections[0]);
-						//	NormalRay.GenerateMesh();
-						//	NormalRay.mesh.Mat.AmbientColor = Vec3(0, 0, 255);
-
-						//	RenderMesh(Gdi, Cam, NormalRay.mesh, Scalar, RotationRads, Pos, Vec3(0, 0, 0), Vec3(1, 1, 1), 0.f, 0.f, 0.f, EngineShaders::Shader_Material);
-						//}
-					}
-					else
-					{
-						EngineGdi->DrawFilledTriangle(PixelRound(ToDraw.Points[0].x), PixelRound(ToDraw.Points[0].y), PixelRound(ToDraw.Points[1].x), PixelRound(ToDraw.Points[1].y), PixelRound(ToDraw.Points[2].x), PixelRound(ToDraw.Points[2].y), BrushPP(RGB(ToDraw.Col.x, ToDraw.Col.y, ToDraw.Col.z)), PenPP(PS_SOLID, 1, RGB(ToDraw.Col.x, ToDraw.Col.y, ToDraw.Col.z)));
-					}
-				}
 			}
 
 			Args->Delete();
@@ -497,9 +428,8 @@ namespace TerraPGE::Renderer
 
 
 	// Render function for rendering entire meshes
-	// Rendering Pipeline: Recieve call with mesh info including positions & lights sources -> Calc and apply matrices + normals -> backface culling	
+	// Rendering Pipeline: Recieve call with mesh info including positions & lights sources -> Calc and apply world matrix + normals -> backface culling	
 	// -> Clipping + Frustum culling -> Call Draw Triangle from graphics API with shader supplied -> Shader called from triangle routine with pixel info + normals -> SetPixel
-	//template<typename T>
 	void RenderMeshes(Camera* Cam, Renderable** SceneObjects, LightObject** SceneLights, size_t ObjectCount, size_t LightCount /*T&& Shader, const ShaderTypes SHADER_TYPE = ShaderTypes::SHADER_FRAGMENT*/)
 	{
 		// TODO MultiThread??
@@ -514,24 +444,10 @@ namespace TerraPGE::Renderer
 	}
 
 
-	void RenderEnvironment(EnvironmentRenderable** Objects, size_t Count)
-	{
-		//Vertex Shading
-
-		//for (int i = 0; i < Count; i++)
-		//{
-		//	Objects[i]->;
-		//}
-	}
-
-
 	void RenderShadowMaps(Renderable** SceneObjects, LightObject** SceneLights, size_t ObjectCount, size_t LightCount, float* Buffer)
 	{
 		bool HasLight = LightCount >= 1;
 
-		// TODO MultiThread??
-		// TODO Allow vertex shaders (:
-		// Project and translate object 
 		for (int objIdx = 0; objIdx < ObjectCount; objIdx++)
 		{
 			Renderable* Object = SceneObjects[objIdx];
@@ -575,6 +491,17 @@ namespace TerraPGE::Renderer
 		}
 	}
 
+	
+	void RenderEnvironment(EnvironmentRenderable** Objects, size_t Count)
+	{
+		//Vertex Shading
+
+		//for (int i = 0; i < Count; i++)
+		//{
+		//	Objects[i]->;
+		//}
+	}
+
 
 	void RenderScene(Camera* Cam, Renderable** SceneObjects, LightObject** SceneLights, size_t ObjectCount, size_t LightCount)
 	{
@@ -586,6 +513,43 @@ namespace TerraPGE::Renderer
 
 		RenderingCore::SwapFrameBuffer(Renderer::UseHDR, Renderer::DoGammaCorrection);
 	}
+
+
+
+
+	// TODO salvage this code for a debug routine?
+	//if (false)
+	//{
+		//if (Object->mesh->MeshName != "Ray")
+		//{
+			//EngineGdi->DrawFilledTriangle(PixelRound(ToDraw.Points[0].x), PixelRound(ToDraw.Points[0].y), PixelRound(ToDraw.Points[1].x), PixelRound(ToDraw.Points[1].y), PixelRound(ToDraw.Points[2].x), PixelRound(ToDraw.Points[2].y), BrushPP(RGB(ToDraw.Col.x, ToDraw.Col.y, ToDraw.Col.z)), PenPP(PS_SOLID, 1, RGB(1, 1, 1)));
+			//if (ShowNormals)
+			//{
+			//	Ray NormalRay = Ray(ToDraw.NormalPositions[0], ToDraw.NormDirections[0]);
+			//	NormalRay.GenerateMesh();
+			//	RenderMesh(Gdi, Cam, NormalRay.mesh, Scalar, RotationRads, Pos, Vec3(0, 0, 0), Vec3(1, 1, 1), 0.f, 0.f, 0.f, EngineShaders::Shader_Material);
+			//	NormalRay.mesh.UseSingleMat = true;
+			//	NormalRay = Ray(ToDraw.NormalPositions[1], ToDraw.NormDirections[0]);
+			//	NormalRay.GenerateMesh();
+			//	NormalRay.mesh.Mat.AmbientColor = Vec3(0, 0, 255);
+			//	RenderMesh(Gdi, Cam, NormalRay.mesh, Scalar, RotationRads, Pos, Vec3(0, 0, 0), Vec3(1, 1, 1), 0.f, 0.f, 0.f, EngineShaders::Shader_Material);
+			//	NormalRay = Ray(ToDraw.NormalPositions[2], ToDraw.NormDirections[0]);
+			//	NormalRay.GenerateMesh();
+			//	NormalRay.mesh.Mat.AmbientColor = Vec3(0, 0, 255);
+			//	RenderMesh(Gdi, Cam, NormalRay.mesh, Scalar, RotationRads, Pos, Vec3(0, 0, 0), Vec3(1, 1, 1), 0.f, 0.f, 0.f, EngineShaders::Shader_Material);
+			//	NormalRay = Ray(ToDraw.NormalPositions[3], ToDraw.NormDirections[0]);
+			//	NormalRay.GenerateMesh();
+			//	NormalRay.mesh.Mat.AmbientColor = Vec3(0, 0, 255);
+			//	RenderMesh(Gdi, Cam, NormalRay.mesh, Scalar, RotationRads, Pos, Vec3(0, 0, 0), Vec3(1, 1, 1), 0.f, 0.f, 0.f, EngineShaders::Shader_Material);
+			//}
+		//}
+		//else
+		//{
+			//EngineGdi->DrawFilledTriangle(PixelRound(ToDraw.Points[0].x), PixelRound(ToDraw.Points[0].y), PixelRound(ToDraw.Points[1].x), PixelRound(ToDraw.Points[1].y), PixelRound(ToDraw.Points[2].x), PixelRound(ToDraw.Points[2].y), BrushPP(RGB(ToDraw.Col.x, ToDraw.Col.y, ToDraw.Col.z)), PenPP(PS_SOLID, 1, RGB(ToDraw.Col.x, ToDraw.Col.y, ToDraw.Col.z)));
+		//}
+	//}
+
+
 
 
 	namespace Multithreaded

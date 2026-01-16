@@ -13,6 +13,7 @@
 // T. Fix Lighting (fix interpolation)
 // 1. Fix the shadows
 // 2. Add skyboxes 
+// X. Fix Specular highlights
 // X. Redesign multithreading
 // X. implement a prefab system
 // X. Fix physics ray cast for ground detection (is mesh local space needs to be world)
@@ -28,6 +29,28 @@
 // X. FXAA, TSAA, Etc
 // X. Proper UI system
 // X. Probably migrate to unicode
+// X. Add cvars
+// X. LOD support
+// X. Add cpu metrics
+// X. Texture streaming
+// X. Reliable Seed based generation
+// X. Normal debug
+// X. motion blur
+// X. depth pre-pass
+// X. temporal accumulation buffer
+// X. Mip-Mapping
+// X. Color Grading / LUTS
+// X. Screen Space edge detection -- (For fxaa and can  be used to debug fxaa)
+// X. Depth of field
+// X. Exposure adaptation
+// X. Depth based fog / scattering
+// X. Particle system
+// X. Debug rays
+// X. 
+
+
+
+
 
 namespace TerraPGE
 {
