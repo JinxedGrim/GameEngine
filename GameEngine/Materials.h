@@ -10,8 +10,8 @@
 #define NULL_MATERIAL_COLOR_VEC3 Vec3(_NULL_MATERIAL_VALUES)
 
 #define SoftUnlitMatAmbient Vec3(0.15f * 255.0f, 0.15f * 255.0f, 0.15f * 255.0f)
-#define SoftUnlitMatDiffuse Vec3(0.6f * 255.0f, 0.6f * 255.0f, 0.6f * 255.0f)
-#define SoftUnlitMatSpecular Vec3(0.04f * 255.0f, 0.04f * 255.0f, 0.04f * 255.0f)
+#define SoftUnlitMatDiffuse Vec3(0.45f * 255.0f, 0.45f * 255.0f, 0.45f * 255.0f)
+#define SoftUnlitMatSpecular Vec3(0.1f * 255.0f, 0.1f * 255.0f, 0.1f * 255.0f)
 
 class Material
 {

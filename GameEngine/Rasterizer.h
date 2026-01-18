@@ -11,15 +11,15 @@
 
 namespace TerraPGE::Renderer
 {
-	float ShadowMapBias = FLOAT_LOWEST;
+	float ShadowMapBias = FLOAT_LOWEST_BIAS;
 	bool DebugDepthBuffer = false;
-	bool DebugShadows = false;
+	bool DebugShadows = true;
 	bool DebugShadowMap = false;
 	bool DebugShadowValue = false;
 	bool SkipDepthTesting = false;
 	float TestDepth = -1.0f;
 	float TestDepthMapped = -1.0f;
-	bool DoShadows = false;
+	bool DoShadows = true;
 	bool WireFrame = false;
 	bool ShowTriLines = false; // TODO make a shader for this
 	float TestHdrExposure = 1.0f;
@@ -43,7 +43,7 @@ namespace TerraPGE::Renderer
 		float Beta;
 		float Gamma;
 
-		void AddBary(float A, float B, float G)
+		void SetBary(const float A, const float B, const float G)
 		{
 			this->Alpha = A;
 			this->Beta = B;
@@ -51,26 +51,40 @@ namespace TerraPGE::Renderer
 		}
 
 
-		float GetInterpolatedValue(float Val0, float Val1, float Val2)
+		float NaiveInterpolate(const float& a, const float& b, const float& c)
 		{
-			return Val0 * Alpha + Val1 * Beta + Val2 * Gamma;
+			return a * this->Alpha + b * this->Beta + this->Gamma * c;
 		}
 
 
-		float PerspectiveCorrectInterpolate(float Val0, float Val1, float Val2, float w0, float w1, float w2)
+		const float PerspectiveCorrectInterpolate(float Val0, float Val1, float Val2, float w0, float w1, float w2)
 		{
 			// Undivide && interpolate
+
+			if (w0 == 0)
+				w0 = FLOAT_LOWEST;
+			if (w1 == 0)
+				w1 = FLOAT_LOWEST;
+			if (w2 == 0)
+				w2 = FLOAT_LOWEST;
+
 			float InvW0 = 1 / w0;
 			float InvW1 = 1 / w1;
 			float InvW2 = 1 / w2;
 
-			float vOverW =
-				Val0 * InvW0 * this->Alpha +
-				Val1 * InvW1 * this->Beta +
-				Val2 * InvW2 * this->Gamma;
+			float InterpolatedW = this->NaiveInterpolate(InvW0, InvW1, InvW2);
 
-			// re-apply perspective
-			return vOverW / this->GetInterpolatedValue(InvW0, InvW1, InvW2);
+			if (InterpolatedW <= 0.0f)
+				InterpolatedW = FLOAT_LOWEST;
+
+			// 
+			float vInterpolated =
+				(Val0 * InvW0) * this->Alpha +
+				(Val1 * InvW1) * this->Beta +
+				(Val2 * InvW2) * this->Gamma;
+
+			// 
+			return vInterpolated / InterpolatedW;
 		}
 	};
 
@@ -93,9 +107,17 @@ namespace TerraPGE::Renderer
 
 			Vec3 Out;
 
-			Out.x = (InterpedVal.x - minPos.x) / (maxPos.x - minPos.x);
-			Out.y = (InterpedVal.y - minPos.y) / (maxPos.y - minPos.y);
-			Out.z = (InterpedVal.z - minPos.z) / (maxPos.z - minPos.z);
+			float Denom0 = (maxPos.x - minPos.x);
+			float Denom1 = (maxPos.y - minPos.y);
+			float Denom2 = (maxPos.z - minPos.z);
+
+			Denom0 = Denom0 + (FLOAT_LOWEST * (Denom0 == 0.0f));
+			Denom1 = Denom0 + (FLOAT_LOWEST * (Denom0 == 0.0f));
+			Denom2 = Denom0 + (FLOAT_LOWEST * (Denom0 == 0.0f));
+
+			Out.x = (InterpedVal.x - minPos.x) / Denom0;
+			Out.y = (InterpedVal.y - minPos.y) / Denom1;
+			Out.z = (InterpedVal.z - minPos.z) / Denom2;
 
 			Out.x = std::clamp(Out.x, 0.0f, 1.0f);
 			Out.y = std::clamp(Out.y, 0.0f, 1.0f);
@@ -172,11 +194,11 @@ namespace TerraPGE::Renderer
 		{
 			for (int x = minX; x <= maxX; x++)
 			{
-				int idx = y * Core::sx + x;
+				int idx = ContIdx(x, y, Core::sx);
 				MidPixel = (x == ScreenWidth / 2 && y == ScreenHeight / 2);
 				// Compute barycentric coordinates
-				float alpha = (v1y_Sub_v2y * (x - v2.x) + (v2x_Sub_v1x) * (y - v2.y)) / triArea;
-				float beta = (v2y_Sub_v0y * (x - v2.x) + (v0x_Sub_v2x) * (y - v2.y)) / triArea;
+				float alpha = (v1y_Sub_v2y * ((x + 0.5f) - v2.x) + (v2x_Sub_v1x) * ((y + 0.5f) - v2.y)) / triArea;
+				float beta = (v2y_Sub_v0y * ((x + 0.5f) - v2.x) + (v0x_Sub_v2x) * ((y + 0.5f) - v2.y)) / triArea;
 				float gamma = 1.0f - alpha - beta;
 
 //				if (triArea < 0.0f)
@@ -189,8 +211,13 @@ namespace TerraPGE::Renderer
 
 				if (alpha < 0 || beta < 0 || gamma < 0) continue;
 
+				if (false)
+				{
+					TerraPGE::Core::SetPixelFrameBuffer(x, y, alpha, beta, gamma);
+					continue;
+				}
 
-				Interp.AddBary(alpha, beta, gamma);
+				Interp.SetBary(alpha, beta, gamma);
 				float Depth = Interp.PerspectiveCorrectInterpolate(v0.z, v1.z, v2.z, v0.w, v1.w, v2.w);
 
 				if (Depth < DepthBuffer[idx] || SkipDepthTesting)
@@ -218,6 +245,13 @@ namespace TerraPGE::Renderer
 					InterpolatedWorldPos.y = Interp.PerspectiveCorrectInterpolate(world0.y, world1.y, world2.y, v0.w, v1.w, v2.w);
 					InterpolatedWorldPos.z = Interp.PerspectiveCorrectInterpolate(world0.z, world1.z, world2.z, v0.w, v1.w, v2.w);
 
+					if (false)
+					{
+						Vec3 Color = RasterUtils::MapInterpedVec3ToColor(world0, world1, world2, InterpolatedWorldPos);
+						TerraPGE::Core::SetPixelFrameBuffer(x, y, Color.x, Color.y, Color.z);
+						continue;
+					}
+
 					if (Renderer::DoShadows && HasLight)
 					{
 						Matrix LightVp = Lights[0]->VpMatrices[0];
@@ -227,77 +261,65 @@ namespace TerraPGE::Renderer
 
 						// 3. Divide by W, map to shadow map
 						Vec3 ShadowUV;
+
 						ShadowUV.x = LightClip.x / LightClip.w;
 						ShadowUV.y = LightClip.y / LightClip.w;
 						ShadowUV.z = LightClip.z / LightClip.w;
+
+						if (false)
+						{
+							TerraPGE::Core::SetPixelFrameBuffer(x, y, ShadowUV.x, ShadowUV.y, ShadowUV.z);
+							continue;
+						}
 
 						ShadowUV *= Vec3((float)((Core::ShadowMapWidth - 1) * 0.5f), (float)((Core::ShadowMapHeight - 1) * 0.5f), 1.0f);
 						ShadowUV += Vec3((float)((Core::ShadowMapWidth - 1) * 0.5f), (float)((Core::ShadowMapHeight - 1) * 0.5f), 0.0f);
 
 						// 5. Sample shadow map
-						int MapIdx = ContIdx(PixelRoundMinMax(ShadowUV.x, 0, Core::ShadowMapWidth - 1),
-							PixelRoundMinMax(ShadowUV.y, 0, Core::ShadowMapHeight - 1),
-							Core::ShadowMapWidth);
+						int MapIdx = ContIdx((int)ShadowUV.x, (int)ShadowUV.y, Core::ShadowMapWidth);
 
-						float ShadowMapDepth = Core::ShadowMap[MapIdx] + ShadowMapBias;
+						ShadowMapDepth = Core::ShadowMap[MapIdx] + ShadowMapBias;
 						ShadowDepth = ShadowUV.z;
 
-						if (ShadowDepth > ShadowMapDepth)
-						{
-							BaseArgs->EditShaderDataValue(TPGE_SHDR_IS_IN_SHADOW, true);
-						}
-						else
-						{
-							BaseArgs->EditShaderDataValue(TPGE_SHDR_IS_IN_SHADOW, false);
-						}
-					}
-
-					if (true)
-					{
-
-						Vec3 Color = RasterUtils::MapInterpedVec3ToColor(world0, world1, world2, InterpolatedWorldPos);
-						TerraPGE::Core::SetPixelFrameBuffer(x, y, Color.x, Color.y, Color.z);
-						continue;
-					}
-					
-					if (DebugShadowMap || DebugShadows || DebugShadowValue)
-					{
-						// I plan to add a way to visualize the shadow map here
-						float Val = 0.0f;
-						if (DebugShadowMap)
-						{
-							Val = ShadowMapDepth;
-						}
-						else if (DebugShadows)
-						{
-							if (ShadowDepth > ShadowMapDepth)
-							{
-								Val = 0.0f;
-							}
-							else
-							{
-								Val = ShadowDepth;
-							}
-						}
-						else
-						{
-							if (DebugShadowValue)
-								Val = ShadowDepth;
-						}
-
-						if (MidPixel)
+						if (MidPixel && (DebugShadows || DebugShadowValue || DebugShadows))
 						{
 							TestDepth = ShadowDepth;
 							TestDepthMapped = ShadowMapDepth;
 						}
 
-						float ColorVal = (255.0f * Val);
+						if (DebugShadowValue)
+						{
+							TerraPGE::Core::SetPixelFrameBuffer(x, y, ShadowDepth, ShadowDepth, ShadowDepth);
+							continue;
+						}
+						else if (DebugShadowMap)
+						{
+							ShadowMapDepth = std::clamp(ShadowMapDepth, 0.0f, 1.0f);
+							float ColorVal = (ShadowMapDepth);
+							TerraPGE::Core::SetPixelFrameBuffer(x, y, ColorVal, ColorVal, ColorVal);
 
-						ColorVal = std::clamp(ColorVal / 255.0f, 0.0f, 1.0f);
-						
-						ColorVal = std::clamp(ColorVal / 255.0f, 0.0f, 1.0f);
-						TerraPGE::Core::SetPixelFrameBuffer(x, y, ColorVal, ColorVal, ColorVal);
-						continue;
+							if (MidPixel)
+							{
+								TestDepth = ShadowDepth;
+								TestDepthMapped = ShadowMapDepth;
+							}
+							continue;
+						}
+
+						if (ShadowDepth > ShadowMapDepth)
+						{
+							BaseArgs->EditShaderDataValue(TPGE_SHDR_IS_IN_SHADOW, true);
+
+							if (DebugShadows)
+							{
+								TerraPGE::Core::SetPixelFrameBuffer(x, y, 255.0f, 0.0f, 0.0f);
+								continue;
+							}
+						}
+						else
+						{
+							BaseArgs->EditShaderDataValue(TPGE_SHDR_IS_IN_SHADOW, false);
+						}
 					}
 					
 					if (WireFrame)
@@ -362,9 +384,13 @@ namespace TerraPGE::Renderer
 	}
 
 
-	// input tri should be right after perspective division
+	// input tri is clip space
 	void __fastcall BaryCentricRasterizerDepth(Triangle* ClipSpaceTri, float* Buffer, const SIZE_T BufferWidth, const SIZE_T BufferHeight)
 	{
+		float z0 = ClipSpaceTri->Points[0].z;
+		float z1 = ClipSpaceTri->Points[1].z;
+		float z2 = ClipSpaceTri->Points[2].z;
+
 		ClipSpaceTri->ApplyPerspectiveDivide();
 		ClipSpaceTri->Scale(Vec3((float)((BufferWidth - 1) * 0.5f), (float)((BufferHeight - 1) * 0.5f), 1.0f));
 		ClipSpaceTri->Translate(Vec3((float)((BufferWidth - 1) * 0.5f), (float)((BufferHeight - 1) * 0.5f), 0.0f));
@@ -396,17 +422,16 @@ namespace TerraPGE::Renderer
 			for (int x = minX; x <= maxX; x++)
 			{
 				// Compute barycentric coordinates
-				float alpha = (v1y_Sub_v2y * (x - v2.x) + (v2x_Sub_v1x) * (y - v2.y)) / denom;
-				float beta = (v2y_Sub_v0y * (x - v2.x) + (v0x_Sub_v2x) * (y - v2.y)) / denom;
+				float alpha = (v1y_Sub_v2y * ((x + 0.5f) - v2.x) + (v2x_Sub_v1x) * ((y + 0.5f) - v2.y)) / denom;
+				float beta = (v2y_Sub_v0y * ((x + 0.5f) - v2.x) + (v0x_Sub_v2x) * ((y + 0.5f) - v2.y)) / denom;
 				float gamma = 1.0f - alpha - beta;
 
 				if (alpha < 0 || beta < 0 || gamma < 0) continue;
 
-				Interp.AddBary(alpha, beta, gamma);
+				Interp.SetBary(alpha, beta, gamma);
 
 				// this is correct for non ortho projection TODO make a switch for this in my main renderer and here 
 				float Depth = Interp.PerspectiveCorrectInterpolate(v0.z, v1.z, v2.z, v0.w, v1.w, v2.w);
-				//float Depth = alpha * v0.z + beta * v1.z + gamma * v2.z;
 
 				if (Depth > 1.0f || Depth < 0.0f)
 					continue;

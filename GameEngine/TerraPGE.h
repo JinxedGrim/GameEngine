@@ -10,8 +10,7 @@
 // Direct2D and DirectWrite are justified the same way
 
 //     TO DO 
-// T. Fix Lighting (fix interpolation)
-// 1. Fix the shadows
+// 1.Fix some minor inyerpolation issues (rasterizer / clipping)
 // 2. Add skyboxes 
 // X. Fix Specular highlights
 // X. Redesign multithreading
@@ -33,7 +32,7 @@
 // X. LOD support
 // X. Add cpu metrics
 // X. Texture streaming
-// X. Reliable Seed based generation
+// X. Seed based generation
 // X. Normal debug
 // X. motion blur
 // X. depth pre-pass

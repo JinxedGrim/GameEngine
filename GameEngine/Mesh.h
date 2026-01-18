@@ -227,7 +227,10 @@ class Triangle
 
 	int ClipAgainstPlane(const Vec4& plane, Triangle& Out1, Triangle& Out2, bool DebugClip) const
 	{
+		// Attributes to interp
 		Vec4 in[3] = { Points[0], Points[1], Points[2] };
+		Vec4 world[3] = { Points[0], Points[1], Points[2] };
+
 		float w[3] = { Points[0].w, Points[1].w, Points[2].w }; // store original w
 		float d[3];
 		bool inside[3];

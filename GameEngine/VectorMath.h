@@ -14,6 +14,8 @@ constexpr float ToRad(float d) { return d * (PI / 180.0f); }
 #define ToRadD(Rad) (double)((Rad) * (PI / 180.0))
 #endif
 
+#define FLOAT_LOWEST 0.0000001f 
+
 // TODO Probably replace with std::clamp
 float Clamp(float Min, float Max, float Val)
 {
@@ -582,12 +584,11 @@ public:
 
 	void __inline CorrectPerspective()
 	{
-		if (this->w != 0)
-		{
-			this->x /= this->w;
-			this->y /= this->w;
-			this->z /= this->w;
-		}
+		this->w = this->w + (FLOAT_LOWEST * (this->w == 0.0f));
+
+		this->x /= this->w;
+		this->y /= this->w;
+		this->z /= this->w;
 	}
 
 

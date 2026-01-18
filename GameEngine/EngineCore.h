@@ -33,8 +33,7 @@
 #include "../../../Source/repos/GlLoader/GlLoader/GlLoader.h"
 #endif
 
-#define FLOAT_LOWEST 0.0000001f
-#define FLOAT_LOWEST_BIAS 0.0000003f
+#define FLOAT_LOWEST_BIAS 0.0001
 
 namespace TerraPGE::Core
 {
