@@ -93,10 +93,10 @@ class ExampleScene : public TerraPGE::Scene
 		this->WorldBlockMat = Material::CreateMaterial(SoftUnlitMatAmbient, SoftUnlitMatDiffuse, SoftUnlitMatSpecular, 32.0f, "Unlit");
 		this->CubeMat = Material::GetNullMaterial();
 		CubeMat->Textures.push_back(Txt);
-		this->CubeMsh = DEBUG_NEW Cube(1, 1, 1, CubeMat);
+		this->CubeMsh = DEBUG_NEW Cube(1, 1, 1, WorldBlockMat);
 		this->CubeMesh2 = DEBUG_NEW Cube(1, 1, 1, WorldBlockMat);
 		this->Skybox = CubeMap::LoadCubemapFromDirectory("Skybox_Sky\\");
-
+		this->SkyboxToRender = Skybox;
 		this->LoadingMode++;
 		TerraPGE::UpdateLoadingScreen();
 

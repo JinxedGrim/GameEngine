@@ -10,8 +10,8 @@
 // Direct2D and DirectWrite are justified the same way
 
 //     TO DO 
-// 1.Fix some minor inyerpolation issues (rasterizer / clipping)
-// 2. Add skyboxes 
+// X. Fix some minor inyerpolation issues (rasterizer / clipping)
+// X. Add skyboxes 
 // X. Fix Specular highlights
 // X. Redesign multithreading
 // X. implement a prefab system
@@ -205,7 +205,7 @@ namespace TerraPGE
 
 			CurrScene->MainCamera->Transform.WalkTransformChain();
 
-			Renderer::RenderScene(CurrScene->MainCamera, RenderQueue, LightsToRender, SceneRenderQueue->size(), SceneLights->size());
+			Renderer::RenderScene(CurrScene->MainCamera, RenderQueue, LightsToRender, SceneRenderQueue->size(), SceneLights->size(), CurrScene->SkyboxToRender);
 
 			delete[] LightsToRender;
 			delete[] RenderQueue;

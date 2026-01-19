@@ -749,6 +749,7 @@ namespace TerraPGE
 			};
 
 
+		
 		const auto Shader_Texture_Only = [](ShaderArgs* Args)
 			{
 				const Triangle* Tri = Args->FindShaderResourcePtr<Triangle*>(TPGE_SHDR_TRI);
@@ -793,7 +794,7 @@ namespace TerraPGE
 			}
 			else
 			{
-				FragColor->R = 255.0f;
+			    FragColor->R = 255.0f;
 				FragColor->G = 255.0f;
 				FragColor->B = 255.0f;
 				FragColor->A = 255.0f;

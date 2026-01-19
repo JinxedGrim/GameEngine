@@ -25,7 +25,12 @@
 //     during registry a hash is created that points to the obj
 //     on delete, make sure to clear the data and deregister (or subtract ref count and delete on 0)
 
-
+#define CUBEMAP_PX 0
+#define CUBEMAP_PY 1
+#define CUBEMAP_PZ 2
+#define CUBEMAP_NX 3
+#define CUBEMAP_NY 4
+#define CUBEMAP_NZ 5
 
 class Image2D
 {
@@ -154,6 +159,7 @@ class Image2D
 
 		if (!Out->Loaded || !Success)
 		{
+			std::cout << "Failed to load: " << FilePath << std::endl;
 			return nullptr;
 		}
 
@@ -176,6 +182,24 @@ class Image2D
 		float r = static_cast<float>(this->PixelData[index + 2]);
 
 		return Color(r, g, b);
+	}
+
+
+	Color GetColorAtPixel(float u, float v) const
+	{
+		u = (u) * (float)(this->Width - 1);
+		v = (v) * (float)(this->Height - 1);
+
+		u = std::clamp(u, 0.0f, (float)this->Width-1);
+		v = std::clamp( v, 0.0f, (float)this->Height-1);
+
+		int index = ContIdx((int)(u), (int)(v), this->Width);
+
+		float b = static_cast<float>(this->PixelData[index]);
+		float g = static_cast<float>(this->PixelData[index + 1]);
+		float r = static_cast<float>(this->PixelData[index + 2]);
+
+		return Color(r / 255.0f, g / 255.0f, b / 255.0f);
 	}
 
 
@@ -449,6 +473,7 @@ class CubeMap
 
 		if (!Out->CheckFaces())
 		{
+			std::cout << "Failed to load one or more faces" << std::endl;
 			return nullptr;
 		}
 
@@ -457,13 +482,80 @@ class CubeMap
 		return Out;
 	}
 
-	static CubeMap* LoadCubemapFromDirectory(const std::string Directory, const std::string Ext=".bmp")
+	static CubeMap* LoadCubemapFromDirectory(const std::string CubemapDirectory, const std::string Ext = ".bmp", const std::string& Prefix = "Assets\\")
 	{
-		return LoadCubemapFromImages(Directory + "px" + Ext, Directory + "py" + Ext, Directory + "pz" + Ext, Directory + "nx" + Ext, Directory + "ny" + Ext, Directory + "nz" + Ext);
+		std::cout << "Loading Cubmap textures from dir: " << Prefix + CubemapDirectory << std::endl;
+		return LoadCubemapFromImages(Prefix + CubemapDirectory + "px" + Ext, Prefix + CubemapDirectory + "py" + Ext, Prefix + CubemapDirectory + "pz" + Ext, Prefix + CubemapDirectory + "nx" + Ext, Prefix + CubemapDirectory + "ny" + Ext, Prefix + CubemapDirectory + "nz" + Ext);
 	}
 
-	Color Sample(const Vec3& dir) const
-	{
 
+	Color Sample(Vec3& ViewDirection)
+	{
+		Vec3 Dir = ViewDirection.Normalized();
+		Vec3 Abs = Dir.GetAbs();
+		int Axis = Abs.GetBiggestComponent();
+
+		//return Color(Abs);
+
+		float u, v;
+		int ToSample = CUBEMAP_PX;
+
+		switch (Axis)
+		{
+		case 0: // X dominant
+			if (Dir.x > 0.0f)
+			{
+				// +X
+				u = -Dir.z / Abs.x;
+				v = Dir.y / Abs.x;
+				ToSample = CUBEMAP_PX;
+			}
+			else
+			{
+				// -X
+				u = Dir.z / Abs.x;
+				v = Dir.y / Abs.x;
+				ToSample = CUBEMAP_NX;
+			}
+			break;
+		case 1: // Y dominant
+			if (Dir.y > 0.0f)
+			{
+				// +Y
+				u = Dir.x / Abs.y;
+				v = -Dir.z / Abs.y;
+				ToSample = CUBEMAP_PY;
+			}
+			else
+			{
+				// -Y
+				u = Dir.x / Abs.y;
+				v = Dir.z / Abs.y;
+				ToSample = CUBEMAP_NY;
+			}
+			break;
+		case 2: // Z dominant
+			if (Dir.z > 0.0f)
+			{
+				// +Z
+				u = Dir.x / Abs.z;
+				v = Dir.y / Abs.z;
+				ToSample = CUBEMAP_PZ;
+			}
+			else
+			{
+				// -Z
+				u = -Dir.x / Abs.z;
+				v = Dir.y / Abs.z;
+				ToSample = CUBEMAP_NZ;
+			}
+		default:
+			throw;
+		}
+
+
+		return Color(u, v, (255.0f/2.0f * ToSample)/255.0f);
+
+		return this->Faces[ToSample]->GetColorAtPixel(u, v);
 	}
 };
