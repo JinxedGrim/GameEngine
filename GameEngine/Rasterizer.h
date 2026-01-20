@@ -13,7 +13,7 @@ namespace TerraPGE::Renderer
 {
 	float ShadowMapBias = FLOAT_LOWEST_BIAS;
 	bool DebugDepthBuffer = false;
-	bool DebugShadows = true;
+	bool DebugShadows = false;
 	bool DebugShadowMap = false;
 	bool DebugShadowValue = false;
 	bool SkipDepthTesting = false;

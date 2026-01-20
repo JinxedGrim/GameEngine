@@ -25,14 +25,14 @@
     <Filter Include="Header Files\Core\Libs\Graphics">
       <UniqueIdentifier>{66499fbe-8c85-40dc-8173-18d0a29ffb9c}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Header Files\Core\Libs\Math">
-      <UniqueIdentifier>{101519b7-5152-4313-b8b6-ce8742e3070f}</UniqueIdentifier>
-    </Filter>
     <Filter Include="Header Files\Core\Engine">
       <UniqueIdentifier>{7e220bf5-6641-488e-a76d-84875ad7cea0}</UniqueIdentifier>
     </Filter>
     <Filter Include="Header Files\EngineAPI">
       <UniqueIdentifier>{e9a2c468-0bf7-46ca-a077-1fcf3868c944}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\EngineAPI\Math">
+      <UniqueIdentifier>{101519b7-5152-4313-b8b6-ce8742e3070f}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
@@ -117,13 +117,13 @@
       <Filter>Header Files\EngineAPI</Filter>
     </ClInclude>
     <ClInclude Include="Math.h">
-      <Filter>Header Files\Core\Libs\Math</Filter>
+      <Filter>Header Files\EngineAPI\Math</Filter>
     </ClInclude>
     <ClInclude Include="MatrixMath.h">
-      <Filter>Header Files\Core\Libs\Math</Filter>
+      <Filter>Header Files\EngineAPI\Math</Filter>
     </ClInclude>
     <ClInclude Include="VectorMath.h">
-      <Filter>Header Files\Core\Libs\Math</Filter>
+      <Filter>Header Files\EngineAPI\Math</Filter>
     </ClInclude>
     <ClInclude Include="Skybox.h">
       <Filter>Header Files\EngineAPI</Filter>

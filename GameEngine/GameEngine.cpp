@@ -73,11 +73,15 @@ class ExampleScene : public TerraPGE::Scene
 
 	void BeginScene(WndCreator& Wnd) override
 	{
+		//Vec3 Dir = -(LightSrcPos.GetDirectionToVector(Vec3(0.0f, 0.0f, 0.0f)).Normalized());
 		Vec3 InitialVelocity = Vec3(4.0f, 1.5f, 0.0f);
 		this->LightSrcPos = { 0, 50, -10 };
-		Vec3 dir = -(LightSrcPos.GetDirectionToVector(Vec3(0.0f, 0.0f, 0.0f)).Normalized());
+		this->MainCamera = DEBUG_NEW Camera(Vec3(0, 3, 0), (float)((float)TerraPGE::Core::sy / (float)TerraPGE::Core::sx), TerraPGE::Core::FOV, TerraPGE::Core::FNEAR, TerraPGE::Core::FFAR);
+		this->SkyboxToRender = Skybox::Create(this->MainCamera, CubeMap::LoadCubemapFromDirectory("Skybox_Sky\\"));
+		Vec3 SunDir = ((Skybox*)this->SkyboxToRender)->SampleForSunDirection();
 
-		Dl = DirectionalLight(dir, 100.0f, Vec3(253, 251, 211), 0.15f, 0.4f, 0.2f);
+
+		Dl = DirectionalLight(SunDir, 50.0f, Vec3(253, 251, 211), 0.15f, 0.4f, 0.2f);
 		Dl.CastsShadows = true;
 
 		this->PointLightPos = { 0, 1, 0 };
@@ -97,10 +101,6 @@ class ExampleScene : public TerraPGE::Scene
 		this->CubeMesh2 = DEBUG_NEW Cube(1, 1, 1, WorldBlockMat);
 		this->LoadingMode++;
 		TerraPGE::UpdateLoadingScreen();
-
-		this->MainCamera = DEBUG_NEW Camera(Vec3(0, 3, 0), (float)((float)TerraPGE::Core::sy / (float)TerraPGE::Core::sx), TerraPGE::Core::FOV, TerraPGE::Core::FNEAR, TerraPGE::Core::FFAR);
-		this->SkyboxToRender = Skybox::Create(this->MainCamera, CubeMap::LoadCubemapFromDirectory("Skybox_Sky\\"));
-		Vec3 Dir = ((Skybox*)this->SkyboxToRender)->SampleForSunDirection();
 
 		LockCamera = false;
 		this->MainCamera->SetLocalPosition(Vec3(0, 3, 0));

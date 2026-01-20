@@ -64,22 +64,22 @@ public:
 
 		switch (MaxFace)
 		{
-			case 0:
+			case CUBEMAP_PX:
 				LightDir = Vec3(1, -py, -px);
 				break;
-			case 1:
+			case CUBEMAP_NX:
 				LightDir = Vec3(-1, -py, px);
 				break;
-			case 2:
+			case CUBEMAP_PY:
 				LightDir = Vec3(px, 1, py);
 				break;
-			case 3:
+			case CUBEMAP_NY:
 				LightDir = Vec3(px, -1, -py);
 				break;
-			case 4:
+			case CUBEMAP_PZ:
 				LightDir = Vec3(px, -py, 1);
 				break;
-			case 5:
+			case CUBEMAP_NZ:
 				LightDir = Vec3(-px, -py, -1);
 				break;
 			default:
