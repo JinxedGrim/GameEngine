@@ -11,7 +11,6 @@
 
 //     TO DO 
 // X. Fix some minor inyerpolation issues (rasterizer / clipping)
-// X. Add skyboxes 
 // X. Fix Specular highlights
 // X. Redesign multithreading
 // X. implement a prefab system
@@ -20,6 +19,7 @@
 // X. Caclulate Vertex norms for all 3 vertices and store them
 // X. Better reosource management
 // X. Fix camera PointAt
+// X. PBR lighting
 // X. Audio system 
 // X. Voice 
 // X. SpotLights

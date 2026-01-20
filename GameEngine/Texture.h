@@ -193,7 +193,7 @@ class Image2D
 		u = std::clamp(u, 0.0f, (float)this->Width-1);
 		v = std::clamp( v, 0.0f, (float)this->Height-1);
 
-		int index = ContIdx((int)(u), (int)(v), this->Width);
+		int index = ContIdx((int)(u), (int)(v), this->Width) * 3;
 
 		float b = static_cast<float>(this->PixelData[index]);
 		float g = static_cast<float>(this->PixelData[index + 1]);
@@ -495,7 +495,7 @@ class CubeMap
 		Vec3 Abs = Dir.GetAbs();
 		int Axis = Abs.GetBiggestComponent();
 
-		//return Color(Abs);
+		//return Color(Dir);
 
 		float u, v;
 		int ToSample = CUBEMAP_PX;
@@ -549,12 +549,16 @@ class CubeMap
 				v = Dir.y / Abs.z;
 				ToSample = CUBEMAP_NZ;
 			}
+			break;
 		default:
 			throw;
 		}
 
+		u = (u + 1.0f) * 0.5f;
+		v = (v + 1.0f) * 0.5f;
 
-		return Color(u, v, (255.0f/2.0f * ToSample)/255.0f);
+
+		//return Color(u, v, (255.0f/2.0f * ToSample)/255.0f);
 
 		return this->Faces[ToSample]->GetColorAtPixel(u, v);
 	}

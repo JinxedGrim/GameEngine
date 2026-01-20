@@ -77,7 +77,7 @@ class ExampleScene : public TerraPGE::Scene
 		this->LightSrcPos = { 0, 50, -10 };
 		Vec3 dir = -(LightSrcPos.GetDirectionToVector(Vec3(0.0f, 0.0f, 0.0f)).Normalized());
 
-		Dl = DirectionalLight(dir, 20.0f, Vec3(253, 251, 211), 0.15f, 0.4f, 0.2f);
+		Dl = DirectionalLight(dir, 100.0f, Vec3(253, 251, 211), 0.15f, 0.4f, 0.2f);
 		Dl.CastsShadows = true;
 
 		this->PointLightPos = { 0, 1, 0 };
@@ -727,6 +727,6 @@ int APIENTRY WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance,
 	TerraPGE::Run(Wnd, ExScene);
 
 #ifdef _DEBUG
-	system("pause");
+	system("timeout \t 8");
 #endif
 }

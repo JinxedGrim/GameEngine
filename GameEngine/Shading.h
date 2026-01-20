@@ -647,15 +647,24 @@ namespace TerraPGE
 					Light = Args->FindShaderResourcePtr<LightObject**>(TPGE_SHDR_LIGHT_OBJECTS)[i];
 
 					Vec3 LightDir = -Light->GetLightDirection().Normalized();
-					Vec3 ReflectedDir = (-LightDir).GetReflectection(*FragNormal);
+					Vec3 ReflectedDir = (LightDir).GetReflectection(*FragNormal);
+
+					// Blinn specular math
+					Vec3 V = (*CamLookDir).Normalized();
+					Vec3 H = (LightDir + V).Normalized();
+					float Hdot = FragNormal->Dot(H);
 
 					float Li = FragNormal->Dot(LightDir); // Light intensity
 					float Intensity = std::max<float>(0.0f, Li);
-					float SpecularIntensity = pow(std::max<float>(0.0f, (-ReflectedDir).Dot((*CamLookDir).Normalized())), Mat->Shininess);
+					float SpecularIntensity = pow(std::max(0.0f, Hdot), 32);
+
 
 					Vec3 AmbientCol = (Mat->AmbientColor / 255.0f) * Light->AmbientCoeff;
 					Vec3 DiffuseCol = ((((Light->Color / 255.0f) * Light->DiffuseCoeff) * (Mat->DiffuseColor / 255.0f)) * Intensity);
-					Vec3 SpecularClr = ((((Light->Color / 255.0f) * Light->SpecularCoeff) * (Mat->SpecularColor / 255.0f)) * SpecularIntensity);
+					//Vec3 SpecularClr = ((((Light->Color / 255.0f) * Light->SpecularCoeff) * (Mat->SpecularColor / 255.0f)) * SpecularIntensity);
+				
+					Vec3 SpecularClr = Vec3(1.0f, 0.0f, 0.0f) * SpecularIntensity;
+
 					FinalColor += AmbientCol + ((DiffuseCol + SpecularClr) * shadowMul);
 
 					// for point light

@@ -148,16 +148,16 @@ public:
 	}
 
 
-	__inline int GetBiggestComponent()
+	__inline int GetBiggestComponent() const
 	{
-		int max = 0;;
 		int idx = 0;
+		float max = data[0];
 
-		for (int i = 0; i < 3; i++)
+		for (int i = 1; i < 3; i++)
 		{
-			if (this->data[i] < max)
+			if (data[i] > max)
 			{
-				max = this->data[i];
+				max = data[i];
 				idx = i;
 			}
 		}
