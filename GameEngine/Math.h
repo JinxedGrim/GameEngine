@@ -375,6 +375,13 @@ __inline void Matrix::Decompose(Vec3& outScale, Vec3& outEuler, Vec3& outPos) co
 #define COLOR_NORMAL 0
 #define COLOR_255 1
 
+enum ColorModes
+{
+	RGB = 0,
+	NormalizedRGB = 1,
+	sRGB = 2
+};
+
 class Color
 {
 public:
@@ -383,7 +390,7 @@ public:
 
 	}
 
-	Color(const float R, const float G, const float B, const float A = 255.0f, const int Mode = COLOR_255)
+	Color(const float R, const float G, const float B, const float A = 255.0f, const ColorModes Mode = ColorModes::RGB)
 	{
 		this->R = R;
 		this->G = G;
@@ -416,6 +423,18 @@ public:
 			return powf((c + 0.055f) / 1.055f, 2.4f);
 	}
 
+
+	float CalculateLuminance(ColorModes Mode = ColorModes::RGB)
+	{
+		if (Mode == ColorModes::RGB)
+		{
+			this->R /= 255.0f;
+			this->G /= 255.0f;
+			this->B /= 255.0f;
+		}
+
+		return 0.2126f * this->R + 0.7152f * this->G + 0.0722f * this->B;
+	}
 
 	Color(const Vec3 RGB, const float A = 255.0f, const int Mode = COLOR_255)
 	{

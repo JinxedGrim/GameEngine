@@ -355,11 +355,6 @@ namespace TerraPGE::Renderer
 
 	}
 
-	void RenderSkybox()
-	{
-
-	}
-
 
 	void DrawFpsCounter(WndCreator& Wnd, const float& Fps, const SIZE_T CurrMB)
 	{
@@ -508,9 +503,9 @@ namespace TerraPGE::Renderer
 	}
 
 
-	void RenderSkybox(Camera* Cam, CubeMap* Skybox)
+	void RenderSkybox(Camera* Cam, EnvironmentRenderable* sky)
 	{
-		if (Skybox == nullptr)
+		if (sky == nullptr)
 			return;
 
 		const int W = Core::sx;
@@ -523,20 +518,8 @@ namespace TerraPGE::Renderer
 		{
 			for (int x = 0; x < W; ++x)
 			{
-				float fovY = Cam->GetFov(); // vertical FOV in radians
-				float aspect = (float)W / H;
-
-				float px = (2.0f * (x + 0.5f) / W - 1.0f) * tan(fovY * 0.5f) * aspect;
-				float py = (1.0f - 2.0f * (y + 0.5f) / H) * tan(fovY * 0.5f);
-
-				Vec3 viewDir = Vec3(px, py, 1.0f).Normalized();
-
-				// 3. Rotate into world space (NO translation)
-				Vec3 worldDir = viewDir * CamRot;
-				worldDir = worldDir;
-
-				// 4. Sample cubemap
-				Color skyColor = Skybox->Sample(worldDir);
+				// skyboox render
+				Color skyColor = sky->Render(x, y, W, H, CamRot);
 
 				// 5. Write color
 				Core::SetPixelFrameBuffer(x, y, skyColor.R, skyColor.G, skyColor.B);
@@ -545,7 +528,7 @@ namespace TerraPGE::Renderer
 	}
 
 
-	void RenderScene(Camera* Cam, Renderable** SceneObjects, LightObject** SceneLights, size_t ObjectCount, size_t LightCount, CubeMap* Skybox = nullptr)
+	void RenderScene(Camera* Cam, Renderable** SceneObjects, LightObject** SceneLights, size_t ObjectCount, size_t LightCount, EnvironmentRenderable* Skybox = nullptr)
 	{
 		Renderer::RenderSkybox(Cam, Skybox);
 

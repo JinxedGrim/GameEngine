@@ -4,6 +4,7 @@
 #include "Scene.h"
 #include "Physics.h"
 #include "RayCaster.h"
+#include "Skybox.h"
 
 // The entire premise of this project is to build a game engine without using any libraries, but the std library and the WinAPI. 
 // GdiPP is more or less straight WinAPI, but you do have to link with a dll which is sort of cheating but it's about the only way to do graphics without any libs like DX or OpenGl

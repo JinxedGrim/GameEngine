@@ -24,7 +24,7 @@ namespace TerraPGE
 
 	public:
 		Camera* MainCamera;
-		CubeMap* SkyboxToRender = nullptr;
+		EnvironmentRenderable* SkyboxToRender = nullptr;
 
 		Scene()
 		{

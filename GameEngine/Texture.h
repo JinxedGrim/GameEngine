@@ -460,6 +460,11 @@ class CubeMap
 
 	public:
 
+	int GetFaceSize()
+	{
+		return this->FaceSize;
+	}
+
 	static CubeMap* LoadCubemapFromImages(std::string px, std::string py, std::string pz, std::string nx, std::string ny, std::string nz)
 	{
 		CubeMap* Out = new CubeMap();
@@ -486,6 +491,12 @@ class CubeMap
 	{
 		std::cout << "Loading Cubmap textures from dir: " << Prefix + CubemapDirectory << std::endl;
 		return LoadCubemapFromImages(Prefix + CubemapDirectory + "px" + Ext, Prefix + CubemapDirectory + "py" + Ext, Prefix + CubemapDirectory + "pz" + Ext, Prefix + CubemapDirectory + "nx" + Ext, Prefix + CubemapDirectory + "ny" + Ext, Prefix + CubemapDirectory + "nz" + Ext);
+	}
+
+
+	Color Sample(int x, int y, int face)
+	{
+		return this->Faces[face]->GetColorAtPixel(x, y);
 	}
 
 

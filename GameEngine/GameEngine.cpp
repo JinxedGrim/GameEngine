@@ -36,7 +36,7 @@ class ExampleScene : public TerraPGE::Scene
 	PointLight sl; // TODO make this ptr
 	DirectionalLight Dl; // TODO make this ptr
 
-	CubeMap* Skybox = nullptr;
+	CubeMap* Sky = nullptr;
 
 	Material* WorldBlockMat = nullptr;
 
@@ -95,12 +95,12 @@ class ExampleScene : public TerraPGE::Scene
 		CubeMat->Textures.push_back(Txt);
 		this->CubeMsh = DEBUG_NEW Cube(1, 1, 1, WorldBlockMat);
 		this->CubeMesh2 = DEBUG_NEW Cube(1, 1, 1, WorldBlockMat);
-		this->Skybox = CubeMap::LoadCubemapFromDirectory("Skybox_Sky\\");
-		this->SkyboxToRender = Skybox;
 		this->LoadingMode++;
 		TerraPGE::UpdateLoadingScreen();
 
 		this->MainCamera = DEBUG_NEW Camera(Vec3(0, 3, 0), (float)((float)TerraPGE::Core::sy / (float)TerraPGE::Core::sx), TerraPGE::Core::FOV, TerraPGE::Core::FNEAR, TerraPGE::Core::FFAR);
+		this->SkyboxToRender = Skybox::Create(this->MainCamera, CubeMap::LoadCubemapFromDirectory("Skybox_Sky\\"));
+		Vec3 Dir = ((Skybox*)this->SkyboxToRender)->SampleForSunDirection();
 
 		LockCamera = false;
 		this->MainCamera->SetLocalPosition(Vec3(0, 3, 0));
