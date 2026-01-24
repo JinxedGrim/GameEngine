@@ -6,9 +6,6 @@
 // 
 
 
-
-
-
 namespace TerraPGE::Renderer
 {
 	float ShadowMapBias = FLOAT_LOWEST_BIAS;
