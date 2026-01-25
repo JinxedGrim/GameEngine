@@ -167,6 +167,16 @@ class Image2D
 	}
 
 
+	void SetColorAtPixel(const int x, const int y, const Color& Col)
+	{
+		int index = (x + this->Width * y) * 3;
+
+		this->PixelData[index] = (int)Col.R;
+		this->PixelData[index + 1] = (int)Col.G;
+		this->PixelData[index + 2] = (int)Col.B;
+	}
+
+
 	bool IsLoaded() const
 	{
 		return this->Loaded;
@@ -177,9 +187,9 @@ class Image2D
 	{
 		int index = (x + this->Width * y) * 3;
 
-		float b = static_cast<float>(this->PixelData[index]);
-		float g = static_cast<float>(this->PixelData[index + 1]);
-		float r = static_cast<float>(this->PixelData[index + 2]);
+		int b = static_cast<float>(this->PixelData[index]);
+		int g = static_cast<float>(this->PixelData[index + 1]);
+		int r = static_cast<float>(this->PixelData[index + 2]);
 
 		return Color(r, g, b);
 	}
@@ -193,13 +203,7 @@ class Image2D
 		u = std::clamp(u, 0.0f, (float)this->Width-1);
 		v = std::clamp( v, 0.0f, (float)this->Height-1);
 
-		int index = ContIdx((int)(u), (int)(v), this->Width) * 3;
-
-		float b = static_cast<float>(this->PixelData[index]);
-		float g = static_cast<float>(this->PixelData[index + 1]);
-		float r = static_cast<float>(this->PixelData[index + 2]);
-
-		return Color(r / 255.0f, g / 255.0f, b / 255.0f);
+		return this->GetColorAtPixel((int)u, (int)v);
 	}
 
 
@@ -417,7 +421,7 @@ class Texture
 		x = std::clamp<int>(x, 0, (Width - 1));
 		y = std::clamp<int>(y, 0, (Height - 1));
 
-		return this->Image->GetColorAtPixel(x, y);
+		return this->Image->GetColorAtPixel(x, y).Denormalized();
 	}
 
 
@@ -494,11 +498,18 @@ class CubeMap
 	}
 
 
-	Color Sample(int x, int y, int face)
+	// Color must 0-255
+	void SetPixel(const int& x, const int& y, const int& face, const Color& RGB)
 	{
-		return this->Faces[face]->GetColorAtPixel(x, y);
+		this->Faces[face]->SetColorAtPixel(x, y, RGB);
 	}
 
+
+	Color Sample(int x, int y, int face)
+	{
+		return this->Faces[face]->GetColorAtPixel(x, y).Denormalized();
+	}
+	
 
 	Color Sample(Vec3& ViewDirection)
 	{
@@ -571,6 +582,13 @@ class CubeMap
 
 		//return Color(u, v, (255.0f/2.0f * ToSample)/255.0f);
 
-		return this->Faces[ToSample]->GetColorAtPixel(u, v);
+		//float Lum = this->Faces[ToSample]->GetColorAtPixel(u, v).Denormalized().CalculateLuminance();
+		//if (Lum >= 255.0f)
+		//{
+		//	return Color(Lum, 0.0f, 0.0f);
+		//}
+
+		//return Color(Lum, Lum, Lum);
+		return this->Faces[ToSample]->GetColorAtPixel(u, v).Normalized();
 	}
 };

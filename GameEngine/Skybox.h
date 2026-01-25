@@ -29,7 +29,7 @@ public:
 		this->Cam = Cam;
 	}
 
-	Vec3 SampleForSunDirection()
+	Vec3 SampleForSunDirection(bool Debug = false)
 	{
 		int sz = this->Texture->GetFaceSize();
 		float MaxLuminance = 0.0f;
@@ -43,7 +43,7 @@ public:
 			{
 				for (int y = 0; y < sz; y++)
 				{
-					float SampledLum = this->Texture->Sample(x, y, face).CalculateLuminance();
+					float SampledLum = this->Texture->Sample(x, y, face).Denormalized().CalculateLuminance();
 
 					if (SampledLum > MaxLuminance)
 					{
@@ -60,15 +60,16 @@ public:
 		float v = (MaxY + 0.5f) / sz; // 0..1
 		float px = 2.0f * u - 1.0f;         // -1..1
 		float py = 1.0f - 2.0f * v;         // -1..1
+
 		Vec3 LightDir;
 
 		switch (MaxFace)
 		{
 			case CUBEMAP_PX:
-				LightDir = Vec3(1, -py, -px);
+				LightDir = Vec3(1, -py, px);
 				break;
 			case CUBEMAP_NX:
-				LightDir = Vec3(-1, -py, px);
+				LightDir = Vec3(-1, -py, -px);
 				break;
 			case CUBEMAP_PY:
 				LightDir = Vec3(px, 1, py);
@@ -80,7 +81,7 @@ public:
 				LightDir = Vec3(px, -py, 1);
 				break;
 			case CUBEMAP_NZ:
-				LightDir = Vec3(-px, -py, -1);
+				LightDir = Vec3(-px, -py, -1);				
 				break;
 			default:
 				throw;
@@ -88,6 +89,11 @@ public:
 		}
 
 		LightDir = -(LightDir.Normalized());
+
+		if (Debug)
+		{
+			this->Texture->SetPixel(MaxX, MaxY, MaxFace, Color(255.0f, 0.0f, 0.0f));
+		}
 
 		std::cout << "MaxLum: " << MaxLuminance << " at face: " << MaxFace << " at: (" << MaxX << ", " << MaxY << ")" << std::endl << "Calculated LightDir: " << LightDir << std::endl;
 		return LightDir;

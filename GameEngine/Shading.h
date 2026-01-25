@@ -11,6 +11,74 @@
 // this shading system is cool but performs too slow.
 // move to 'functor'?
 
+
+// New proposal
+// System has struct of param info each info contains an ID and an index.
+// then an arg with the full data struct
+// 
+
+struct ShaderParam
+{
+	void* Data;
+	uint64_t Sz;
+};
+
+
+class SA
+{
+	std::vector<ShaderParam> Uniforms;
+	std::vector<ShaderParam> Resources;
+
+	std::vector<ShaderParam> Mutables;
+
+	SA()
+	{
+
+	}
+
+	public:
+	static SA* Copy(const SA* In)
+	{
+		SA* out = new SA();
+		out->Uniforms = In->Uniforms;
+		out->Resources = In->Resources;
+	}
+
+	static SA* Create()
+	{
+		return new SA();
+	}
+
+	template<typename T>
+	void AddUniform(const T& Value)
+	{
+		ShaderParam Data = {};
+		Data.Data = Value;
+//		this->Uniforms.push_back();
+	}
+
+	template<typename T>
+	void AddUnique(T Data)
+	{
+
+	}
+
+	template<typename T>
+	T GetUniform()
+	{
+
+	}
+
+	template<typename T>
+	T GetUnique()
+	{
+
+	}
+};
+
+
+
+
 enum class ShaderTypes
 {
 	SHADER_TRIANGLE = 0,
@@ -628,14 +696,21 @@ namespace TerraPGE
 				Color* FragColor = Args->FindShaderResourcePtr<Color*>(TPGE_SHDR_FRAG_COLOR);
 				bool IsInShadow = Args->FindShaderResourceValue<bool>(TPGE_SHDR_IS_IN_SHADOW);
 				float shadowMul = 1.0f - IsInShadow * (1.0f - 0.5f);
-				FragColor->A = 255.0f;
-				FragColor->R = 0.0f;
-				FragColor->G = 0.0f;
-				FragColor->B = 0.0f;
+				TextureCoords* UVW = Args->FindShaderResourcePtr<TextureCoords*>(TPGE_SHDR_TEX_UVW);
+
+				Vec3 TexturCol = Vec3(1.0f, 1.0f, 1.0f);
+				Vec3 TexColor = Vec3(1.0f, 1.0f, 1.0f); // default white (no effect)
+				TexColor *= (Tri->Material->HasUsableTexture()) ? Tri->Material->Textures.at(0)->GetPixelColor(UVW->u, 1.0f - UVW->v).GetRGB() / 255.0f : Vec3(1.0f, 1.0f, 1.0f);
+				
+				Vec3 BaseDiffuse = (Mat->DiffuseColor / 255.0f) * TexColor;
 
 				LightObject* Light = nullptr;
 				Vec3 FinalColor = Vec3();
 
+				FragColor->A = 255.0f;
+				FragColor->R = 0.0f;
+				FragColor->G = 0.0f;
+				FragColor->B = 0.0f;
 
 				if (LightCount <= 0)
 				{
@@ -660,10 +735,10 @@ namespace TerraPGE
 
 
 					Vec3 AmbientCol = (Mat->AmbientColor / 255.0f) * Light->AmbientCoeff;
-					Vec3 DiffuseCol = ((((Light->Color / 255.0f) * Light->DiffuseCoeff) * (Mat->DiffuseColor / 255.0f)) * Intensity);
-					//Vec3 SpecularClr = ((((Light->Color / 255.0f) * Light->SpecularCoeff) * (Mat->SpecularColor / 255.0f)) * SpecularIntensity);
+					Vec3 DiffuseCol = ((((Light->Color / 255.0f) * Light->DiffuseCoeff) * BaseDiffuse) * Intensity);
+					Vec3 SpecularClr = ((((Light->Color / 255.0f) * Light->SpecularCoeff) * (Mat->SpecularColor / 255.0f)) * SpecularIntensity);
 				
-					Vec3 SpecularClr = Vec3(1.0f, 0.0f, 0.0f) * SpecularIntensity;
+					//Vec3 SpecularClr = Vec3(1.0f, 0.0f, 0.0f) * SpecularIntensity;
 
 					FinalColor += AmbientCol + ((DiffuseCol + SpecularClr) * shadowMul);
 
@@ -696,9 +771,9 @@ namespace TerraPGE
 				bool IsInShadow = Args->FindShaderResourceValue<bool>(TPGE_SHDR_IS_IN_SHADOW);
 				LightObject** Lights = Args->FindShaderResourcePtr<LightObject**>(TPGE_SHDR_LIGHT_OBJECTS);
 				//bool DebugShadows = Args->FindShaderResourceValue<bool>(TPGE_SHDR_DEBUG_SHADOWS);
-
 				// Shadow intensity multiplier
 				float ShadowMult = 1.0f - (0.5f * (int)IsInShadow);
+
 
 				// === Base lighting ===
 				Vec3 AmbientSum(0.0f, 0.0f, 0.0f); // base scene ambient

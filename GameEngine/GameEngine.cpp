@@ -95,9 +95,9 @@ class ExampleScene : public TerraPGE::Scene
 		this->AK47 = DEBUG_NEW Mesh("AK47.obj");
 		this->Plane = DEBUG_NEW Mesh("FlatTerrain.obj");
 		this->WorldBlockMat = Material::CreateMaterial(SoftUnlitMatAmbient, SoftUnlitMatDiffuse, SoftUnlitMatSpecular, 32.0f, "Unlit");
-		this->CubeMat = Material::GetNullMaterial();
+		this->CubeMat = Material::CreateMaterial(SoftUnlitMatAmbient, SoftUnlitMatDiffuse, SoftUnlitMatSpecular, 32.0f, "SmileCubemat");
 		CubeMat->Textures.push_back(Txt);
-		this->CubeMsh = DEBUG_NEW Cube(1, 1, 1, WorldBlockMat);
+		this->CubeMsh = DEBUG_NEW Cube(1, 1, 1, CubeMat);
 		this->CubeMesh2 = DEBUG_NEW Cube(1, 1, 1, WorldBlockMat);
 		this->LoadingMode++;
 		TerraPGE::UpdateLoadingScreen();

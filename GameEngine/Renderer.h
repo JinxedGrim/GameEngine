@@ -356,17 +356,17 @@ namespace TerraPGE::Renderer
 	}
 
 
-	void DrawFpsCounter(WndCreator& Wnd, const float& Fps, const SIZE_T CurrMB)
+	void DrawFpsCounter(WndCreator& Wnd, const float& Fps, const SIZE_T CurrMB, double FrameTime, double CpuUsage)
 	{
 #ifdef UNICODE
 		// Draw FPS and some debug info
-		std::wstring Str = Core::FpsWStr + std::to_wstring(Fps) + L" Memory Usage: " + std::to_wstring(CurrMB) + L"/" + std::to_wstring(Core::MaxMemoryMB) + L" MB " + std::to_wstring(Core::GetUsedHeap()) + L"MB (Heap)" + (Core::DoMultiThreading ? L"(MultiThreaded)" : L"");
-		Wnd.SetWndTitle(Str);
+		std::wstring Str = Core::FpsWStr + std::to_wstring(Fps) + L" Cpu/Time: " + std::to_wstring(CpuUsage) + L"/" + std::to_wstring(FrameTime) + L" Memory Usage: " + std::to_wstring(CurrMB) + L"/" + std::to_wstring(Core::MaxMemoryMB) + L" MB " + std::to_wstring(Core::GetUsedHeap()) + L"MB (Heap)" + (Core::DoMultiThreading ? L"(MultiThreaded)" : L"");
+		//Wnd.SetWndTitle(Str);
 		Renderer::EngineGdi->DrawStringW(20, 20, Str, RGB(255, 0, 0), TRANSPARENT);
 #endif
 #ifndef UNICODE
 		std::string Str = FpsStr + std::to_string(Fps) + " Memory Usage: " + std::to_string(CurrMB) + "/" + std::to_string(Core::MaxMemoryMB) + " MB " + (DoMultiThreading ? "(MultiThreaded)" : "");;
-		Wnd.SetWndTitle(Str);
+		//Wnd.SetWndTitle(Str);
 		EngineGdi.DrawStringA(20, 20, Str, RGB(255, 0, 0), TRANSPARENT);
 #endif
 	}

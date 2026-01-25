@@ -48,12 +48,61 @@
 // X. Debug rays
 // X. 
 
-
-
-
-
 namespace TerraPGE
 {
+	class SceneManager
+	{
+		static SceneManager* Instance;
+
+		Scene* CurrScene = nullptr;
+		Renderable** RenderQueue = nullptr;
+		LightObject** LightsToRender = nullptr;
+
+		const std::vector<Renderable*>* SceneRenderQueue = nullptr;
+		const std::vector<LightObject*>* SceneLights = nullptr;
+		std::vector<Renderable*> Roots;
+
+		SceneManager(Scene* FirstScene)
+		{
+			CurrScene = FirstScene;
+		}
+
+		public:
+		static SceneManager* GetInstance()
+		{
+			if (Instance == nullptr)
+			{
+				return nullptr;
+			}
+
+			return Instance;
+		}
+
+		static SceneManager* Create(Scene* FirstScene)
+		{
+			return new SceneManager(FirstScene);
+		}
+
+		void UpdateScene(WndCreator& Wnd, double ElapsedTime)
+		{
+			CurrScene->ClearRenderQueue();
+			CurrScene->ClearLights();
+
+			Roots.clear();
+
+			// call draw code
+			CurrScene->RunTick(Renderer::EngineGdi, Wnd, (float)ElapsedTime);
+
+			SceneRenderQueue = CurrScene->GetObjects();
+			SceneLights = CurrScene->GetLights();
+
+			LightsToRender = DEBUG_NEW LightObject * [CurrScene->GetLights()->size()];
+			RenderQueue = DEBUG_NEW Renderable * [CurrScene->GetObjects()->size()];
+
+			Roots = CurrScene->GetRoots();
+		}
+	};
+
 	// Render function for rendering entire meshes
 	//Rendering Pipeline: Recieve call with mesh info including positions & lights sources -> Calc and apply matrices + normals -> backface culling	
 	// -> Clipping + Frustum culling -> Call Draw Triangle from graphics API with shader supplied -> Shader called from triangle routine with pixel info + normals -> SetPixel
@@ -67,6 +116,8 @@ namespace TerraPGE
 	double PhysicsTick = 1 / 30.0f;
 	bool DoPhysics = false;
 	bool ApplyGravity = true;
+
+
 
 	//template<typename T>
 	/*void RenderRenderable(GdiPP& Gdi, Camera& Cam, Renderable& R, LightObject LightSrc, T&& Shader, const int SHADER_TYPE = ShaderTypes::SHADER_FRAGMENT)
@@ -102,7 +153,7 @@ namespace TerraPGE
 
 		// Counters
 		MSG msg                   = { 0 };
-		double ElapsedTime        = 0.0f;
+		double ElapsedTime        = 0.0;
 		double physicsAccumulator = 0.0;
 		CurrScene = FirstScene;
 
@@ -113,25 +164,30 @@ namespace TerraPGE
 
 		std::vector<Renderable*> Roots;
 
+		SceneManager* _sceneManager = SceneManager::Create(CurrScene);
+
 		Wnd.RegisterRawInput();
 		Renderer::RenderingCore::PrepareRenderingBackend(Wnd);
 		Core::UpdateWindow(Wnd, &msg);
 		UpdateLoadingScreen();
 		CurrScene->BeginScene(Wnd);
 		
-		auto FrameStart      = std::chrono::system_clock::now();
-		auto LastPhysicsTime = std::chrono::system_clock::now();
+		auto FrameStart      = std::chrono::steady_clock::now();
+		auto LastPhysicsTime = std::chrono::steady_clock::now();
+		uint64_t CpuFrameStart = Core::GetCpuUsageInfo();
 
 		while (!Wnd.Input.IsKeyPressed(VK_RETURN))
 		{
 #ifdef _DEBUG
 			_CrtMemCheckpoint(&stateBefore);
 #endif
-			FrameStart = std::chrono::system_clock::now();
+			FrameStart = std::chrono::steady_clock::now();
+			CpuFrameStart = Core::GetCpuUsageInfo();
 
 			Core::UpdateWindow(Wnd, &msg);
 
 			Renderer::RenderingCore::ClearScreen();
+
 			CurrScene->ClearRenderQueue();
 			CurrScene->ClearLights();
 
@@ -163,7 +219,7 @@ namespace TerraPGE
 				RenderQueue[idx] = SceneRenderQueue->at(idx);
 			}
 
-			auto now = std::chrono::system_clock::now();
+			auto now = std::chrono::steady_clock::now();
 			double framePhysicsDelta = std::chrono::duration<double>(now - LastPhysicsTime).count();
 			LastPhysicsTime = now;
 
@@ -211,10 +267,10 @@ namespace TerraPGE
 			delete[] LightsToRender;
 			delete[] RenderQueue;
 
-
 			if (Core::FpsEngineCounter)
 			{
-				Renderer::DrawFpsCounter(Wnd, Fps, CurrMB);
+				uint64_t CpuFrameDelta = Core::GetCpuUsageInfo() - CpuFrameStart;
+				Renderer::DrawFpsCounter(Wnd, Fps, CurrMB, ElapsedTime, Core::CalculateCpuUsage(CpuFrameDelta * 1e-9, ElapsedTime, Core::CpuCores));
 			}
 
 			CurrScene->DrawSceneGUI(Renderer::EngineGdi);
@@ -224,7 +280,7 @@ namespace TerraPGE
 			//EngineGdi.DrawDoubleBuffer();
 
 			// Calc elapsed time
-			ElapsedTime = std::chrono::duration<double>(std::chrono::system_clock::now() - FrameStart).count();
+			ElapsedTime = std::chrono::duration<double>(std::chrono::steady_clock::now() - FrameStart).count();
 
 			if (Core::FpsEngineCounter)
 			{

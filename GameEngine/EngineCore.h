@@ -33,7 +33,7 @@
 #include "../../../Source/repos/GlLoader/GlLoader/GlLoader.h"
 #endif
 
-#define FLOAT_LOWEST_BIAS 0.0003
+#define FLOAT_LOWEST_BIAS 0.0005
 
 namespace TerraPGE::Core
 {
@@ -87,6 +87,26 @@ namespace TerraPGE::Core
 	void LogError(std::string CallerTag, std::string Message, int Level)
 	{
 		Core::Log("[W] (" + CallerTag + ") " + Message);
+	}
+
+
+	uint64_t GetCpuUsageInfo()
+	{
+		FILETIME creation, exit, kernel, user;
+		GetProcessTimes(GetCurrentProcess(), &creation, &exit, &kernel, &user);
+
+		ULARGE_INTEGER k, u;
+		k.LowPart = kernel.dwLowDateTime;
+		k.HighPart = kernel.dwHighDateTime;
+		u.LowPart = user.dwLowDateTime;
+		u.HighPart = user.dwHighDateTime;
+
+		return (k.QuadPart + u.QuadPart) * 100; // FILETIME = 100ns units
+	}
+
+	double CalculateCpuUsage(uint64_t cpuTimeDeltaNs, uint64_t wallTimeDeltaNs, int coreCount)
+	{
+		return (double)cpuTimeDeltaNs / (double)(wallTimeDeltaNs * coreCount) * 100.0;
 	}
 
 

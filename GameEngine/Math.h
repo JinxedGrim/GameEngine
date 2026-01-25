@@ -457,6 +457,11 @@ public:
 		this->A = this->A / 255.0f;
 	}
 
+	Color Normalized()
+	{
+		return Color(this->R / 255.0f, this->G / 255.0f, this->B / 255.0f);
+	}
+
 
 	Vec3 GetRGB() const
 	{
@@ -469,6 +474,11 @@ public:
 		this->G = this->G * 255.0f;
 		this->B = this->B * 255.0f;
 		this->A = this->A * 255.0f;
+	}
+
+	Color Denormalized()
+	{
+		return Color(this->R * 255.0f, this->G * 255.0f, this->B * 255.0f);
 	}
 
 	void TosRGB()
