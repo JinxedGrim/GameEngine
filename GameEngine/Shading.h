@@ -696,8 +696,9 @@ namespace TerraPGE
 				Color* FragColor = Args->FindShaderResourcePtr<Color*>(TPGE_SHDR_FRAG_COLOR);
 				bool IsInShadow = Args->FindShaderResourceValue<bool>(TPGE_SHDR_IS_IN_SHADOW);
 				float shadowMul = 1.0f - IsInShadow * (1.0f - 0.5f);
+				const Vec3* CamPos = Args->FindShaderResourcePtr<Vec3*>(TPGE_SHDR_CAMERA_POS);
 				TextureCoords* UVW = Args->FindShaderResourcePtr<TextureCoords*>(TPGE_SHDR_TEX_UVW);
-
+				FragNormal->Normalize();
 				Vec3 TexturCol = Vec3(1.0f, 1.0f, 1.0f);
 				Vec3 TexColor = Vec3(1.0f, 1.0f, 1.0f); // default white (no effect)
 				TexColor *= (Tri->Material->HasUsableTexture()) ? Tri->Material->Textures.at(0)->GetPixelColor(UVW->u, 1.0f - UVW->v).GetRGB() / 255.0f : Vec3(1.0f, 1.0f, 1.0f);
@@ -722,24 +723,21 @@ namespace TerraPGE
 					Light = Args->FindShaderResourcePtr<LightObject**>(TPGE_SHDR_LIGHT_OBJECTS)[i];
 
 					Vec3 LightDir = -Light->GetLightDirection().Normalized();
-					Vec3 ReflectedDir = (LightDir).GetReflectection(*FragNormal);
 
 					// Blinn specular math
-					Vec3 V = (*CamLookDir).Normalized();
+					Vec3 V = (*CamPos - *FragPos).Normalized();
 					Vec3 H = (LightDir + V).Normalized();
 					float Hdot = FragNormal->Dot(H);
 
 					float Li = FragNormal->Dot(LightDir); // Light intensity
 					float Intensity = std::max<float>(0.0f, Li);
-					float SpecularIntensity = pow(std::max(0.0f, Hdot), 32);
+					float SpecularIntensity = pow(std::max(0.0f, Hdot), Mat->Shininess);
 
 
 					Vec3 AmbientCol = (Mat->AmbientColor / 255.0f) * Light->AmbientCoeff;
 					Vec3 DiffuseCol = ((((Light->Color / 255.0f) * Light->DiffuseCoeff) * BaseDiffuse) * Intensity);
 					Vec3 SpecularClr = ((((Light->Color / 255.0f) * Light->SpecularCoeff) * (Mat->SpecularColor / 255.0f)) * SpecularIntensity);
 				
-					//Vec3 SpecularClr = Vec3(1.0f, 0.0f, 0.0f) * SpecularIntensity;
-
 					FinalColor += AmbientCol + ((DiffuseCol + SpecularClr) * shadowMul);
 
 					// for point light

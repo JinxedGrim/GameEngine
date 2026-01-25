@@ -12,7 +12,6 @@
 
 //     TO DO 
 // X. Fix some minor inyerpolation issues (rasterizer / clipping)
-// X. Fix Specular highlights
 // X. Redesign multithreading
 // X. implement a prefab system
 // X. Fix physics ray cast for ground detection (is mesh local space needs to be world)
