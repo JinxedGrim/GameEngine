@@ -31,7 +31,6 @@
 // X. Probably migrate to unicode
 // X. Add cvars
 // X. LOD support
-// X. Add cpu metrics
 // X. Texture streaming
 // X. Seed based generation
 // X. Normal debug

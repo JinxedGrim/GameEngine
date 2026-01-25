@@ -47,10 +47,11 @@ namespace TerraPGE::Core
 	float FNEAR = 0.1f;
 	float FFAR = 100.0f;
 
+	// move all to TPGE
 	bool FpsEngineCounter = true;
 	bool DoMultiThreading = false;
-	bool ShowNormals = false;
-	bool NormalMapping = false;
+	bool SimdAcceleration = false;
+	bool GpuAcceleration = false;
 
 	int CpuCores = 0;
 	int GPUDevCount = 0;
@@ -61,17 +62,25 @@ namespace TerraPGE::Core
 #ifdef SSE_SIMD_42_SUPPORT
 	CPUID CpuId(1);
 	SupportedInstructions SimdInfo = { 0 };
+#else
+	CPUID CpuId(1);
+	SupportedInstructions SimdInfo = { 0 };
 #endif
 
+	// move to TPGE keep all and add a switch for updating keyboard input (allow user to disable all input)
 	bool UpdateMouseIn = true;
 	bool LockCursor = true;
 	bool CursorShow = false;
 
+	// move to lighting obj
 	int ShadowMapHeight = 1024;
 	int ShadowMapWidth = 1024;
 
+	// move to renderer
 	float* DepthBuffer = DEBUG_NEW float[sx * sy];
 	float* FrameBuffer = DEBUG_NEW float[sx * sy * 3];
+
+	// move out and into ligting objects
 	float* ShadowMap = DEBUG_NEW float[ShadowMapWidth * ShadowMapHeight];
 
 	void Log(std::string Message)
@@ -128,19 +137,41 @@ namespace TerraPGE::Core
 		return memState.lTotalCount / 1024 / 1024;
 	}
 
+	std::wstring GetDevList()
+	{
+		std::wstring out = L"";
+		for (const std::wstring& str : TerraPGE::Core::GPUDevNames)
+		{
+			out += str;
+			out += +L", ";
+		}
+
+		return out;
+	}
+
+	void GetCpuInfo()
+	{
+		SYSTEM_INFO SysInf;
+
+		SimdInfo = CpuId.GetSupportedInstructions();
+		CpuId.LogCpuInfo();
+
+		GetSystemInfo(&SysInf);
+		TerraPGE::Core::CpuCores = SysInf.dwNumberOfProcessors;
+
+		std::cout << "Cores: " << TerraPGE::Core::CpuCores << std::endl;
+	}
 
 	void UpdateSystemInfo()
 	{
-		SYSTEM_INFO SysInf;
+		GetCpuInfo();
+
 		MEMORYSTATUSEX MemInf;
 		DISPLAY_DEVICE DispDev;
 
 		DispDev.cb = sizeof(DispDev);
 		MemInf.dwLength = sizeof(MEMORYSTATUSEX);
 		int DevIdx = 0;
-
-		GetSystemInfo(&SysInf);
-		TerraPGE::Core::CpuCores = SysInf.dwNumberOfProcessors;
 
 		if (GlobalMemoryStatusEx(&MemInf))
 			TerraPGE::Core::MaxMemoryMB = (MemInf.ullTotalPhys / 1024 / 1024);

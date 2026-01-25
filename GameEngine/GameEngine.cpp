@@ -620,6 +620,10 @@ class ExampleScene : public TerraPGE::Scene
 			static std::string CamWorldRotXstr = " World: ( Pitch: ";
 			
 			static std::string EngineMenu =         "    (TAB) Engine Settings";
+			static std::string CpuStr     =         "    CPU: ";
+			static std::wstring GpuStr     =         L"    GPU: ";
+			static std::string SIMDStr    =         "    SIMD Support : ";
+
 			static std::string MultiThreadingStr =  "    (F2)  MultiThreading: ";
 			static std::string PhysicsEngineStr =   "    (F3)  PhysicsEnabled: ";
 
@@ -651,8 +655,11 @@ class ExampleScene : public TerraPGE::Scene
 			{
 				Gdi->DrawStringA(20, 40, MenuStr, RGB(255, 0, 0), TRANSPARENT);
 				Gdi->DrawStringA(20, 60, EngineMenu, RGB(255, 0, 0), TRANSPARENT);
-				Gdi->DrawStringA(20, 80, MultiThreadingStr + std::to_string(TerraPGE::Core::DoMultiThreading), RGB(255, 0, 0), TRANSPARENT);
-				Gdi->DrawStringA(20, 100, PhysicsEngineStr + std::to_string(TerraPGE::DoPhysics), RGB(255, 0, 0), TRANSPARENT);
+				Gdi->DrawStringA(20, 80, CpuStr + std::to_string(TerraPGE::Core::CpuCores), RGB(255, 0, 0), TRANSPARENT);
+				Gdi->DrawStringA(20, 100, SIMDStr + TerraPGE::Core::SimdInfo.GetSupportString(), RGB(255, 0, 0), TRANSPARENT);
+				Gdi->DrawStringW(20, 120, GpuStr + TerraPGE::Core::GetDevList(), RGB(255, 0, 0), TRANSPARENT);
+				Gdi->DrawStringA(20, 140, MultiThreadingStr + std::to_string(TerraPGE::Core::DoMultiThreading), RGB(255, 0, 0), TRANSPARENT);
+				Gdi->DrawStringA(20, 160, PhysicsEngineStr + std::to_string(TerraPGE::DoPhysics), RGB(255, 0, 0), TRANSPARENT);
 
 			}
 			else if (DebugMenuTab == 2)
