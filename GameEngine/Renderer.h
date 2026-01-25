@@ -164,7 +164,7 @@ namespace TerraPGE::Renderer
 			out.ApplyMatrix(Model);
 
 			for (int i = 0; i < 3; ++i)
-				out.WorldSpaceVerts[i] = out.Points[i];
+				out.WorldSpaceVerts.Points[i] = out.Points.Points[i];
 
 			return out;
 		}
@@ -175,11 +175,6 @@ namespace TerraPGE::Renderer
 			// 3d Space -> Viewed Space
 			Triangle Result = *Tri;
 			Result.ApplyMatrix(Cam->GetViewMatrix());
-
-			for (int i = 0; i < 3; i++)
-			{
-				Result.ViewSpaceVerts[i] = Result.Points[i];
-			}
 
 			return Result;
 		}
@@ -203,9 +198,9 @@ namespace TerraPGE::Renderer
 				TriNormal = Tri.FaceNormal;
 				if (Object->mesh->Normals.size() == 0)
 				{
-					NormPos = ((Tri.Points[0] + Tri.Points[1] + Tri.Points[2]) / 3.0f);
-					NormDir = (Tri.Points[1] - Tri.Points[0]).GetVec3().CrossNormalized((Tri.Points[2] - Tri.Points[0])).Normalized();
-					TriNormal = -(WorldSpaceTri.Points[1] - WorldSpaceTri.Points[0]).GetVec3().CrossNormalized((WorldSpaceTri.Points[2] - WorldSpaceTri.Points[0])).Normalized(); // this line and the if statement is used for culling
+					NormPos = ((Tri.Points.Points[0] + Tri.Points.Points[1] + Tri.Points.Points[2]) / 3.0f);
+					NormDir = (Tri.Points.Points[1] - Tri.Points.Points[0]).GetVec3().CrossNormalized((Tri.Points.Points[2] - Tri.Points.Points[0])).Normalized();
+					TriNormal = -(WorldSpaceTri.Points.Points[1] - WorldSpaceTri.Points.Points[0]).GetVec3().CrossNormalized((WorldSpaceTri.Points.Points[2] - WorldSpaceTri.Points.Points[0])).Normalized(); // this line and the if statement is used for culling
 
 					for (int i = 0; i < 3; i++)
 					{
@@ -213,9 +208,9 @@ namespace TerraPGE::Renderer
 					}
 
 					WorldSpaceTri.NormalPositions[0] = NormPos;
-					WorldSpaceTri.NormalPositions[1] = Tri.Points[0];
-					WorldSpaceTri.NormalPositions[2] = Tri.Points[1];
-					WorldSpaceTri.NormalPositions[3] = Tri.Points[2];
+					WorldSpaceTri.NormalPositions[1] = Tri.Points.Points[0];
+					WorldSpaceTri.NormalPositions[2] = Tri.Points.Points[1];
+					WorldSpaceTri.NormalPositions[3] = Tri.Points.Points[2];
 					WorldSpaceTri.NormDirections[0] = NormDir;
 				}
 				else
@@ -230,17 +225,12 @@ namespace TerraPGE::Renderer
 					NormPos = WorldSpaceTri.NormalPositions[0];
 				}
 
-				if (!RenderingUtils::ShouldCulltriangle(WorldSpaceTri.Points[0], TriNormal, Cam->GetWorldPosition()) || !DoCull) // backface culling
+				if (!RenderingUtils::ShouldCulltriangle(WorldSpaceTri.Points.Points[0], TriNormal, Cam->GetWorldPosition()) || !DoCull) // backface culling
 				{
 					WorldSpaceTri.FaceNormal = TriNormal;
 					Triangle ViewSpaceTri = RenderingUtils::ProjectToViewSpace(&WorldSpaceTri, Cam);
 
 					ViewSpaceTri.ApplyMatrix(Cam->GetProjectionMatrix());
-
-					for (int p = 0; p < 3; p++)
-					{
-						ViewSpaceTri.ViewSpaceVerts[p] = ViewSpaceTri.Points[p];
-					}
 
 					ClipSpaceTris.push_back(ViewSpaceTri);
 				}
@@ -460,7 +450,7 @@ namespace TerraPGE::Renderer
 
 				for (int i = 0; i < 3; i++)
 				{
-					Proj.WorldSpaceVerts[i] = Proj.Points[i];
+					Proj.WorldSpaceVerts.Points[i] = Proj.Points.Points[i];
 				}
 
 				if (Renderer::DoShadows && HasLight)

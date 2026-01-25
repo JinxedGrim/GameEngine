@@ -11,11 +11,12 @@
 // Direct2D and DirectWrite are justified the same way
 
 //     TO DO 
-// X. Fix some minor inyerpolation issues (rasterizer / clipping)
+// X. Fix texture interpolation in clipper 
 // X. Redesign multithreading
 // X. implement a prefab system
 // X. Fix physics ray cast for ground detection (is mesh local space needs to be world)
 // X. Bloom
+// X. Skybox sun sampling (color/intensity/exposure/etc)
 // X. Caclulate Vertex norms for all 3 vertices and store them
 // X. Better reosource management
 // X. Fix camera PointAt

@@ -580,9 +580,9 @@ namespace TerraPGE
 
 				Light = *Args->FindShaderResourcePtr<LightObject**>(TPGE_SHDR_LIGHT_OBJECTS);
 
-				Vec3 Centroid = ((Tri->Points[0] + Tri->Points[1] + Tri->Points[2]) / 3.0f);
-				Vec3 BaryCoords = CalculateBarycentricCoordinatesScreenSpace(*PixelCoords, Vec2(Centroid.x, Centroid.y), Vec2(Tri->Points[1].x, Tri->Points[1].y), Vec2(Tri->Points[2].x, Tri->Points[2].y));
-				Vec3 BaryCoords2 = CalculateBarycentricCoordinatesScreenSpace(*PixelCoords, Vec2(Tri->Points[0].x, Tri->Points[0].y), Vec2(Tri->Points[1].x, Tri->Points[1].y), Vec2(Centroid.x, Centroid.y));
+				Vec3 Centroid = ((Tri->Points.Points[0] + Tri->Points.Points[1] + Tri->Points.Points[2]) / 3.0f);
+				Vec3 BaryCoords = CalculateBarycentricCoordinatesScreenSpace(*PixelCoords, Vec2(Centroid.x, Centroid.y), Vec2(Tri->Points.Points[1].x, Tri->Points.Points[1].y), Vec2(Tri->Points.Points[2].x, Tri->Points.Points[2].y));
+				Vec3 BaryCoords2 = CalculateBarycentricCoordinatesScreenSpace(*PixelCoords, Vec2(Tri->Points.Points[0].x, Tri->Points.Points[0].y), Vec2(Tri->Points.Points[1].x, Tri->Points.Points[1].y), Vec2(Centroid.x, Centroid.y));
 
 				float Intensity = 1.0f;
 				Vec3 LDir = (Light->Transform.GetLocalPosition() - *FragPos).Normalized();
@@ -612,7 +612,7 @@ namespace TerraPGE
 
 				Light = *Args->FindShaderResourcePtr<LightObject**>(TPGE_SHDR_LIGHT_OBJECTS);
 
-				Vec3 LDir = (Light->Transform.GetLocalPosition() - ((Tri->Points[0] + Tri->Points[1] + Tri->Points[2]) / 3.0f)).Normalized();
+				Vec3 LDir = (Light->Transform.GetLocalPosition() - ((Tri->Points.Points[0] + Tri->Points.Points[1] + Tri->Points.Points[2]) / 3.0f)).Normalized();
 
 				float Li = std::max<float>(0.0f, Tri->FaceNormal.Dot(LDir));
 
@@ -637,7 +637,7 @@ namespace TerraPGE
 
 				Light = *Args->FindShaderResourcePtr<LightObject**>(TPGE_SHDR_LIGHT_OBJECTS);
 
-				Vec3 LDir = (Light->Transform.GetLocalPosition() - ((Tri->Points[0] + Tri->Points[1] + Tri->Points[2]) / 3.0f)).Normalized();
+				Vec3 LDir = (Light->Transform.GetLocalPosition() - ((Tri->Points.Points[0] + Tri->Points.Points[1] + Tri->Points.Points[2]) / 3.0f)).Normalized();
 
 				float Li = std::max<float>(0.0f, Tri->FaceNormal.Dot(LDir));
 
@@ -666,7 +666,7 @@ namespace TerraPGE
 				Light = *Args->FindShaderResourcePtr<LightObject**>(TPGE_SHDR_LIGHT_OBJECTS);
 
 				float Intensity = 1.0f;
-				Vec3 LDir = (Light->Transform.GetLocalPosition() - ((Tri->Points[0] + Tri->Points[1] + Tri->Points[2]) / 3.0f)).Normalized();
+				Vec3 LDir = (Light->Transform.GetLocalPosition() - ((Tri->Points.Points[0] + Tri->Points.Points[1] + Tri->Points.Points[2]) / 3.0f)).Normalized();
 				float Li = Tri->FaceNormal.Dot(LDir);
 
 				Intensity = std::max<float>(0.0f, Li);
@@ -725,23 +725,38 @@ namespace TerraPGE
 					Vec3 LightDir = -Light->GetLightDirection().Normalized();
 
 					// Blinn specular math
+					//https://en.wikipedia.org/wiki/Blinn–Phong_reflection_model
 					Vec3 V = (*CamPos - *FragPos).Normalized();
 					Vec3 H = (LightDir + V).Normalized();
 					float Hdot = FragNormal->Dot(H);
+					float AO = 0.7f + 0.3f * FragNormal->y;
+
+					// Fresnel effect
+					// with schlick approximation
+					//https://en.wikipedia.org/wiki/Fresnel_equations
+					//https://en.wikipedia.org/wiki/Schlick%27s_approximation
+					float NdotV = std::max(0.0f, FragNormal->Dot(V));
+					Vec3 F0 = Mat->SpecularColor / 255.0f; // or ~0.04 for non-metals
+					Vec3 Fresnel = F0 + (Vec3(1.0f, 1.0f, 1.0f) - F0) * pow(1.0f - NdotV, 5.0f); // Schlick
 
 					float Li = FragNormal->Dot(LightDir); // Light intensity
 					float Intensity = std::max<float>(0.0f, Li);
 					float SpecularIntensity = pow(std::max(0.0f, Hdot), Mat->Shininess);
 
-
-					Vec3 AmbientCol = (Mat->AmbientColor / 255.0f) * Light->AmbientCoeff;
+					// Standard phong:
+					//https://en.wikipedia.org/wiki/Phong_reflection_model
+					Vec3 AmbientCol = (Mat->AmbientColor / 255.0f) * Light->AmbientCoeff * AO;
 					Vec3 DiffuseCol = ((((Light->Color / 255.0f) * Light->DiffuseCoeff) * BaseDiffuse) * Intensity);
 					Vec3 SpecularClr = ((((Light->Color / 255.0f) * Light->SpecularCoeff) * (Mat->SpecularColor / 255.0f)) * SpecularIntensity);
-				
+
+					DiffuseCol *= (Vec3(1.0f, 1.0f, 1.0f) - Fresnel);
+					SpecularClr *= Fresnel;
+
 					FinalColor += AmbientCol + ((DiffuseCol + SpecularClr) * shadowMul);
 
 					// for point light
-					//Vec3 LDir = Light->Transform.GetLocalPosition().GetDirectionToVector(*FragPos);
+					//Vec3 LDir = Light->Transform.Ge
+					//LocalPosition().GetDirectionToVector(*FragPos);
 				}
 
 				FinalColor = FinalColor;

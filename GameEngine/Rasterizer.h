@@ -156,17 +156,17 @@ namespace TerraPGE::Renderer
 		BaryCoords Interp;
 
 		// Screen Space
-		Vec4 v0 = ScreenSpaceTri->Points[0];
-		Vec4 v1 = ScreenSpaceTri->Points[1];
-		Vec4 v2 = ScreenSpaceTri->Points[2];
+		Vec4 v0 = ScreenSpaceTri->Points.Points[0];
+		Vec4 v1 = ScreenSpaceTri->Points.Points[1];
+		Vec4 v2 = ScreenSpaceTri->Points.Points[2];
 
 		// Extract per-vertex attributes
 		Vec3 uvw0 = ScreenSpaceTri->TexCoords[0].AsVec3(), uvw1 = ScreenSpaceTri->TexCoords[1].AsVec3(), uvw2 = ScreenSpaceTri->TexCoords[2].AsVec3();
 		Vec3 n0 = ScreenSpaceTri->FaceNormal, n1 = ScreenSpaceTri->FaceNormal, n2 = ScreenSpaceTri->FaceNormal;
 
-		Vec4 world0 = ScreenSpaceTri->WorldSpaceVerts[0];
-		Vec4 world1 = ScreenSpaceTri->WorldSpaceVerts[1];
-		Vec4 world2 = ScreenSpaceTri->WorldSpaceVerts[2];
+		Vec4 world0 = ScreenSpaceTri->WorldSpaceVerts.Points[0];
+		Vec4 world1 = ScreenSpaceTri->WorldSpaceVerts.Points[1];
+		Vec4 world2 = ScreenSpaceTri->WorldSpaceVerts.Points[2];
 		
 		const float v1y_Sub_v2y = v1.y - v2.y;
 		const float v2y_Sub_v0y = v2.y - v0.y;
@@ -384,18 +384,18 @@ namespace TerraPGE::Renderer
 	// input tri is clip space
 	void __fastcall BaryCentricRasterizerDepth(Triangle* ClipSpaceTri, float* Buffer, const SIZE_T BufferWidth, const SIZE_T BufferHeight)
 	{
-		float z0 = ClipSpaceTri->Points[0].z;
-		float z1 = ClipSpaceTri->Points[1].z;
-		float z2 = ClipSpaceTri->Points[2].z;
+		float z0 = ClipSpaceTri->Points.Points[0].z;
+		float z1 = ClipSpaceTri->Points.Points[1].z;
+		float z2 = ClipSpaceTri->Points.Points[2].z;
 
 		ClipSpaceTri->ApplyPerspectiveDivide();
 		ClipSpaceTri->Scale(Vec3((float)((BufferWidth - 1) * 0.5f), (float)((BufferHeight - 1) * 0.5f), 1.0f));
 		ClipSpaceTri->Translate(Vec3((float)((BufferWidth - 1) * 0.5f), (float)((BufferHeight - 1) * 0.5f), 0.0f));
 
 		// Screen Space
-		Vec4 v0 = ClipSpaceTri->Points[0];
-		Vec4 v1 = ClipSpaceTri->Points[1];
-		Vec4 v2 = ClipSpaceTri->Points[2];
+		Vec4 v0 = ClipSpaceTri->Points.Points[0];
+		Vec4 v1 = ClipSpaceTri->Points.Points[1];
+		Vec4 v2 = ClipSpaceTri->Points.Points[2];
 
 		const float v1y_Sub_v2y = v1.y - v2.y;
 		const float v2y_Sub_v0y = v2.y - v0.y;

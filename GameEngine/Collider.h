@@ -196,7 +196,7 @@ public:
         {
             for (int i = 0; i < 3; i++)
             {
-                const Vec3 v = tri.Points[i];
+                const Vec3 v = tri.Points.Points[i];
                 minP.x = std::min(minP.x, v.x);
                 minP.y = std::min(minP.y, v.y);
                 minP.z = std::min(minP.z, v.z);
@@ -222,7 +222,7 @@ public:
         for (const auto& tri : triangles)
             for (int i = 0; i < 3; i++)
             {
-                centroid += tri.Points[i];
+                centroid += tri.Points.Points[i];
                 count++;
             }
         centroid = centroid / static_cast<float>(count);
@@ -230,7 +230,7 @@ public:
         float radius = 0.0f;
         for (const auto& tri : triangles)
             for (int i = 0; i < 3; i++)
-                radius = std::max(radius, (tri.Points[i] - centroid).xyz().Magnitude());
+                radius = std::max(radius, (tri.Points.Points[i] - centroid).xyz().Magnitude());
 
         SphereColliderParams result;
         result.Offset = centroid;

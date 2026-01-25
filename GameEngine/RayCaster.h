@@ -213,9 +213,9 @@ bool RaycastMesh(const Ray& ray, const std::vector<Triangle>& triangles, Raycast
 
 	for (const Triangle& tri : triangles)
 	{
-		Vec3 v0 = tri.Points[0] * *ModelMatrix;
-		Vec3 v1 = tri.Points[1] * *ModelMatrix;
-		Vec3 v2 = tri.Points[2] * *ModelMatrix;
+		Vec3 v0 = tri.Points.Points[0] * *ModelMatrix;
+		Vec3 v1 = tri.Points.Points[1] * *ModelMatrix;
+		Vec3 v2 = tri.Points.Points[2] * *ModelMatrix;
 		if (RayIntersectsTriangle(ray, v0, v1, v2, &temp))
 		{
 			if (temp.distance < closest)
@@ -239,9 +239,9 @@ bool RaycastMesh(const Ray& ray, const std::vector<Triangle>& triangles, Raycast
 
 	for (const Triangle& tri : triangles)
 	{
-		Vec3 v0 = tri.Points[0];
-		Vec3 v1 = tri.Points[1];
-		Vec3 v2 = tri.Points[2];
+		Vec3 v0 = tri.Points.Points[0];
+		Vec3 v1 = tri.Points.Points[1];
+		Vec3 v2 = tri.Points.Points[2];
 		if (RayIntersectsTriangle(ray, v0, v1, v2, &temp))
 		{
 			if (temp.distance < closest)
