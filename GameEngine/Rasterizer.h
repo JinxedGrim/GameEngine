@@ -259,21 +259,21 @@ namespace TerraPGE::Renderer
 						// 3. Divide by W, map to shadow map
 						Vec3 ShadowUV;
 
-						ShadowUV.x = LightClip.x / LightClip.w;
-						ShadowUV.y = LightClip.y / LightClip.w;
-						ShadowUV.z = LightClip.z / LightClip.w;
+						float invW = 1.0f / LightClip.w;
 
-						if (false)
-						{
-							TerraPGE::Core::SetPixelFrameBuffer(x, y, ShadowUV.x, ShadowUV.y, ShadowUV.z);
-							continue;
-						}
+						ShadowUV.x = LightClip.x * invW;
+						ShadowUV.y = LightClip.y * invW;
+						ShadowUV.z = LightClip.z * invW;
 
-						ShadowUV *= Vec3((float)((Core::ShadowMapWidth - 1) * 0.5f), (float)((Core::ShadowMapHeight - 1) * 0.5f), 1.0f);
-						ShadowUV += Vec3((float)((Core::ShadowMapWidth - 1) * 0.5f), (float)((Core::ShadowMapHeight - 1) * 0.5f), 0.0f);
+						// NDC x,y -> [-1,1] -> [0,1]
+						ShadowUV.x = ShadowUV.x * 0.5f + 0.5f;
+						ShadowUV.y = ShadowUV.y * 0.5f + 0.5f; // flip Y
+
+						int ShadowX = int(ShadowUV.x * Core::ShadowMapWidth);
+						int ShadowY = int(ShadowUV.y * Core::ShadowMapHeight);
 
 						// 5. Sample shadow map
-						int MapIdx = ContIdx((int)ShadowUV.x, (int)ShadowUV.y, Core::ShadowMapWidth);
+						int MapIdx = ContIdx(ShadowX, ShadowY, Core::ShadowMapWidth);
 
 						// TODO BAD INTERP
 						ShadowMapDepth = Core::ShadowMap[MapIdx] + ShadowMapBias;
@@ -438,7 +438,7 @@ namespace TerraPGE::Renderer
 				// this is correct for non ortho projection TODO make a switch for this in my main renderer and here 
 				float Depth = Interp.PerspectiveCorrectInterpolate(v0.z, v1.z, v2.z, v0.w, v1.w, v2.w);
 
-				if (Depth > 1.0f || Depth < 0.0f)
+				if (Depth < 0.0f)
 					continue;
 
 				int idx = ContIdx(x, y, BufferWidth);

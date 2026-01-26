@@ -502,13 +502,14 @@ namespace TerraPGE::Renderer
 
 		const Matrix& Proj = Cam->GetProjectionMatrix();
 		const Matrix3x3 CamRot = Cam->GetRotationMatrix(); // rotation only
+		const float Fov = Cam->GetFov();
 
 		for (int y = 0; y < H; ++y)
 		{
 			for (int x = 0; x < W; ++x)
 			{
 				// skyboox render
-				Color skyColor = sky->Render(x, y, W, H, CamRot);
+				Color skyColor = sky->Render(x, y, W, H, Fov, CamRot);
 
 				// 5. Write color
 				Core::SetPixelFrameBuffer(x, y, skyColor.R, skyColor.G, skyColor.B);
@@ -640,13 +641,13 @@ namespace TerraPGE::Renderer
 		}
 
 
-		void RenderSkyboxByChunk(EnvironmentRenderable* sky, Camera* Cam, uint64_t y0, uint64_t y1, uint64_t width, uint64_t height, const Matrix& Proj, const Matrix3x3& CamRot)
+		void RenderSkyboxByChunk(EnvironmentRenderable* sky, const Camera* Cam, const uint64_t y0, const uint64_t y1, const uint64_t width, const uint64_t height, const float& Fov, const Matrix& Proj, const Matrix3x3& CamRot)
 		{
 			for (uint64_t y = y0; y < y1; ++y)
 			{
 				for (uint64_t x = 0; x < width; ++x)
 				{
-					Color skyColor = sky->Render(x, y, width, height, CamRot);
+					Color skyColor = sky->Render(x, y, width, height, Fov, CamRot);
 
 					Core::SetPixelFrameBuffer(x, y, skyColor.R, skyColor.G, skyColor.B);
 				}
@@ -665,15 +666,16 @@ namespace TerraPGE::Renderer
 			const uint64_t Height = Core::sy;
 
 			const uint64_t ChunkSz = std::max<uint64_t>(1, Height / Core::CpuCores);
+			const float Fov = Cam->GetFov();
 
 			for (uint64_t y = 0; y < Height; y += ChunkSz)
 			{
 				uint64_t y0 = y;
 				uint64_t y1 = std::min(y + ChunkSz, Height);
 
-				Core::ThreadPool.EnqueueTask([sky, Cam, y0, y1, Width, Height, &Proj, &CamRot]()
+				Core::ThreadPool.EnqueueTask([sky, Cam, y0, y1, Width, Height, &Fov, &Proj, &CamRot]()
 					{
-						RenderSkyboxByChunk(sky, Cam, y0, y1, Width, Height, Proj, CamRot);
+						RenderSkyboxByChunk(sky, Cam, y0, y1, Width, Height, Fov, Proj, CamRot);
 					});
 			}
 

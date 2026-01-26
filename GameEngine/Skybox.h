@@ -100,13 +100,12 @@ public:
 	}
 
 	// replace with shader call TODO
-	virtual Color Render(int x, int y, int width, int height, const Matrix3x3& CamRot) override
+	virtual Color Render(const int x, const int y, const int width, const int height, const float& Fov, const Matrix3x3& CamRot) override
 	{
-		float fovY = Cam->GetFov(); // vertical FOV in radians
 		float aspect = (float)width / height;
 
-		float px = (2.0f * (x + 0.5f) / width - 1.0f) * tan(fovY * 0.5f) * aspect;
-		float py = (1.0f - 2.0f * (y + 0.5f) / height) * tan(fovY * 0.5f);
+		float px = (2.0f * (x + 0.5f) / width - 1.0f) * tan(Fov * 0.5f) * aspect;
+		float py = (1.0f - 2.0f * (y + 0.5f) / height) * tan(Fov * 0.5f);
 
 		Vec3 viewDir = Vec3(px, py, 1.0f).Normalized();
 
