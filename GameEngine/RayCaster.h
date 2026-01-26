@@ -1,7 +1,6 @@
 #pragma once
 #include "Math.h"
-#include "Collider.h"
-#include "Mesh.h"
+#include "GameObject.h"
 
 
 struct Ray
@@ -205,6 +204,32 @@ bool RayIntersectsCapsule(const Ray& ray, const Vec3& p0, const Vec3& p1, float 
 }
 
 
+bool RaycastMesh(const Ray& ray, const std::vector<Triangle>& triangles, RaycastHit* outHit, Matrix* ModelMatrix)
+{
+	bool foundHit = false;
+	float closest = FLT_MAX;
+
+	RaycastHit temp;
+
+	for (const Triangle& tri : triangles)
+	{
+		Vec3 v0 = tri.Points.Points[0] * *ModelMatrix;
+		Vec3 v1 = tri.Points.Points[1] * *ModelMatrix;
+		Vec3 v2 = tri.Points.Points[2] * *ModelMatrix;
+		if (RayIntersectsTriangle(ray, v0, v1, v2, &temp))
+		{
+			if (temp.distance < closest)
+			{
+				closest = temp.distance;
+				*outHit = temp;
+				foundHit = true;
+			}
+		}
+	}
+
+	return foundHit;
+}
+
 bool RaycastMesh(const Ray& ray, const std::vector<Triangle>& triangles, RaycastHit* outHit)
 {
 	bool foundHit = false;
@@ -214,7 +239,10 @@ bool RaycastMesh(const Ray& ray, const std::vector<Triangle>& triangles, Raycast
 
 	for (const Triangle& tri : triangles)
 	{
-		if (RayIntersectsTriangle(ray, tri.Points[0], tri.Points[1], tri.Points[2], &temp))
+		Vec3 v0 = tri.Points.Points[0];
+		Vec3 v1 = tri.Points.Points[1];
+		Vec3 v2 = tri.Points.Points[2];
+		if (RayIntersectsTriangle(ray, v0, v1, v2, &temp))
 		{
 			if (temp.distance < closest)
 			{

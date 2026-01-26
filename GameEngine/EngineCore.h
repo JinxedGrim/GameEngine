@@ -33,7 +33,7 @@
 #include "../../../Source/repos/GlLoader/GlLoader/GlLoader.h"
 #endif
 
-#define FLOAT_LOWEST 0.0000001f
+#define FLOAT_LOWEST_BIAS 0.0005
 
 namespace TerraPGE::Core
 {
@@ -45,18 +45,13 @@ namespace TerraPGE::Core
 
 	float FOV = 90.0f;
 	float FNEAR = 0.1f;
-	float FFAR = 150.0f;
+	float FFAR = 100.0f;
 
+	// move all to TPGE
 	bool FpsEngineCounter = true;
-	bool DoMultiThreading = false;
-	bool DoCull = true;
-	bool DoLighting = true;
-	bool WireFrame = false;
-	bool ShowTriLines = false;
-	bool DebugClip = false;
-	bool DoShadows = true;
-	bool ShowNormals = false;
-	bool NormalMapping = false;
+	bool DoMultiThreading = true;
+	bool SimdAcceleration = false;
+	bool GpuAcceleration = false;
 
 	int CpuCores = 0;
 	int GPUDevCount = 0;
@@ -67,17 +62,61 @@ namespace TerraPGE::Core
 #ifdef SSE_SIMD_42_SUPPORT
 	CPUID CpuId(1);
 	SupportedInstructions SimdInfo = { 0 };
+#else
+	CPUID CpuId(1);
+	SupportedInstructions SimdInfo = { 0 };
 #endif
 
+	// move to TPGE keep all and add a switch for updating keyboard input (allow user to disable all input)
 	bool UpdateMouseIn = true;
 	bool LockCursor = true;
 	bool CursorShow = false;
 
+	// move to lighting obj
 	int ShadowMapHeight = 1024;
 	int ShadowMapWidth = 1024;
 
+	// move to renderer
 	float* DepthBuffer = DEBUG_NEW float[sx * sy];
+	float* FrameBuffer = DEBUG_NEW float[sx * sy * 3];
+
+	// move out and into ligting objects
 	float* ShadowMap = DEBUG_NEW float[ShadowMapWidth * ShadowMapHeight];
+
+	void Log(std::string Message)
+	{
+		std::cout << Message << std::endl;
+	}
+
+	void LogInfo(std::string CallerTag, std::string Message)
+	{
+		Core::Log("[I] (" + CallerTag + ") " + Message);
+	}
+
+	void LogError(std::string CallerTag, std::string Message, int Level)
+	{
+		Core::Log("[W] (" + CallerTag + ") " + Message);
+	}
+
+
+	uint64_t GetCpuUsageInfo()
+	{
+		FILETIME creation, exit, kernel, user;
+		GetProcessTimes(GetCurrentProcess(), &creation, &exit, &kernel, &user);
+
+		ULARGE_INTEGER k, u;
+		k.LowPart = kernel.dwLowDateTime;
+		k.HighPart = kernel.dwHighDateTime;
+		u.LowPart = user.dwLowDateTime;
+		u.HighPart = user.dwHighDateTime;
+
+		return (k.QuadPart + u.QuadPart) * 100; // FILETIME = 100ns units
+	}
+
+	double CalculateCpuUsage(uint64_t cpuTimeDeltaNs, uint64_t wallTimeDeltaNs, int coreCount)
+	{
+		return (double)cpuTimeDeltaNs / (double)(wallTimeDeltaNs * coreCount) * 100.0;
+	}
 
 
 	SIZE_T GetUsedMemory()
@@ -98,19 +137,41 @@ namespace TerraPGE::Core
 		return memState.lTotalCount / 1024 / 1024;
 	}
 
+	std::wstring GetDevList()
+	{
+		std::wstring out = L"";
+		for (const std::wstring& str : TerraPGE::Core::GPUDevNames)
+		{
+			out += str;
+			out += +L", ";
+		}
+
+		return out;
+	}
+
+	void GetCpuInfo()
+	{
+		SYSTEM_INFO SysInf;
+
+		SimdInfo = CpuId.GetSupportedInstructions();
+		CpuId.LogCpuInfo();
+
+		GetSystemInfo(&SysInf);
+		TerraPGE::Core::CpuCores = SysInf.dwNumberOfProcessors;
+
+		std::cout << "Cores: " << TerraPGE::Core::CpuCores << std::endl;
+	}
 
 	void UpdateSystemInfo()
 	{
-		SYSTEM_INFO SysInf;
+		GetCpuInfo();
+
 		MEMORYSTATUSEX MemInf;
 		DISPLAY_DEVICE DispDev;
 
 		DispDev.cb = sizeof(DispDev);
 		MemInf.dwLength = sizeof(MEMORYSTATUSEX);
 		int DevIdx = 0;
-
-		GetSystemInfo(&SysInf);
-		TerraPGE::Core::CpuCores = SysInf.dwNumberOfProcessors;
 
 		if (GlobalMemoryStatusEx(&MemInf))
 			TerraPGE::Core::MaxMemoryMB = (MemInf.ullTotalPhys / 1024 / 1024);
@@ -124,6 +185,17 @@ namespace TerraPGE::Core
 				TerraPGE::Core::PrimaryGPUDevName = DispDev.DeviceString;
 		}
 
+	}
+
+
+	void OpenConsole()
+	{
+		AllocConsole();
+
+		FILE* fp;
+		freopen_s(&fp, "CONOUT$", "w", stdout);
+		freopen_s(&fp, "CONOUT$", "w", stderr);
+		freopen_s(&fp, "CONIN$", "r", stdin);
 	}
 
 
@@ -174,6 +246,15 @@ namespace TerraPGE::Core
 	}
 
 
+	__inline void SetPixelFrameBuffer(int x, int y, float R, float G, float B)
+	{
+		int index = ContIdx(x, y, Core::sx) * 3;
+		Core::FrameBuffer[index++] = R;
+		Core::FrameBuffer[index++] = G;
+		Core::FrameBuffer[index] = B;
+	}
+
+
 	void UpdateWindow(WndCreator& Wnd, MSG* msg)
 	{
 		Wnd.Input.BeginFrame();
@@ -195,3 +276,4 @@ namespace TerraPGE::Core
 		Core::UpdateInput(Wnd);
 	}
 }
+

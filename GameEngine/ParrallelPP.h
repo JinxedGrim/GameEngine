@@ -65,6 +65,22 @@ typedef struct SupportedInstructions
 	bool SSE42 = false;
 	bool AVX = false;
 	bool AVX2 = false;
+
+	std::string GetSupportString() const
+	{
+	    std::string out = "Suupported instructions:";
+
+		if (this->SSE) out += " [SSE] ";
+		if (this->SSE2) out += " [SSE2] ";
+		if (this->SSE3) out += " [SSE3] ";
+		if (this->SSSE3) out += " [SSSE3] ";
+		if (this->SSE41) out += " [SSE4.1] ";
+		if (this->SSE42) out += " [SSE4.2] ";
+		if (this->AVX) out += " [AVX] ";
+
+		return out;
+	}
+
 };
 
 class CPUID
@@ -84,6 +100,11 @@ class CPUID
 				: "a" (i), "c" (0));
 		// ECX is set to zero for CPUID function 4
 #endif
+	}
+
+	void GetCoreCount()
+	{
+
 	}
 
 	SupportedInstructions GetSupportedInstructions()
@@ -107,7 +128,7 @@ class CPUID
 		return Out;
 	}
 
-	void PrintSupportedInstructions()
+	void LogCpuInfo()
 	{
 		CPUID CpuID = *this;
 		if (this->IdValue != 1)
@@ -116,14 +137,7 @@ class CPUID
 		}
 
 		SupportedInstructions Out = CpuID.GetSupportedInstructions();
-
-		if (Out.SSE) std::cout << "SSE supported" << std::endl;
-		if (Out.SSE2) std::cout << "SSE2 supported" << std::endl;
-		if (Out.SSE3) std::cout << "SSE3 supported" << std::endl;
-		if (Out.SSSE3) std::cout << "SSSE3 supported" << std::endl;
-		if (Out.SSE41) std::cout << "SSE4.1 supported" << std::endl;
-		if (Out.SSE42) std::cout << "SSE4.2 supported" << std::endl;
-		if (Out.AVX) std::cout << "AVX supported" << std::endl;
+		std::cout << Out.GetSupportString() << "\n";
 	}
 
 	const uint32_t& EAX() const { return regs[0]; }
@@ -142,6 +156,7 @@ class ThreadManager
 	std::mutex CoutStream;
 	std::condition_variable TaskConditionVar;
 	std::condition_variable QueueSzConditionVar;
+	std::atomic<size_t> TasksInProgress{ 0 };
 
 
 	void WorkerLoop()
@@ -181,7 +196,10 @@ class ThreadManager
 
 			if (Task)
 			{
+				TasksInProgress++;
 				Task();
+				TasksInProgress--;
+				QueueSzConditionVar.notify_all(); // notify WaitUntilAllTasksFinished
 			}
 		}
 	}
@@ -240,14 +258,10 @@ class ThreadManager
 
 	void WaitUntilAllTasksFinished()
 	{
-		size_t CurrentTasks = 0;
-		do
-		{
-			std::unique_lock<std::mutex> QueueLock(this->QueueMutex);
-			QueueSzConditionVar.wait(QueueLock, [=]() { return Queue.empty(); });
-
-			CurrentTasks = Queue.size();
-		} while (CurrentTasks != 0);
+		std::unique_lock<std::mutex> Lock(this->QueueMutex);
+		QueueSzConditionVar.wait(Lock, [this]() {
+			return Queue.empty() && TasksInProgress.load() == 0;
+		});
 	}
 
 	~ThreadManager()

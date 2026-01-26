@@ -1,7 +1,6 @@
 #pragma once
 #include "Math.h"
-#include "Renderable.h"
-#include "Collider.h"
+#include "GameObject.h"
 #include "RayCaster.h"
 
 namespace TerraPGE::Physics
@@ -92,7 +91,7 @@ namespace TerraPGE::Physics
         return DeltaVelocity;
     }
 
-    void Integrate(Collider* collider, float dt, Renderable* Floor, const RaycastHit* FloorHit, bool ApplyGravity = true)
+    void Integrate(Collider* collider, float dt, GameObject* Floor, const RaycastHit* FloorHit, bool ApplyGravity = true)
     {
         if (!collider->PhysicsEnabled)
             return;
@@ -126,7 +125,12 @@ namespace TerraPGE::Physics
             if (collider->body.Velocity.y < 0.0f)
             {
                 // calculate bounce
+                float v_n = collider->body.Velocity.Dot(FloorHit->normal);
                 collider->body.Velocity.y = -collider->body.Velocity.y * collider->body.restitution;
+                if (v_n >= 0) return;
+                Vec3 j =  FloorHit->normal * (-(1 + collider->body.restitution) * v_n) / (1.0f / collider->body.mass);
+                collider->body.Velocity += j / collider->body.mass;  // p += j; v = p/m
+
                 if (std::abs(collider->body.Velocity.y) < 0.05f) // small threshold
                 {
                     collider->body.Velocity.y = 0.0f;

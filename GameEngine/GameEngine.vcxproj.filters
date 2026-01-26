@@ -5,16 +5,16 @@
       <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
       <Extensions>cpp;c;cc;cxx;c++;cppm;ixx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
     </Filter>
-    <Filter Include="Header Files">
-      <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
-      <Extensions>h;hh;hpp;hxx;h++;hm;inl;inc;ipp;xsd</Extensions>
-    </Filter>
     <Filter Include="Resource Files">
       <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
       <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
     </Filter>
     <Filter Include="ObjectFIles">
       <UniqueIdentifier>{7ff05088-d900-49c1-842e-f27d942f0548}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files">
+      <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
+      <Extensions>h;hh;hpp;hxx;h++;hm;inl;inc;ipp;xsd</Extensions>
     </Filter>
     <Filter Include="Header Files\Core">
       <UniqueIdentifier>{8c1c05cb-fe74-414c-979a-ece6e8c46533}</UniqueIdentifier>
@@ -30,6 +30,9 @@
     </Filter>
     <Filter Include="Header Files\EngineAPI">
       <UniqueIdentifier>{e9a2c468-0bf7-46ca-a077-1fcf3868c944}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\EngineAPI\Math">
+      <UniqueIdentifier>{101519b7-5152-4313-b8b6-ce8742e3070f}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
@@ -68,9 +71,6 @@
     <ClInclude Include="..\..\..\..\Desktop\My Stuff\My Librarys\Graphics\WndCreator.hpp">
       <Filter>Header Files\Core\Libs\Graphics</Filter>
     </ClInclude>
-    <ClInclude Include="Math.h">
-      <Filter>Header Files\Core\Libs</Filter>
-    </ClInclude>
     <ClInclude Include="Mesh.h">
       <Filter>Header Files\Core\Engine</Filter>
     </ClInclude>
@@ -98,7 +98,7 @@
     <ClInclude Include="Renderer.h">
       <Filter>Header Files\EngineAPI</Filter>
     </ClInclude>
-    <ClInclude Include="Renderable.h">
+    <ClInclude Include="GameObject.h">
       <Filter>Header Files\EngineAPI</Filter>
     </ClInclude>
     <ClInclude Include="Collider.h">
@@ -109,6 +109,27 @@
     </ClInclude>
     <ClInclude Include="RayCaster.h">
       <Filter>Header Files\Core\Engine</Filter>
+    </ClInclude>
+    <ClInclude Include="Renderable.h">
+      <Filter>Header Files\EngineAPI</Filter>
+    </ClInclude>
+    <ClInclude Include="ObjectTransform.h">
+      <Filter>Header Files\EngineAPI</Filter>
+    </ClInclude>
+    <ClInclude Include="Math.h">
+      <Filter>Header Files\EngineAPI\Math</Filter>
+    </ClInclude>
+    <ClInclude Include="MatrixMath.h">
+      <Filter>Header Files\EngineAPI\Math</Filter>
+    </ClInclude>
+    <ClInclude Include="VectorMath.h">
+      <Filter>Header Files\EngineAPI\Math</Filter>
+    </ClInclude>
+    <ClInclude Include="Skybox.h">
+      <Filter>Header Files\EngineAPI</Filter>
+    </ClInclude>
+    <ClInclude Include="EnvironmentRenderable.h">
+      <Filter>Header Files\EngineAPI</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

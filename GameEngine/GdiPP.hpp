@@ -1,4 +1,5 @@
 #include <iostream>
+#include <iostream>
 #include <windows.h>
 #include <memory>
 
@@ -44,6 +45,9 @@ __pragma(warning(default:6387))
     //        (which holds the original bitmap), and after scaling restore it back
     //
     // 2. 
+
+
+
 
 
 
@@ -1061,7 +1065,16 @@ public:
     {
         if (this->NeedsPixelsDrawn)
         {
-            SetDIBitsToDevice(this->ScreenDC, 0, 0, this->ScreenSz.x, this->ScreenSz.y, 0, 0, 0, this->ScreenSz.y, PixelBuffer, &bi, DIB_RGB_COLORS);
+            StretchDIBits(
+                ScreenDC,
+                0, 0, ScreenSz.x, ScreenSz.y,
+                0, 0, ScreenSz.x, ScreenSz.y,
+                PixelBuffer,
+                &bi,
+                DIB_RGB_COLORS,
+                SRCCOPY
+            );
+            //SetDIBitsToDevice(this->ScreenDC, 0, 0, this->ScreenSz.x, this->ScreenSz.y, 0, 0, 0, this->ScreenSz.y, PixelBuffer, &bi, DIB_RGB_COLORS);
 
             this->NeedsPixelsDrawn = false;
             return true;

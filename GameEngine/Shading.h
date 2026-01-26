@@ -1,4 +1,5 @@
 #pragma once
+#define NOMINMAX
 #include "Camera.h"
 #include "Lighting.h"
 #include <string>
@@ -9,6 +10,74 @@
 // TODO 
 // this shading system is cool but performs too slow.
 // move to 'functor'?
+
+
+// New proposal
+// System has struct of param info each info contains an ID and an index.
+// then an arg with the full data struct
+// 
+
+struct ShaderParam
+{
+	void* Data;
+	uint64_t Sz;
+};
+
+
+class SA
+{
+	std::vector<ShaderParam> Uniforms;
+	std::vector<ShaderParam> Resources;
+
+	std::vector<ShaderParam> Mutables;
+
+	SA()
+	{
+
+	}
+
+	public:
+	static SA* Copy(const SA* In)
+	{
+		SA* out = new SA();
+		out->Uniforms = In->Uniforms;
+		out->Resources = In->Resources;
+	}
+
+	static SA* Create()
+	{
+		return new SA();
+	}
+
+	template<typename T>
+	void AddUniform(const T& Value)
+	{
+		ShaderParam Data = {};
+		Data.Data = Value;
+//		this->Uniforms.push_back();
+	}
+
+	template<typename T>
+	void AddUnique(T Data)
+	{
+
+	}
+
+	template<typename T>
+	T GetUniform()
+	{
+
+	}
+
+	template<typename T>
+	T GetUnique()
+	{
+
+	}
+};
+
+
+
 
 enum class ShaderTypes
 {
@@ -109,7 +178,7 @@ class ShaderArgs
 		Payload.reserve(B->Payload.size());
 
 		// Iterate through the hash table
-		for (ShaderData* BData : B->Payload)
+		for (const ShaderData* BData : B->Payload)
 		{
 			ShaderData* AData = DEBUG_NEW ShaderData(BData); // copy constructor  
 			AData->FreeOnDelete = false; // Set this because we are a child of the original args and it will do cleanup / the user will
@@ -418,354 +487,415 @@ class ShaderArgs
 
 
 
-namespace EngineShaders
+namespace TerraPGE
 {
-	//const auto DefaultVertexShader = [](ShaderArgs* Args)
-	//{
-
-	//};
-
-	const auto WHACK_SHADER = [](ShaderArgs* Args)
+	namespace EngineShaders
 	{
-		Triangle* Tri = Args->FindShaderResourcePtr<Triangle*>(TPGE_SHDR_TRI);
-		const size_t LightCount = Args->FindShaderResourceValue<size_t>(TPGE_SHDR_LIGHT_COUNT);
-		Material* Mat = Tri->Material;
-
-		LightObject* Light = nullptr;
-		if (LightCount <= 0)
+		namespace DebugShaders
 		{
-			return;
-		}
-
-		Light = *Args->FindShaderResourcePtr<LightObject**>(TPGE_SHDR_LIGHT_OBJECTS);
-
-		Vec3 LDir = (Light->LightPos - ((Tri->Points[0] + Tri->Points[1] + Tri->Points[2]) / 3.0f)).Normalized();
-
-		float Li = std::max<float>(0.0f, Tri->FaceNormal.Dot(LDir));
-
-		Vec3 AmbientCol = Mat->AmbientColor * Light->AmbientCoeff;
-		Vec3 DiffuseCol = Mat->DiffuseColor * Li;
-
-		Tri->Col = (AmbientCol + DiffuseCol) * Light->Color;
-	};
-
-	const auto Shader_Phong_LOW_LOD = [](ShaderArgs* Args)
-	{
-		Triangle* Tri = Args->FindShaderResourcePtr<Triangle*>(TPGE_SHDR_TRI);
-		const size_t LightCount = Args->FindShaderResourceValue<size_t>(TPGE_SHDR_LIGHT_COUNT);
-		Material* Mat = Tri->Material;
-
-		LightObject* Light = nullptr;
-		if (LightCount <= 0)
-		{
-			return;
-		}
-
-		Light = *Args->FindShaderResourcePtr<LightObject**>(TPGE_SHDR_LIGHT_OBJECTS);
-
-		Vec3 LDir = (Light->LightPos - ((Tri->Points[0] + Tri->Points[1] + Tri->Points[2]) / 3.0f)).Normalized();
-
-		float Li = std::max<float>(0.0f, Tri->FaceNormal.Dot(LDir));
-
-		Vec3 AmbientCol = (Mat->AmbientColor * Light->AmbientCoeff);
-		Vec3 DiffuseCol = ((Light->Color * Li) + (Mat->DiffuseColor * Li)) * Light->DiffuseCoeff;
-
-		Tri->Col.x = std::clamp<float>((AmbientCol.x + DiffuseCol.x), 0.0f, 255.0f);
-		Tri->Col.y = std::clamp<float>((AmbientCol.y + DiffuseCol.y), 0.0f, 255.0f);
-		Tri->Col.z = std::clamp<float>((AmbientCol.z + DiffuseCol.z), 0.0f, 255.0f);
-	};
-
-	const auto Shader_Phong = [](ShaderArgs* Args)
-	{
-		Triangle* Tri = Args->FindShaderResourcePtr<Triangle*>(TPGE_SHDR_TRI);
-		const size_t LightCount = Args->FindShaderResourceValue<size_t>(TPGE_SHDR_LIGHT_COUNT);
-		Material* Mat = Tri->Material;
-		Vec3* LookDir = Args->FindShaderResourcePtr<Vec3*>(TPGE_SHDR_CAMERA_LDIR);
-
-		LightObject* Light = nullptr;
-		if (LightCount <= 0)
-		{
-			return;
-		}
-
-		Light = *Args->FindShaderResourcePtr<LightObject**>(TPGE_SHDR_LIGHT_OBJECTS);
-
-		float Intensity = 1.0f;
-		Vec3 LDir = (Light->LightPos - ((Tri->Points[0] + Tri->Points[1] + Tri->Points[2]) / 3.0f)).Normalized();
-		float Li = Tri->FaceNormal.Dot(LDir);
-
-		Intensity = std::max<float>(0.0f, Li);
-		Vec3 RDir = LDir - Tri->FaceNormal * 2.0f * Li;
-
-		float SpecularIntensity = pow(std::max<float>(0.0f, RDir.Dot(*LookDir)), Mat->Shininess);
-
-		Vec3 AmbientCol = (Mat->AmbientColor) * Light->AmbientCoeff;
-		Vec3 DiffuseCol = ((Light->Color * Intensity) + (Mat->DiffuseColor * Intensity)) * Light->DiffuseCoeff;
-		Vec3 SpecularClr = ((Light->Color * Light->SpecularCoeff) + (Mat->SpecularColor * Light->SpecularCoeff)) * SpecularIntensity;
-
-		Tri->Col.x = std::clamp<float>((AmbientCol.x + DiffuseCol.x + SpecularClr.x), 0.0f, 255.0f);
-		Tri->Col.y = std::clamp<float>((AmbientCol.y + DiffuseCol.y + SpecularClr.y), 0.0f, 255.0f);
-		Tri->Col.z = std::clamp<float>((AmbientCol.z + DiffuseCol.z + SpecularClr.z), 0.0f, 255.0f);
-	};
-
-	const auto Shader_Material = [](ShaderArgs* Args)
-	{
-		Triangle* Tri = Args->FindShaderResourceValue<Triangle*>(TPGE_SHDR_TRI);
-		Material* Mat = Tri->Material;
-
-		Tri->Col = Mat->AmbientColor;
-	};
-
-	const auto Shader_Frag_Phong = [](ShaderArgs* Args)
-	{
-		const Triangle* Tri = Args->FindShaderResourcePtr<Triangle*>(TPGE_SHDR_TRI);
-		const size_t LightCount = Args->FindShaderResourceValue<size_t>(TPGE_SHDR_LIGHT_COUNT);
-		const Material* Mat = Tri->Material;
-		const Vec3* CamLookDir = Args->FindShaderResourcePtr<Vec3*>(TPGE_SHDR_CAMERA_LDIR);
-		Vec3* FragPos = Args->FindShaderResourcePtr<Vec3*>(TPGE_SHDR_FRAG_POS);
-		Vec3* FragNormal = Args->FindShaderResourcePtr<Vec3*>(TPGE_SHDR_FRAG_NORMAL);
-		Color* FragColor = Args->FindShaderResourcePtr<Color*>(TPGE_SHDR_FRAG_COLOR);
-
-		LightObject* Light = nullptr;
-		if (LightCount <= 0)
-		{
-			return;
-		}
-
-		Light = *Args->FindShaderResourcePtr<LightObject**>(TPGE_SHDR_LIGHT_OBJECTS);
-
-		Vec3 LDir = Light->LightPos.GetDirectionToVector(*FragPos);
-		float Li = FragNormal->Dot(LDir);
-
-		float Intensity = std::max<float>(0.0f, Li);
-		Vec3 RDir = (-LDir).GetReflectection(*FragNormal);
-
-		float SpecularIntensity = pow(std::max<float>(0.0f, (-RDir).Dot(*CamLookDir)), Mat->Shininess);
-
-		Vec3 AmbientCol = (Mat->AmbientColor) * Light->AmbientCoeff;
-		Vec3 DiffuseCol = ((Light->Color * Intensity) + (Mat->DiffuseColor * Intensity)) * Light->DiffuseCoeff;
-		Vec3 SpecularClr = ((Light->Color * Light->SpecularCoeff) + (Mat->SpecularColor * Light->SpecularCoeff)) * SpecularIntensity;
-
-		FragColor->R = std::clamp<float>((AmbientCol.x + DiffuseCol.x + SpecularClr.x), 0.0f, 255.0f);
-		FragColor->G = std::clamp<float>((AmbientCol.y + DiffuseCol.y + SpecularClr.y), 0.0f, 255.0f);
-		FragColor->B = std::clamp<float>((AmbientCol.z + DiffuseCol.z + SpecularClr.z), 0.0f, 255.0f);
-		FragColor->A = 255.0f;
-	};
-
-	const auto Shader_Frag_Phong_Shadows = [](ShaderArgs* Args)
-	{
-		const Triangle* Tri = Args->FindShaderResourcePtr<Triangle*>(TPGE_SHDR_TRI);
-		const size_t LightCount = Args->FindShaderResourceValue<size_t>(TPGE_SHDR_LIGHT_COUNT);
-		const Material* Mat = Tri->Material;
-		const Vec3* CamLookDir = Args->FindShaderResourcePtr<Vec3*>(TPGE_SHDR_CAMERA_LDIR);
-		Vec3* FragPos = Args->FindShaderResourcePtr<Vec3*>(TPGE_SHDR_FRAG_POS);
-		Vec3* FragNormal = Args->FindShaderResourcePtr<Vec3*>(TPGE_SHDR_FRAG_NORMAL);
-		Color* FragColor = Args->FindShaderResourcePtr<Color*>(TPGE_SHDR_FRAG_COLOR);
-		bool IsInShadow = Args->FindShaderResourceValue<bool>(TPGE_SHDR_IS_IN_SHADOW);
-		LightObject** Lights = Args->FindShaderResourcePtr<LightObject**>(TPGE_SHDR_LIGHT_OBJECTS);
-		//bool DebugShadows = Args->FindShaderResourceValue<bool>(TPGE_SHDR_DEBUG_SHADOWS);
-
-		// Shadow intensity multiplier
-		float ShadowMult = 1.0f - (0.5f * (int)IsInShadow);
-
-		// === Base lighting ===
-		Vec3 AmbientSum(0.0f, 0.0f, 0.0f); // base scene ambient
-		Vec3 DiffuseSum(0.0f, 0.0f, 0.0f);
-		Vec3 SpecularSum(0.0f, 0.0f, 0.0f);
-
-		if (Lights && LightCount > 0)
-		{
-			for (size_t i = 0; i < LightCount; ++i)
+			const auto Shader_Gradient = [](ShaderArgs* Args)
 			{
-				LightObject* Light = Lights[i];
-				if (!Light) continue;
+				const Triangle* Tri = Args->FindShaderResourcePtr<Triangle*>(TPGE_SHDR_TRI);
+				const size_t LightCount = Args->FindShaderResourceValue<size_t>(TPGE_SHDR_LIGHT_COUNT);
+				const Material* Mat = Tri->Material;
+				const Vec3* CamLookDir = Args->FindShaderResourcePtr<Vec3*>(TPGE_SHDR_CAMERA_LDIR);
+				const Vec3* FragPos = Args->FindShaderResourcePtr<Vec3*>(TPGE_SHDR_FRAG_POS);
+				const Vec3* FragNormal = Args->FindShaderResourcePtr<Vec3*>(TPGE_SHDR_FRAG_NORMAL);
+				const Vec3* BaryCoords = Args->FindShaderResourcePtr<Vec3*>(TPGE_SHDR_FRAG_BARY_COORDS);
+				Color* FragColor = Args->FindShaderResourcePtr<Color*>(TPGE_SHDR_FRAG_COLOR);
 
-				Vec3 LDir;
-				float Atten = 1.0f;
-
-				if (Light->Type == LightTypes::DirectionalLight)
+				LightObject* Light = nullptr;
+				if (LightCount <= 0)
 				{
-					// For directional light, direction is constant (points *toward* surface)
-					LDir = (-Light->LightDir).Normalized();
+					return;
 				}
-				else if (Light->Type == LightTypes::PointLight)
+
+				Light = *Args->FindShaderResourcePtr<LightObject**>(TPGE_SHDR_LIGHT_OBJECTS);
+
+				Vec3 LDir = Light->GetLightDirection();
+				float Li = FragNormal->Dot(LDir);
+
+				float Intensity = std::max<float>(0.0f, Li);
+
+				FragColor->R = std::clamp<float>(((255.0f * BaryCoords->x) * Intensity), 0.0f, 255.0f);
+				FragColor->G = std::clamp<float>(((255.0f * BaryCoords->y) * Intensity), 0.0f, 255.0f);
+				FragColor->B = std::clamp<float>(((255.0f * BaryCoords->z) * Intensity), 0.0f, 255.0f);
+				FragColor->A = 255.0f;			const auto Shader_Normal = [](ShaderArgs* Args)
+			{
+				const Triangle* Tri = Args->FindShaderResourcePtr<Triangle*>(TPGE_SHDR_TRI);
+				const Vec3* FragNormal = Args->FindShaderResourcePtr<Vec3*>(TPGE_SHDR_FRAG_NORMAL);
+				Color* FragColor = Args->FindShaderResourcePtr<Color*>(TPGE_SHDR_FRAG_COLOR);
+
+				Vec3 n = FragNormal->Normalized();
+
+				FragColor->R = std::clamp<float>((n.x * 0.5f + 0.5f) * 255.0f, 0.0f, 255.0f);
+				FragColor->G = std::clamp<float>((n.y * 0.5f + 0.5f) * 255.0f, 0.0f, 255.0f);
+				FragColor->B = std::clamp<float>((n.z * 0.5f + 0.5f) * 255.0f, 0.0f, 255.0f);
+				FragColor->A = 255.0f;
+			};
+			};
+
+
+			const auto Shader_WireFrame = [](ShaderArgs* Args)
+			{
+				const Vec3* BaryCoords = Args->FindShaderResourcePtr<Vec3*>(TPGE_SHDR_FRAG_BARY_COORDS);
+				Color* FragColor = Args->FindShaderResourcePtr<Color*>(TPGE_SHDR_FRAG_COLOR);
+
+				//TODO:
+				//add these to shader system
+				float WireThickness = 0.01;
+				Vec3 WireColor = Vec3(255, 255, 255);
+
+				// Basic idea: 
+				// each bary coord represents distance from an edge
+				// so if edge distance < thickness of the wire frame 
+				// we set the pixel to the wire frame color
+
+				float Dist = std::min({ BaryCoords->x, BaryCoords->y, BaryCoords->z });
+
+				if (Dist < WireThickness)
 				{
-					// Point light direction is from fragment to light
-					LDir = Light->LightPos.GetDirectionToVector(*FragPos);
-					Atten = static_cast<PointLight*>(Light)->Attenuate(Light->LightPos.Distance(*FragPos));
+					*FragColor = WireColor;
 				}
 				else
 				{
-					continue; // Unsupported light type
+					*FragColor = Vec3(0, 0, 0);
+				}
+			};
+
+
+			const auto Shader_Gradient_Centroid = [](ShaderArgs* Args)
+			{
+				const Triangle* Tri = Args->FindShaderResourcePtr<Triangle*>(TPGE_SHDR_TRI);
+				const size_t LightCount = Args->FindShaderResourceValue<size_t>(TPGE_SHDR_LIGHT_COUNT);
+				const Vec3* FragPos = Args->FindShaderResourcePtr<Vec3*>(TPGE_SHDR_FRAG_POS);
+				const Vec3* FragNormal = Args->FindShaderResourcePtr<Vec3*>(TPGE_SHDR_FRAG_NORMAL);
+				Color* FragColor = Args->FindShaderResourcePtr<Color*>(TPGE_SHDR_FRAG_COLOR);
+				Vec2* PixelCoords = Args->FindShaderResourcePtr<Vec2*>(TPGE_SHDR_PIXEL_COORDS);
+				LightObject* Light = nullptr;
+				if (LightCount <= 0)
+				{
+					return;
 				}
 
-				// Light direction and attenuation
-				float NdotL = std::max(0.0f, FragNormal->Dot(LDir));
+				Light = *Args->FindShaderResourcePtr<LightObject**>(TPGE_SHDR_LIGHT_OBJECTS);
+
+				Vec3 Centroid = ((Tri->Points.Points[0] + Tri->Points.Points[1] + Tri->Points.Points[2]) / 3.0f);
+				Vec3 BaryCoords = CalculateBarycentricCoordinatesScreenSpace(*PixelCoords, Vec2(Centroid.x, Centroid.y), Vec2(Tri->Points.Points[1].x, Tri->Points.Points[1].y), Vec2(Tri->Points.Points[2].x, Tri->Points.Points[2].y));
+				Vec3 BaryCoords2 = CalculateBarycentricCoordinatesScreenSpace(*PixelCoords, Vec2(Tri->Points.Points[0].x, Tri->Points.Points[0].y), Vec2(Tri->Points.Points[1].x, Tri->Points.Points[1].y), Vec2(Centroid.x, Centroid.y));
+
+				float Intensity = 1.0f;
+				Vec3 LDir = (Light->Transform.GetLocalPosition() - *FragPos).Normalized();
 				float Li = FragNormal->Dot(LDir);
 
-				// Reflection direction for specular
-				Vec3 RDir = (-LDir).GetReflectection(FragNormal->Normalized());
-				float SpecularIntensity = pow(std::max(0.0f, (-RDir).Dot(*CamLookDir)), Mat->Shininess);
+				Intensity = std::max<float>(0.0f, Li);
 
-				// Accumulate each component
-				AmbientSum += (((Mat->AmbientColor) * (Light->Color / 255.0f)) * Light->AmbientCoeff) * Atten;
-				DiffuseSum += ((Mat->DiffuseColor) * (Light->Color / 255.0f)) * Light->DiffuseCoeff * NdotL * Atten;
-				SpecularSum += ((Mat->SpecularColor) * (Light->Color / 255.0f)) * Light->SpecularCoeff * SpecularIntensity * Atten;
+				FragColor->R = std::clamp<float>(((255.0f * BaryCoords2.x) * Intensity), 0.0f, 255.0f);
+				FragColor->G = std::clamp<float>(((255.0f * BaryCoords.y) * Intensity), 0.0f, 255.0f);
+				FragColor->B = std::clamp<float>(((255.0f * BaryCoords.z) * Intensity), 0.0f, 255.0f);
+				FragColor->A = 255.0f;
+			};
+
+		}
+
+		const auto WHACK_SHADER = [](ShaderArgs* Args)
+			{
+				Triangle* Tri = Args->FindShaderResourcePtr<Triangle*>(TPGE_SHDR_TRI);
+				const size_t LightCount = Args->FindShaderResourceValue<size_t>(TPGE_SHDR_LIGHT_COUNT);
+				Material* Mat = Tri->Material;
+
+				LightObject* Light = nullptr;
+				if (LightCount <= 0)
+				{
+					return;
+				}
+
+				Light = *Args->FindShaderResourcePtr<LightObject**>(TPGE_SHDR_LIGHT_OBJECTS);
+
+				Vec3 LDir = (Light->Transform.GetLocalPosition() - ((Tri->Points.Points[0] + Tri->Points.Points[1] + Tri->Points.Points[2]) / 3.0f)).Normalized();
+
+				float Li = std::max<float>(0.0f, Tri->FaceNormal.Dot(LDir));
+
+				Vec3 AmbientCol = Mat->AmbientColor * Light->AmbientCoeff;
+				Vec3 DiffuseCol = Mat->DiffuseColor * Li;
+
+				Tri->Col = (AmbientCol + DiffuseCol) * Light->Color;
+			};
+
+
+		const auto Shader_Phong_LOW_LOD = [](ShaderArgs* Args)
+			{
+				Triangle* Tri = Args->FindShaderResourcePtr<Triangle*>(TPGE_SHDR_TRI);
+				const size_t LightCount = Args->FindShaderResourceValue<size_t>(TPGE_SHDR_LIGHT_COUNT);
+				Material* Mat = Tri->Material;
+
+				LightObject* Light = nullptr;
+				if (LightCount <= 0)
+				{
+					return;
+				}
+
+				Light = *Args->FindShaderResourcePtr<LightObject**>(TPGE_SHDR_LIGHT_OBJECTS);
+
+				Vec3 LDir = (Light->Transform.GetLocalPosition() - ((Tri->Points.Points[0] + Tri->Points.Points[1] + Tri->Points.Points[2]) / 3.0f)).Normalized();
+
+				float Li = std::max<float>(0.0f, Tri->FaceNormal.Dot(LDir));
+
+				Vec3 AmbientCol = (Mat->AmbientColor * Light->AmbientCoeff);
+				Vec3 DiffuseCol = ((Light->Color * Li) + (Mat->DiffuseColor * Li)) * Light->DiffuseCoeff;
+
+				Tri->Col.x = std::clamp<float>((AmbientCol.x + DiffuseCol.x), 0.0f, 255.0f);
+				Tri->Col.y = std::clamp<float>((AmbientCol.y + DiffuseCol.y), 0.0f, 255.0f);
+				Tri->Col.z = std::clamp<float>((AmbientCol.z + DiffuseCol.z), 0.0f, 255.0f);
+			};
+
+
+		const auto Shader_Phong = [](ShaderArgs* Args)
+			{
+				Triangle* Tri = Args->FindShaderResourcePtr<Triangle*>(TPGE_SHDR_TRI);
+				const size_t LightCount = Args->FindShaderResourceValue<size_t>(TPGE_SHDR_LIGHT_COUNT);
+				Material* Mat = Tri->Material;
+				Vec3* LookDir = Args->FindShaderResourcePtr<Vec3*>(TPGE_SHDR_CAMERA_LDIR);
+
+				LightObject* Light = nullptr;
+				if (LightCount <= 0)
+				{
+					return;
+				}
+
+				Light = *Args->FindShaderResourcePtr<LightObject**>(TPGE_SHDR_LIGHT_OBJECTS);
+
+				float Intensity = 1.0f;
+				Vec3 LDir = (Light->Transform.GetLocalPosition() - ((Tri->Points.Points[0] + Tri->Points.Points[1] + Tri->Points.Points[2]) / 3.0f)).Normalized();
+				float Li = Tri->FaceNormal.Dot(LDir);
+
+				Intensity = std::max<float>(0.0f, Li);
+				Vec3 RDir = LDir - Tri->FaceNormal * 2.0f * Li;
+
+				float SpecularIntensity = pow(std::max<float>(0.0f, RDir.Dot(*LookDir)), Mat->Shininess);
+
+				Vec3 AmbientCol = (Mat->AmbientColor) * Light->AmbientCoeff;
+				Vec3 DiffuseCol = ((Light->Color * Intensity) + (Mat->DiffuseColor * Intensity)) * Light->DiffuseCoeff;
+				Vec3 SpecularClr = ((Light->Color * Light->SpecularCoeff) + (Mat->SpecularColor * Light->SpecularCoeff)) * SpecularIntensity;
+
+				Tri->Col.x = std::clamp<float>((AmbientCol.x + DiffuseCol.x + SpecularClr.x), 0.0f, 255.0f);
+				Tri->Col.y = std::clamp<float>((AmbientCol.y + DiffuseCol.y + SpecularClr.y), 0.0f, 255.0f);
+				Tri->Col.z = std::clamp<float>((AmbientCol.z + DiffuseCol.z + SpecularClr.z), 0.0f, 255.0f);
+			};
+
+
+		// Blinn Phong with extra stuff
+		const auto DefaultShader = [](ShaderArgs* Args)
+			{
+				const Triangle* Tri = Args->FindShaderResourcePtr<Triangle*>(TPGE_SHDR_TRI);
+				const size_t LightCount = Args->FindShaderResourceValue<size_t>(TPGE_SHDR_LIGHT_COUNT);
+				const Material* Mat = Tri->Material;
+				const Vec3* CamLookDir = Args->FindShaderResourcePtr<Vec3*>(TPGE_SHDR_CAMERA_LDIR);
+				Vec3* FragPos = Args->FindShaderResourcePtr<Vec3*>(TPGE_SHDR_FRAG_POS);
+				Vec3* FragNormal = Args->FindShaderResourcePtr<Vec3*>(TPGE_SHDR_FRAG_NORMAL);
+				Color* FragColor = Args->FindShaderResourcePtr<Color*>(TPGE_SHDR_FRAG_COLOR);
+				bool IsInShadow = Args->FindShaderResourceValue<bool>(TPGE_SHDR_IS_IN_SHADOW);
+				float shadowMul = 1.0f - IsInShadow * (1.0f - 0.5f);
+				const Vec3* CamPos = Args->FindShaderResourcePtr<Vec3*>(TPGE_SHDR_CAMERA_POS);
+				TextureCoords* UVW = Args->FindShaderResourcePtr<TextureCoords*>(TPGE_SHDR_TEX_UVW);
+				FragNormal->Normalize();
+				Vec3 TexturCol = Vec3(1.0f, 1.0f, 1.0f);
+				Vec3 TexColor = Vec3(1.0f, 1.0f, 1.0f); // default white (no effect)
+				TexColor *= (Tri->Material->HasUsableTexture()) ? Tri->Material->Textures.at(0)->GetPixelColor(UVW->u, 1.0f - UVW->v).GetRGB() / 255.0f : Vec3(1.0f, 1.0f, 1.0f);
+				
+				Vec3 BaseDiffuse = (Mat->DiffuseColor / 255.0f) * TexColor;
+
+				LightObject* Light = nullptr;
+				Vec3 FinalColor = Vec3();
+
+				FragColor->A = 255.0f;
+				FragColor->R = 0.0f;
+				FragColor->G = 0.0f;
+				FragColor->B = 0.0f;
+
+				if (LightCount <= 0)
+				{
+					return;
+				}
+
+				for (int i = 0; i < LightCount; i++)
+				{
+					Light = Args->FindShaderResourcePtr<LightObject**>(TPGE_SHDR_LIGHT_OBJECTS)[i];
+
+					Vec3 LightDir = -Light->GetLightDirection().Normalized();
+
+					// Blinn specular math
+					//https://en.wikipedia.org/wiki/Blinn–Phong_reflection_model
+					Vec3 V = (*CamPos - *FragPos).Normalized();
+					Vec3 H = (LightDir + V).Normalized();
+					float Hdot = FragNormal->Dot(H);
+					float AO = 0.7f + 0.3f * FragNormal->y;
+
+					// Fresnel effect
+					// with schlick approximation
+					//https://en.wikipedia.org/wiki/Fresnel_equations
+					//https://en.wikipedia.org/wiki/Schlick%27s_approximation
+					float NdotV = std::max(0.0f, FragNormal->Dot(V));
+					Vec3 F0 = Mat->SpecularColor / 255.0f; // or ~0.04 for non-metals
+					Vec3 Fresnel = F0 + (Vec3(1.0f, 1.0f, 1.0f) - F0) * pow(1.0f - NdotV, 5.0f); // Schlick
+
+					float Li = FragNormal->Dot(LightDir); // Light intensity
+					float Intensity = std::max<float>(0.0f, Li);
+					float SpecularIntensity = pow(std::max(0.0f, Hdot), Mat->Shininess);
+
+					// Standard phong:
+					//https://en.wikipedia.org/wiki/Phong_reflection_model
+					Vec3 AmbientCol = (Mat->AmbientColor / 255.0f) * Light->AmbientCoeff * AO;
+					Vec3 DiffuseCol = ((((Light->Color / 255.0f) * Light->DiffuseCoeff) * BaseDiffuse) * Intensity);
+					Vec3 SpecularClr = ((((Light->Color / 255.0f) * Light->SpecularCoeff) * (Mat->SpecularColor / 255.0f)) * SpecularIntensity);
+
+					DiffuseCol *= (Vec3(1.0f, 1.0f, 1.0f) - Fresnel);
+					SpecularClr *= Fresnel;
+
+					FinalColor += AmbientCol + ((DiffuseCol + SpecularClr) * shadowMul);
+
+					// for point light
+					//Vec3 LDir = Light->Transform.Ge
+					//LocalPosition().GetDirectionToVector(*FragPos);
+				}
+
+				FinalColor = FinalColor;
+				
+				float glow = Mat->EmissiveStrength; /* * pow(1.0 - FragNormal->Dot(*CamLookDir), 4.0f)*/;
+				Vec3 EmissiveCol = (Mat->EmissiveColor / 255.0f) * glow;
+
+				FinalColor = (FinalColor + EmissiveCol);
+
+				FragColor->R = FinalColor.x;
+				FragColor->G = FinalColor.y;
+				FragColor->B = FinalColor.z;
+			};
+
+
+		const auto Shader_Frag_Phong_Shadows = [](ShaderArgs* Args)
+			{
+				const Triangle* Tri = Args->FindShaderResourcePtr<Triangle*>(TPGE_SHDR_TRI);
+				const size_t LightCount = Args->FindShaderResourceValue<size_t>(TPGE_SHDR_LIGHT_COUNT);
+				const Material* Mat = Tri->Material;
+				const Vec3* CamLookDir = Args->FindShaderResourcePtr<Vec3*>(TPGE_SHDR_CAMERA_LDIR);
+				Vec3* FragPos = Args->FindShaderResourcePtr<Vec3*>(TPGE_SHDR_FRAG_POS);
+				Vec3* FragNormal = Args->FindShaderResourcePtr<Vec3*>(TPGE_SHDR_FRAG_NORMAL);
+				Color* FragColor = Args->FindShaderResourcePtr<Color*>(TPGE_SHDR_FRAG_COLOR);
+				bool IsInShadow = Args->FindShaderResourceValue<bool>(TPGE_SHDR_IS_IN_SHADOW);
+				LightObject** Lights = Args->FindShaderResourcePtr<LightObject**>(TPGE_SHDR_LIGHT_OBJECTS);
+				//bool DebugShadows = Args->FindShaderResourceValue<bool>(TPGE_SHDR_DEBUG_SHADOWS);
+				// Shadow intensity multiplier
+				float ShadowMult = 1.0f - (0.5f * (int)IsInShadow);
+
+
+				// === Base lighting ===
+				Vec3 AmbientSum(0.0f, 0.0f, 0.0f); // base scene ambient
+				Vec3 DiffuseSum(0.0f, 0.0f, 0.0f);
+				Vec3 SpecularSum(0.0f, 0.0f, 0.0f);
+
+				if (Lights && LightCount > 0)
+				{
+					for (size_t i = 0; i < LightCount; ++i)
+					{
+						LightObject* Light = Lights[i];
+						if (!Light) continue;
+
+						Vec3 LDir;
+						float Atten = 1.0f;
+
+						if (Light->Type == LightTypes::DirectionalLight)
+						{
+							// For directional light, direction is constant (points *toward* surface)
+							LDir = (-Light->GetLightDirection()).Normalized();
+						}
+						else if (Light->Type == LightTypes::PointLight)
+						{
+							// Point light direction is from fragment to light
+							LDir = Light->Transform.GetLocalPosition().GetDirectionToVector(*FragPos);
+							Atten = static_cast<PointLight*>(Light)->Attenuate(Light->Transform.GetLocalPosition().Distance(*FragPos));
+						}
+						else
+						{
+							continue; // Unsupported light type
+						}
+
+						// Light direction and attenuation
+						float NdotL = std::max(0.0f, FragNormal->Dot(LDir));
+						float Li = FragNormal->Dot(LDir);
+
+						// Reflection direction for specular
+						Vec3 RDir = (-LDir).GetReflectection(FragNormal->Normalized());
+						float SpecularIntensity = pow(std::max(0.0f, (-RDir).Dot(*CamLookDir)), Mat->Shininess);
+
+						// Accumulate each component
+						AmbientSum += (((Mat->AmbientColor) * (Light->Color / 255.0f)) * Light->AmbientCoeff) * Atten;
+						DiffuseSum += ((Mat->DiffuseColor) * (Light->Color / 255.0f)) * Light->DiffuseCoeff * NdotL * Atten;
+						SpecularSum += ((Mat->SpecularColor) * (Light->Color / 255.0f)) * Light->SpecularCoeff * SpecularIntensity * Atten;
+					}
+				}
+
+				float glow = Mat->EmissiveStrength * pow(1.0 - FragNormal->Dot(*CamLookDir), 4.0f);
+				Vec3 EmissiveCol = Mat->EmissiveColor * glow;
+
+				Vec3 FinalColor = ((AmbientSum + DiffuseSum + SpecularSum) * ShadowMult) + EmissiveCol;
+
+				FragColor->R = std::clamp(FinalColor.x, 0.0f, 255.0f);
+				FragColor->G = std::clamp(FinalColor.y, 0.0f, 255.0f);
+				FragColor->B = std::clamp(FinalColor.z, 0.0f, 255.0f);
+				FragColor->A = 255.0f;
+			};
+
+
+		
+		const auto Shader_Texture_Only = [](ShaderArgs* Args)
+			{
+				const Triangle* Tri = Args->FindShaderResourcePtr<Triangle*>(TPGE_SHDR_TRI);
+				TextureCoords* UVW = Args->FindShaderResourcePtr<TextureCoords*>(TPGE_SHDR_TEX_UVW);
+				Color* FragColor = Args->FindShaderResourcePtr<Color*>(TPGE_SHDR_FRAG_COLOR);
+
+				Vec3 TexturCol = Vec3();
+
+				if (Tri->Material->HasUsableTexture())
+				{
+					TexturCol = Tri->Material->Textures.at(0)->GetPixelColor(UVW->u, 1.0f - UVW->v).GetRGB();
+					FragColor->R = std::clamp<float>(TexturCol.x, 0.0f, 255.0f);
+					FragColor->G = std::clamp<float>(TexturCol.y, 0.0f, 255.0f);
+					FragColor->B = std::clamp<float>(TexturCol.z, 0.0f, 255.0f);
+					FragColor->A = 255.0f;
+				}
+				else
+				{
+					FragColor->R = 255.0f;
+					FragColor->G = 0.0f;
+					FragColor->B = 255.0f;
+					FragColor->A = 255.0f;
+				}
+			};
+
+
+		const auto Shader_Sample_Texture = [](ShaderArgs* Args)
+		{
+			const Triangle* Tri = Args->FindShaderResourcePtr<Triangle*>(TPGE_SHDR_TRI);
+			TextureCoords* UVW = Args->FindShaderResourcePtr<TextureCoords*>(TPGE_SHDR_TEX_UVW);
+			Color* FragColor = Args->FindShaderResourcePtr<Color*>(TPGE_SHDR_FRAG_COLOR);
+
+			Vec3 TexturCol = Vec3();
+
+			if (Tri->Material->HasUsableTexture())
+			{
+				TexturCol = Tri->Material->Textures.at(0)->GetPixelColor(UVW->u, 1.0f - UVW->v).GetRGB();
+				FragColor->R = std::clamp<float>(TexturCol.x, 0.0f, 255.0f);
+				FragColor->G = std::clamp<float>(TexturCol.y, 0.0f, 255.0f);
+				FragColor->B = std::clamp<float>(TexturCol.z, 0.0f, 255.0f);
+				FragColor->A = 255.0f;
 			}
-		}
-
-		float glow = Mat->EmissiveStrength * pow(1.0 - FragNormal->Dot(*CamLookDir), 4.0f);
-		Vec3 EmissiveCol = Mat->EmissiveColor * glow;
-
-		Vec3 FinalColor = ((AmbientSum + DiffuseSum + SpecularSum) * ShadowMult) + EmissiveCol;
-
-		FragColor->R = std::clamp(FinalColor.x, 0.0f, 255.0f);
-		FragColor->G = std::clamp(FinalColor.y, 0.0f, 255.0f);
-		FragColor->B = std::clamp(FinalColor.z, 0.0f, 255.0f);
-		FragColor->A = 255.0f;
-	};
-
-	const auto Shader_Gradient = [](ShaderArgs* Args)
-	{
-		const Triangle* Tri = Args->FindShaderResourcePtr<Triangle*>(TPGE_SHDR_TRI);
-		const size_t LightCount = Args->FindShaderResourceValue<size_t>(TPGE_SHDR_LIGHT_COUNT);
-		const Material* Mat = Tri->Material;
-		const Vec3* CamLookDir = Args->FindShaderResourcePtr<Vec3*>(TPGE_SHDR_CAMERA_LDIR);
-		const Vec3* FragPos = Args->FindShaderResourcePtr<Vec3*>(TPGE_SHDR_FRAG_POS);
-		const Vec3* FragNormal = Args->FindShaderResourcePtr<Vec3*>(TPGE_SHDR_FRAG_NORMAL);
-		const Vec3* BaryCoords = Args->FindShaderResourcePtr<Vec3*>(TPGE_SHDR_FRAG_BARY_COORDS);
-		Color* FragColor = Args->FindShaderResourcePtr<Color*>(TPGE_SHDR_FRAG_COLOR);
-
-		LightObject* Light = nullptr;
-		if (LightCount <= 0)
-		{
-			return;
-		}
-
-		Light = *Args->FindShaderResourcePtr<LightObject**>(TPGE_SHDR_LIGHT_OBJECTS);
-
-		float Intensity = 1.0f;
-		Vec3 LDir = (Light->LightPos - *FragPos).Normalized();
-		float Li = FragNormal->Dot(LDir);
-
-		Intensity = std::max<float>(0.0f, Li);
-
-		FragColor->R = std::clamp<float>(((255.0f * BaryCoords->x) * Intensity), 0.0f, 255.0f);
-		FragColor->G = std::clamp<float>(((255.0f * BaryCoords->y) * Intensity), 0.0f, 255.0f);
-		FragColor->B = std::clamp<float>(((255.0f * BaryCoords->z) * Intensity), 0.0f, 255.0f);
-		FragColor->A = 255.0f;
-	};
-
-	const auto Shader_Gradient_Centroid = [](ShaderArgs* Args)
-	{
-		const Triangle* Tri = Args->FindShaderResourcePtr<Triangle*>(TPGE_SHDR_TRI);
-		const size_t LightCount = Args->FindShaderResourceValue<size_t>(TPGE_SHDR_LIGHT_COUNT);
-		const Vec3* FragPos = Args->FindShaderResourcePtr<Vec3*>(TPGE_SHDR_FRAG_POS);
-		const Vec3* FragNormal = Args->FindShaderResourcePtr<Vec3*>(TPGE_SHDR_FRAG_NORMAL);
-		Color* FragColor = Args->FindShaderResourcePtr<Color*>(TPGE_SHDR_FRAG_COLOR);
-		Vec2* PixelCoords = Args->FindShaderResourcePtr<Vec2*>(TPGE_SHDR_PIXEL_COORDS);
-		LightObject* Light = nullptr;
-		if (LightCount <= 0)
-		{
-			return;
-		}
-
-		Light = *Args->FindShaderResourcePtr<LightObject**>(TPGE_SHDR_LIGHT_OBJECTS);
-
-		Vec3 Centroid = ((Tri->Points[0] + Tri->Points[1] + Tri->Points[2]) / 3.0f);
-		Vec3 BaryCoords = CalculateBarycentricCoordinatesScreenSpace(*PixelCoords, Vec2(Centroid.x, Centroid.y), Vec2(Tri->Points[1].x, Tri->Points[1].y), Vec2(Tri->Points[2].x, Tri->Points[2].y));
-		Vec3 BaryCoords2 = CalculateBarycentricCoordinatesScreenSpace(*PixelCoords, Vec2(Tri->Points[0].x, Tri->Points[0].y), Vec2(Tri->Points[1].x, Tri->Points[1].y), Vec2(Centroid.x, Centroid.y));
-
-		float Intensity = 1.0f;
-		Vec3 LDir = (Light->LightPos - *FragPos).Normalized();
-		float Li = FragNormal->Dot(LDir);
-
-		Intensity = std::max<float>(0.0f, Li);
-
-		FragColor->R = std::clamp<float>(((255.0f * BaryCoords2.x) * Intensity), 0.0f, 255.0f);
-		FragColor->G = std::clamp<float>(((255.0f * BaryCoords.y) * Intensity), 0.0f, 255.0f);
-		FragColor->B = std::clamp<float>(((255.0f * BaryCoords.z) * Intensity), 0.0f, 255.0f);
-		FragColor->A = 255.0f;
-	};
-
-	const auto Shader_Tex_Phong = [](ShaderArgs* Args)
-	{
-		const Triangle* Tri = Args->FindShaderResourcePtr<Triangle*>(TPGE_SHDR_TRI);
-		const size_t LightCount = Args->FindShaderResourceValue<size_t>(TPGE_SHDR_LIGHT_COUNT);
-		const Vec3* FragPos = Args->FindShaderResourcePtr<Vec3*>(TPGE_SHDR_FRAG_POS);
-		const Vec3* FragNormal = Args->FindShaderResourcePtr<Vec3*>(TPGE_SHDR_FRAG_NORMAL);
-		const Vec3* BaryCoords = Args->FindShaderResourcePtr<Vec3*>(TPGE_SHDR_FRAG_BARY_COORDS);
-		Color* FragColor = Args->FindShaderResourcePtr<Color*>(TPGE_SHDR_FRAG_COLOR);
-		Vec2* PixelCoords = Args->FindShaderResourcePtr<Vec2*>(TPGE_SHDR_PIXEL_COORDS);
-		const Vec3* CamLookDir = Args->FindShaderResourcePtr<Vec3*>(TPGE_SHDR_CAMERA_LDIR);
-		TextureCoords* UVW = Args->FindShaderResourcePtr<TextureCoords*>(TPGE_SHDR_TEX_UVW);
-		const Material* Mat = Tri->Material;
-
-		LightObject* Light = nullptr;
-		if (LightCount <= 0)
-		{
-			return;
-		}
-
-		Light = *Args->FindShaderResourcePtr<LightObject**>(TPGE_SHDR_LIGHT_OBJECTS);
-
-		Vec3 TexturCol = Vec3();
-
-		if (Tri->Material->HasUsableTexture())
-		{
-			TexturCol = Tri->Material->Textures.at(0)->GetPixelColor(UVW->u, 1.0f - UVW->v).GetRGB();
-			FragColor->R = std::clamp<float>(TexturCol.x, 0.0f, 255.0f);
-			FragColor->G = std::clamp<float>(TexturCol.y, 0.0f, 255.0f);
-			FragColor->B = std::clamp<float>(TexturCol.z, 0.0f, 255.0f);
-			FragColor->A = 255.0f;
-		}
-		else
-		{
-			Shader_Frag_Phong(Args);
-		}
-
-		Vec3 LDir = Light->LightPos.GetDirectionToVector(*FragPos);
-		float Li = FragNormal->Dot(LDir);
-
-		// Calculate the reflection direction using the formula: R = I - 2 * (I dot N) * N
-		float Intensity = std::max<float>(0.0f, Li);
-		//Vec3 RDir = (LDir - Args->FragNormal * 2.0f * Li).Normalized();
-		Vec3 RDir = (-LDir).GetReflectection(*FragNormal);
-
-		float SpecularIntensity = pow(std::max<float>(0.0f, (-RDir).Dot(*CamLookDir)), Mat->Shininess);
-
-		Vec3 AmbientCol = (TexturCol)*Light->AmbientCoeff;
-		Vec3 DiffuseCol = ((Light->Color * Intensity) + (TexturCol * Intensity)) * Light->DiffuseCoeff;
-		Vec3 SpecularClr = ((Light->Color * Light->SpecularCoeff) + (TexturCol * Light->SpecularCoeff)) * SpecularIntensity;
-
-		FragColor->R = std::clamp<float>((AmbientCol.x + DiffuseCol.x + SpecularClr.x), 0.0f, 255.0f);
-		FragColor->G = std::clamp<float>((AmbientCol.y + DiffuseCol.y + SpecularClr.y), 0.0f, 255.0f);
-		FragColor->B = std::clamp<float>((AmbientCol.z + DiffuseCol.z + SpecularClr.z), 0.0f, 255.0f);
-		FragColor->A = 255.0f;
-	};
-
-	const auto Shader_Texture_Only = [](ShaderArgs* Args)
-	{
-		const Triangle* Tri = Args->FindShaderResourcePtr<Triangle*>(TPGE_SHDR_TRI);
-		TextureCoords* UVW = Args->FindShaderResourcePtr<TextureCoords*>(TPGE_SHDR_TEX_UVW);
-		Color* FragColor = Args->FindShaderResourcePtr<Color*>(TPGE_SHDR_FRAG_COLOR);
-
-		Vec3 TexturCol = Vec3();
-
-		if (Tri->Material->HasUsableTexture())
-		{
-			TexturCol = Tri->Material->Textures.at(0)->GetPixelColor(UVW->u, 1.0f - UVW->v).GetRGB();
-			FragColor->R = std::clamp<float>(TexturCol.x, 0.0f, 255.0f);
-			FragColor->G = std::clamp<float>(TexturCol.y, 0.0f, 255.0f);
-			FragColor->B = std::clamp<float>(TexturCol.z, 0.0f, 255.0f);
-			FragColor->A = 255.0f;
-		}
-		else
-		{
-			FragColor->R = 255.0f;
-			FragColor->G = 255.0f;
-			FragColor->B = 255.0f;
-			FragColor->A = 255.0f;
-		}
-	};
+			else
+			{
+			    FragColor->R = 255.0f;
+				FragColor->G = 255.0f;
+				FragColor->B = 255.0f;
+				FragColor->A = 255.0f;
+			}
+		};
+	}
 }

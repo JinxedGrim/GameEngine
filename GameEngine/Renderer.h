@@ -1,6 +1,7 @@
 #pragma once
 #include "Rasterizer.h"
 #include "Renderable.h"
+#include "EnvironmentRenderable.h"
 
 namespace TerraPGE::Renderer
 {
@@ -11,391 +12,434 @@ namespace TerraPGE::Renderer
 		GPU = 2
 	};
 
-	RenderingBackend CurrBackend = RenderingBackend::CPU;
+	static RenderingBackend CurrBackend = RenderingBackend::CPU;
 	static GdiPP* EngineGdi = nullptr;
 
-	BrushPP ClearBrush = -1;
+	static BrushPP ClearBrush = -1;
+	static const Vec3 PlaneNormal = { 0.0f, 0.0f, 1.0f };
+
+	bool DebugClip = false;
+	bool DoCull = true;
 
 
-	void PrepareRenderingBackend(WndCreator& Wnd)
+	namespace RenderingCore
 	{
-		switch (CurrBackend)
+		void PrepareRenderingBackend(WndCreator& Wnd)
 		{
-		case RenderingBackend::CPU:
-			EngineGdi = new GdiPP(Wnd.Wnd, true);
-			Core::sx = Wnd.GetClientArea().Width;
-			Core::sy = Wnd.GetClientArea().Height;
-
-			Core::UpdateSystemInfo();
-
-			delete[] Core::DepthBuffer;
-
-			// Create depth buffer
-			Core::DepthBuffer = DEBUG_NEW float[(SIZE_T)(Core::sx * Core::sy)];
-
-			// Initial Client Region
-			EngineGdi->UpdateClientRgn();
-			break;
-		default:
-			std::cout << "Backend Not Found" << std::endl;
-		}
-	}
-
-
-	void DispatchRenderingCall()
-	{
-
-	}
-
-
-	void SetClearColor(int BrushIdx)
-	{
-		ClearBrush = (HBRUSH)GetStockObject(BrushIdx);
-	}
-
-
-	void ClearScreen()
-	{
-		// clear the screen
-
-		if ((HBRUSH)ClearBrush == (HBRUSH)-1)
-		{
-			SetClearColor(BLACK_BRUSH);
-		}
-
-		Renderer::EngineGdi->Clear(GDIPP_PIXELCLEAR, ClearBrush);
-		std::fill(Core::DepthBuffer, Core::DepthBuffer + Core::sx * Core::sy, 1.0f);
-		std::fill(Core::ShadowMap, Core::ShadowMap + Core::ShadowMapWidth * Core::ShadowMapHeight, 1.0f);
-	}
-
-
-	void PrepareLights(LightObject** SceneLights, size_t LightCount)
-	{
-		// already do this? TODO
-		for (int i = 0; i < LightCount; i++)
-		{
-			LightObject* Light = SceneLights[i];
-
-			Light->CalcVpMats();
-		}
-	}
-
-
-	__inline Triangle TransformToWorld(const Triangle& Tri, const Matrix& Model)
-	{
-		Triangle out = Tri;
-		out.ApplyMatrix(Model);
-
-		for (int i = 0; i < 3; ++i)
-			out.WorldSpaceVerts[i] = out.Points[i];
-
-		return out;
-	}
-
-
-	__inline void PorjectToViewSpace(Triangle& Tri, const Camera* Cam)
-	{
-		// 3d Space -> Viewed Space
-		Tri.ApplyMatrix(Cam->ViewMatrix);
-
-		for (int i = 0; i < 3; i++)
-		{
-			Tri.ViewSpaceVerts[i] = Tri.Points[i];
-		}
-	}
-
-
-	__inline bool ShouldCulltriangle(const Triangle& tri, const Camera* Cam)
-	{
-		//if ((TriNormal.Dot(WorldSpaceTri.Points[0] - Cam->Pos) < 0.0f) || !TerraPGE::DoCull || !MeshToRender->BackfaceCulling) // backface culling
-		if (!Core::DoCull)
-			return false;
-		Vec3 normal = tri.FaceNormal;
-		float facing = normal.Dot(tri.Points[0] - Cam->Transform.GetLocalPosition());
-		return facing >= 0.0f;
-	}
-
-
-	std::vector<Triangle> VertexShader(Camera* Cam, Renderable* Object)
-	{
-		std::vector<Triangle> ClipSpaceTris = {};
-		ClipSpaceTris.reserve(Object->mesh->Triangles.size());
-
-		Triangle Clipped[2];
-		Vec3 NormPos = Vec3(0, 0, 0);
-		Vec3 NormDir = Vec3(0, 0, 0);
-		Vec3 TriNormal;
-
-		for (const Triangle& Tri : Object->mesh->Triangles)
-		{
-
-			// 3D Space / World Space
-			Triangle WorldSpaceTri = TransformToWorld(Tri, Object->Transform.GetWorldMatrix());
-
-			//TODO Fix this whole damn thing calc normals at mesh gen or at vertex shade time fuck the rest
-			TriNormal = Tri.FaceNormal;
-			if (Object->mesh->Normals.size() == 0)
+			switch (CurrBackend)
 			{
-				NormPos = ((Tri.Points[0] + Tri.Points[1] + Tri.Points[2]) / 3.0f);
-				NormDir = (Tri.Points[1] - Tri.Points[0]).GetVec3().CrossNormalized((Tri.Points[2] - Tri.Points[0])).Normalized();
+				case RenderingBackend::CPU:
+					EngineGdi = new GdiPP(Wnd.Wnd, true);
+					Core::sx = Wnd.GetClientArea().Width;
+					Core::sy = Wnd.GetClientArea().Height;
 
-				TriNormal = (WorldSpaceTri.Points[1] - WorldSpaceTri.Points[0]).GetVec3().CrossNormalized((WorldSpaceTri.Points[2] - WorldSpaceTri.Points[0])).Normalized(); // this line and the if statement is used for culling
+					Core::UpdateSystemInfo();
 
-				for (int i = 0; i < 3; i++)
-				{
-					WorldSpaceTri.VertexNormals[i] *= Object->Transform.Normal;
-				}
+					delete[] Core::DepthBuffer;
+					delete[] Core::FrameBuffer;
 
-				WorldSpaceTri.NormalPositions[0] = NormPos;
-				WorldSpaceTri.NormalPositions[1] = Tri.Points[0];
-				WorldSpaceTri.NormalPositions[2] = Tri.Points[1];
-				WorldSpaceTri.NormalPositions[3] = Tri.Points[2];
-				WorldSpaceTri.NormDirections[0] = NormDir;
+					// Create depth buffer
+					Core::DepthBuffer = DEBUG_NEW float[(SIZE_T)(Core::sx * Core::sy)];
+					Core::FrameBuffer = DEBUG_NEW float[(SIZE_T)(Core::sx * Core::sy * 3)];
+
+					// Initial Client Region
+					EngineGdi->UpdateClientRgn();
+					break;
+				default:
+					std::cout << "Backend Not Found" << std::endl;
 			}
-			else
-			{
-				TriNormal *= Object->Transform.Normal;
-				for (int i = 0; i < 3; i++)
-				{
-					WorldSpaceTri.VertexNormals[i] *= Object->Transform.Normal;
-				}
+		}
 
-				NormDir = WorldSpaceTri.FaceNormal;
-				NormPos = WorldSpaceTri.NormalPositions[0];
+
+		void DispatchRenderingCall()
+		{
+
+		}
+
+
+		void SetClearColor(int BrushIdx)
+		{
+			ClearBrush = (HBRUSH)GetStockObject(BrushIdx);
+		}
+
+
+		void ClearScreen()
+		{
+			// clear the screen
+
+			if ((HBRUSH)ClearBrush == (HBRUSH)-1)
+			{
+				SetClearColor(BLACK_BRUSH);
 			}
 
-			WorldSpaceTri.FaceNormal = TriNormal;
+			std::fill(Core::DepthBuffer, Core::DepthBuffer + Core::sx * Core::sy, 1.0f);
+			std::fill(Core::ShadowMap, Core::ShadowMap + Core::ShadowMapWidth * Core::ShadowMapHeight, 1.0f);
+			std::fill(Core::FrameBuffer, Core::FrameBuffer + (Core::sx * Core::sy * 3), 0.0f);
+		}
 
 
-
-			if (!ShouldCulltriangle(WorldSpaceTri, Cam)) // backface culling
+		void SwapFrameBuffer(bool Hdr, bool GammaCorrection)
+		{
+			for (int i = 0; i < Core::sx * Core::sy; i++)
 			{
-				PorjectToViewSpace(WorldSpaceTri, Cam);
+				int index = i * 3;
+				float* ChannelPtr = Core::FrameBuffer + index;
 
-				Vec3 PlaneNormal = { 0.0f, 0.0f, 1.0f };
-				int Count = WorldSpaceTri.ClipAgainstPlane(Cam->NearPlane, PlaneNormal, Clipped[0], Clipped[1], Core::DebugClip);
+				float Rf, Gf, Bf = 0.0f;
+				int R, G, B = 0;
 
-				if (Count == 0)
-					continue;
+				Rf = ChannelPtr[0];
+				Gf = ChannelPtr[1];
+				Bf = ChannelPtr[2];
 
-				for (int i = 0; i < Count; i++)
+				if (Renderer::UseHDR)
 				{
-					Triangle Projected = Clipped[i];
+					Rf /= (1.0f + Rf);
+					Gf /= (1.0f + Gf);
+					Bf /= (1.0f + Bf);
+				}
 
-					// Viewed Space -> clip space
-					Projected = Cam->ProjectTriangle(&Projected);
+				Rf = std::clamp<float>(Rf, 0, 1.0f);
+				Gf = std::clamp<float>(Gf, 0, 1.0f);
+				Bf = std::clamp<float>(Bf, 0, 1.0f);
 
-					for (int p = 0; p < 3; p++)
+				if (Renderer::DoGammaCorrection)
+				{
+					// Gamma Correction
+					Rf = Color::LinearToSRGB_Channel(Rf);
+					Gf = Color::LinearToSRGB_Channel(Gf);
+					Bf = Color::LinearToSRGB_Channel(Bf);
+				}
+
+				// Final transformation to RGB Space
+				R = Rf * 255.0f;
+				G = Gf * 255.0f;
+				B = Bf * 255.0f;
+
+				int y = i / Core::sx;
+				int x = i % Core::sx;
+
+				// Write to out buffer
+				EngineGdi->QuickSetPixel(x, y, RGB(R, G, B));
+			}
+		}
+	}
+
+
+	namespace RenderingUtils
+	{
+		__inline bool ShouldCulltriangle(const Vec3& WorldSpacePos, Vec3 FaceNormal, const Vec3& CamPos)
+		{
+			//if ((TriNormal.Dot(WorldSpaceTri.Points[0] - Cam->Pos) < 0.0f) || !TerraPGE::DoCull || !MeshToRender->BackfaceCulling) // backface culling
+			float facing = FaceNormal.Dot(WorldSpacePos - CamPos);
+			return facing >= 0.0f;
+		}
+
+
+		__inline bool ShouldCulltriangle(const Vec3& ViewSpacePos, const Vec3& FaceNormal, const Matrix& ViewMatrix)
+		{
+			Vec3 viewPos = ViewSpacePos * ViewMatrix;
+			Vec3 normalVS = FaceNormal * ViewMatrix;
+			float facing = normalVS.Dot(viewPos);
+			return facing >= 0.0f;
+		}
+
+
+		void PrepareLights(LightObject** SceneLights, size_t LightCount)
+		{
+			// already do this? TODO
+			for (int i = 0; i < LightCount; i++)
+			{
+				LightObject* Light = SceneLights[i];
+
+				Light->CalcVpMats();
+			}
+		}
+
+
+		__inline Triangle TransformToWorld(const Triangle& Tri, const Matrix& Model)
+		{
+			Triangle out = Tri;
+			out.ApplyMatrix(Model);
+
+			for (int i = 0; i < 3; ++i)
+				out.WorldSpaceVerts.Points[i] = out.Points.Points[i];
+
+			return out;
+		}
+
+
+		__inline Triangle ProjectToViewSpace(const Triangle* Tri, Camera* Cam)
+		{
+			// 3d Space -> Viewed Space
+			Triangle Result = *Tri;
+			Result.ApplyMatrix(Cam->GetViewMatrix());
+
+			return Result;
+		}
+
+
+		std::vector<Triangle> VertexShader(Camera* Cam, Renderable* Object)
+		{
+			std::vector<Triangle> ClipSpaceTris = {};
+			ClipSpaceTris.reserve(Object->mesh->Triangles.size());
+
+			Vec3 NormPos = Vec3(0, 0, 0);
+			Vec3 NormDir = Vec3(0, 0, 0);
+			Vec3 TriNormal;
+
+			for (const Triangle& Tri : Object->mesh->Triangles)
+			{
+				// 3D Space / World Space
+				Triangle WorldSpaceTri = RenderingUtils::TransformToWorld(Tri, Object->Transform.GetWorldMatrix());
+
+				//TODO Fix this whole damn thing calc normals at mesh gen or at vertex shade time fuck the rest
+				TriNormal = Tri.FaceNormal;
+				if (Object->mesh->Normals.size() == 0)
+				{
+					NormPos = ((Tri.Points.Points[0] + Tri.Points.Points[1] + Tri.Points.Points[2]) / 3.0f);
+					NormDir = (Tri.Points.Points[1] - Tri.Points.Points[0]).GetVec3().CrossNormalized((Tri.Points.Points[2] - Tri.Points.Points[0])).Normalized();
+					TriNormal = -(WorldSpaceTri.Points.Points[1] - WorldSpaceTri.Points.Points[0]).GetVec3().CrossNormalized((WorldSpaceTri.Points.Points[2] - WorldSpaceTri.Points.Points[0])).Normalized(); // this line and the if statement is used for culling
+
+					for (int i = 0; i < 3; i++)
 					{
-						Projected.ClipSpaceVerts[p] = Projected.Points[p];
+						WorldSpaceTri.VertexNormals[i] *= Object->Transform.Normal;
 					}
 
-					// Add Triangle to render list
-					ClipSpaceTris.push_back(Projected);
+					WorldSpaceTri.NormalPositions[0] = NormPos;
+					WorldSpaceTri.NormalPositions[1] = Tri.Points.Points[0];
+					WorldSpaceTri.NormalPositions[2] = Tri.Points.Points[1];
+					WorldSpaceTri.NormalPositions[3] = Tri.Points.Points[2];
+					WorldSpaceTri.NormDirections[0] = NormDir;
+				}
+				else
+				{
+					TriNormal *= Object->Transform.Normal;
+					for (int i = 0; i < 3; i++)
+					{
+						WorldSpaceTri.VertexNormals[i] *= Object->Transform.Normal;
+					}
+
+					NormDir = WorldSpaceTri.FaceNormal;
+					NormPos = WorldSpaceTri.NormalPositions[0];
+				}
+
+				if (!RenderingUtils::ShouldCulltriangle(WorldSpaceTri.Points.Points[0], TriNormal, Cam->GetWorldPosition()) || !DoCull) // backface culling
+				{
+					WorldSpaceTri.FaceNormal = TriNormal;
+					Triangle ViewSpaceTri = RenderingUtils::ProjectToViewSpace(&WorldSpaceTri, Cam);
+
+					ViewSpaceTri.ApplyMatrix(Cam->GetProjectionMatrix());
+
+					ClipSpaceTris.push_back(ViewSpaceTri);
 				}
 			}
+			return ClipSpaceTris;
 		}
-		return ClipSpaceTris;
+
+
+		std::vector<Triangle> Clipping(const Triangle* Tri)
+		{
+			Triangle Clipped[2];
+
+			std::vector<Triangle> ListTris;
+			ListTris.push_back(*Tri);
+			int NewTris = 1;
+
+			for (int p = 0; p < 4; p++)
+			{
+				int NewTrisToAdd = 0;
+				while (NewTris > 0)
+				{
+					Triangle Test = ListTris.front();
+					ListTris.erase(ListTris.begin());
+					NewTris--;
+
+					switch (p)
+					{
+						case 0:
+						{
+							NewTrisToAdd = Test.ClipAgainstPlane({ 0.0f, 0.0f, 0.0f }, { 0.0f, 1.0f, 0.0f }, Clipped[0], Clipped[1], Renderer::DebugClip);
+							break;
+						}
+						case 1:
+						{
+							NewTrisToAdd = Test.ClipAgainstPlane({ 0.0f, (float)Core::sy - 1, 0.0f }, { 0.0f, -1.0f, 0.0f }, Clipped[0], Clipped[1], Renderer::DebugClip);
+							break;
+						}
+						case 2:
+						{
+							NewTrisToAdd = Test.ClipAgainstPlane({ 0.0f, 0.0f, 0.0f }, { 1.0f, 0.0f, 0.0f }, Clipped[0], Clipped[1], Renderer::DebugClip);
+							break;
+						}
+						case 3:
+						{
+							NewTrisToAdd = Test.ClipAgainstPlane({ (float)Core::sx - 1, 0.0f, 0.0f }, { -1.0f, 0.0f, 0.0f }, Clipped[0], Clipped[1], Renderer::DebugClip);
+							break;
+						}
+					}
+
+					for (int w = 0; w < NewTrisToAdd; w++)
+					{
+						ListTris.push_back(Clipped[w]);
+					}
+				}
+				NewTris = (int)ListTris.size();
+			}
+
+			return ListTris;
+		}
+
+
+		std::vector<Triangle> ClippingClipSpace(const Triangle* Tri)
+		{
+			std::vector<Triangle> Tris;
+			Tris.push_back(*Tri);
+
+			Vec4 planes[6] = {
+				{  0,  0,  1,  0 }, // z >= 0
+				{  1,  0,  0,  1 }, // x >= -w
+				{ -1,  0,  0,  1 }, // x <=  w
+				{  0,  1,  0,  1 }, // y >= -w
+				{  0, -1,  0,  1 }, // y <=  w
+				{  0,  0, -1,  1 }  // z <=  w
+			};
+
+			for (int p = 0; p < 6; ++p)
+			{
+				std::vector<Triangle> Next;
+
+				for (const Triangle& T : Tris)
+				{
+					Triangle O1, O2;
+					int count = T.ClipAgainstPlane(planes[p], O1, O2, DebugClip);
+
+					if (count >= 1)
+						Next.push_back(O1);
+					if (count == 2)
+						Next.push_back(O2);
+				}
+
+				Tris.swap(Next);
+
+				if (Tris.empty())
+					break;
+			}
+
+			return Tris;
+		}
+
+
+		void BuildRenderQueue(const Renderable** Renderables, int Sz)
+		{
+			// This is where i can do filtering and checking for transparency and stuff TODO
+		}
 	}
 
 
-	std::vector<Triangle> ScreenSpaceClipping(Triangle* Tri)
+	// Some sort of way to force backend to implement this
+	// Probably this Renderer Becomes a class thats derivable
+	void RenderFormattedText(std::string)
 	{
-		Triangle Clipped[2];
 
-		std::vector<Triangle> ListTris;
-		ListTris.push_back(*Tri);
-		int NewTris = 1;
+	}
 
-		for (int p = 0; p < 4; p++)
+
+	void DrawFpsCounter(WndCreator& Wnd, const float& Fps, const SIZE_T CurrMB, double FrameTime, double CpuUsage)
+	{
+#ifdef UNICODE
+		// Draw FPS and some debug info
+		std::wstring Str = Core::FpsWStr + std::to_wstring(Fps) + L" Cpu/Time: " + std::to_wstring(CpuUsage) + L"/" + std::to_wstring(FrameTime) + L" Memory Usage: " + std::to_wstring(CurrMB) + L"/" + std::to_wstring(Core::MaxMemoryMB) + L" MB " + std::to_wstring(Core::GetUsedHeap()) + L"MB (Heap)" + (Core::DoMultiThreading ? L"(MultiThreaded)" : L"");
+		//Wnd.SetWndTitle(Str);
+		Renderer::EngineGdi->DrawStringW(20, 20, Str, RGB(255, 0, 0), TRANSPARENT);
+#endif
+#ifndef UNICODE
+		std::string Str = FpsStr + std::to_string(Fps) + " Memory Usage: " + std::to_string(CurrMB) + "/" + std::to_string(Core::MaxMemoryMB) + " MB " + (DoMultiThreading ? "(MultiThreaded)" : "");;
+		//Wnd.SetWndTitle(Str);
+		EngineGdi.DrawStringA(20, 20, Str, RGB(255, 0, 0), TRANSPARENT);
+#endif
+	}
+
+
+	void RenderMesh(Camera* Cam, Renderable* Object, LightObject** SceneLights, size_t LightCount)
+	{
+		std::vector<Triangle> ClipSpaceTris = RenderingUtils::VertexShader(Cam, Object);
+
+		for (const Triangle& ClipSpaceTri : ClipSpaceTris)
 		{
-			int NewTrisToAdd = 0;
-			while (NewTris > 0)
+			std::vector<Triangle> Clipped = RenderingUtils::ClippingClipSpace(&ClipSpaceTri);
+
+			// initialize shader
+			ShaderArgs* Args = DEBUG_NEW ShaderArgs();
+			Args->AddShaderDataByValue(TPGE_SHDR_TYPE, Object->SHADER_TYPE, 0);
+			Args->AddShaderDataByValue<Vec3>(TPGE_SHDR_CAMERA_POS, Cam->Transform.GetWorldPosition(), 0);
+			Args->AddShaderDataByValue<Vec3>(TPGE_SHDR_CAMERA_LDIR, Cam->GetLookDirection(), 0);
+			Args->AddShaderDataPtr(TPGE_SHDR_CAMERA_VIEW_MATRIX, Cam->_GetViewMatrixPtr(), 0);
+			Args->AddShaderDataPtr(TPGE_SHDR_CAMERA_PROJ_MATRIX, Cam->_GetProjectionMatrixPtr(), 0);
+			Args->AddShaderDataPtr(TPGE_SHDR_OBJ_MATRIX, Object->Transform._GetWorldMatrixPtr(), 0);
+			Args->AddShaderDataPtr(TPGE_SHDR_LIGHT_OBJECTS, SceneLights, 0);
+			Args->AddShaderDataByValue<size_t>(TPGE_SHDR_LIGHT_COUNT, LightCount, 0);
+			Args->AddShaderDataByValue<bool>(TPGE_SHDR_DEBUG_SHADOWS, DebugShadows);
+			Args->AddShaderDataByValue<bool>(TPGE_SHDR_IS_IN_SHADOW, false);
+			Args->AddShaderDataPtr(TPGE_SHDR_TRI, nullptr, 0);
+
+			// Draw each tri
+			for (Triangle& ToDraw : Clipped)
 			{
-				Triangle Test = ListTris.front();
-				ListTris.erase(ListTris.begin());
-				NewTris--;
+				// Clip Space -> NDC Space
+				ToDraw.ApplyPerspectiveDivide();
 
-				switch (p)
+				// Offset to viewport space (Ndc -> Screen Space)
+				ToDraw.Scale(Vec3((float)(Core::sx * 0.5f), (float)(Core::sy * 0.5f), 1.0f));
+				ToDraw.Translate(Vec3((float)(Core::sx * 0.5f), (float)(Core::sy * 0.5f), 0.0f));
+
+				//SceneLights, LightCount
+				Args->EditShaderData(TPGE_SHDR_TRI, &ToDraw, 0);
+
+
+
+				// Calc lighting (only if lighting is applied at a tri level)
+				if ((Renderer::DoLighting) && Object->SHADER_TYPE == ShaderTypes::SHADER_TRIANGLE)
 				{
-				case 0:
-				{
-					NewTrisToAdd = Test.ClipAgainstPlane({ 0.0f, 0.0f, 0.0f }, { 0.0f, 1.0f, 0.0f }, Clipped[0], Clipped[1], Core::DebugClip);
-					break;
-				}
-				case 1:
-				{
-					NewTrisToAdd = Test.ClipAgainstPlane({ 0.0f, (float)Core::sy - 1, 0.0f }, { 0.0f, -1.0f, 0.0f }, Clipped[0], Clipped[1], Core::DebugClip);
-					break;
-				}
-				case 2:
-				{
-					NewTrisToAdd = Test.ClipAgainstPlane({ 0.0f, 0.0f, 0.0f }, { 1.0f, 0.0f, 0.0f }, Clipped[0], Clipped[1], Core::DebugClip);
-					break;
-				}
-				case 3:
-				{
-					NewTrisToAdd = Test.ClipAgainstPlane({ (float)Core::sx - 1, 0.0f, 0.0f }, { -1.0f, 0.0f, 0.0f }, Clipped[0], Clipped[1], Core::DebugClip);
-					break;
-				}
+					Object->Shader(Args);
 				}
 
-				for (int w = 0; w < NewTrisToAdd; w++)
-				{
-					ListTris.push_back(Clipped[w]);
-				}
+
+				if (Core::DoMultiThreading)
+					Renderer::BaryCentricRasterizer(Core::DepthBuffer, Core::sx, Core::sy, EngineGdi, Object->Shader, Args);
+				else
+					Renderer::BaryCentricRasterizer(Core::DepthBuffer, Core::sx, Core::sy, EngineGdi, Object->Shader, Args);
 			}
-			NewTris = (int)ListTris.size();
-		}
 
-		return ListTris;
+			Args->Delete();
+		}
 	}
 
 
 	// Render function for rendering entire meshes
-	// Rendering Pipeline: Recieve call with mesh info including positions & lights sources -> Calc and apply matrices + normals -> backface culling	
+	// Rendering Pipeline: Recieve call with mesh info including positions & lights sources -> Calc and apply world matrix + normals -> backface culling	
 	// -> Clipping + Frustum culling -> Call Draw Triangle from graphics API with shader supplied -> Shader called from triangle routine with pixel info + normals -> SetPixel
-	//template<typename T>
 	void RenderMeshes(Camera* Cam, Renderable** SceneObjects, LightObject** SceneLights, size_t ObjectCount, size_t LightCount /*T&& Shader, const ShaderTypes SHADER_TYPE = ShaderTypes::SHADER_FRAGMENT*/)
 	{
 		// TODO MultiThread??
 		// TODO Allow vertex shaders (:
 		// Project and translate object 
-		PrepareLights(SceneLights, LightCount);
+		RenderingUtils::PrepareLights(SceneLights, LightCount);
 
 		for (int i = 0; i < ObjectCount; i++)
 		{
-			Renderable* Object = SceneObjects[i];
-
-			std::vector<Triangle> ClipSpaceTris = VertexShader(Cam, Object);
-
-			for (Triangle& ClipSpaceTri : ClipSpaceTris)
-			{
-				// Clip Space -> NDC Space
-				Triangle NdcSpaceTri = ClipSpaceTri;
-				NdcSpaceTri.ApplyPerspectiveDivide();
-
-
-				// Offset to viewport space (Ndc -> Screen Space)
-				NdcSpaceTri.Scale(Vec3((float)(Core::sx * 0.5f), (float)(Core::sy * 0.5f), 1.0f));
-				NdcSpaceTri.Translate(Vec3((float)(Core::sx * 0.5f), (float)(Core::sy * 0.5f), 0.0f));
-
-				std::vector<Triangle> ClippedScreenSpace = ScreenSpaceClipping(&NdcSpaceTri);
-
-				// sort faces 
-		//		std::sort(TrisToRender.begin(), TrisToRender.end(), [](const Triangle& t1, const Triangle& t2)
-		//		{
-		//			float z1 = (t1.Points[0].z + t1.Points[1].z + t1.Points[2].z) / 3.0f;
-		//			float z2 = (t2.Points[0].z + t2.Points[1].z + t2.Points[2].z) / 3.0f;
-		//			return z1 > z2;
-		//		});
-
-
-				ShaderArgs* Args = DEBUG_NEW ShaderArgs();
-				Args->AddShaderDataByValue(TPGE_SHDR_TYPE, Object->SHADER_TYPE, 0);
-				Args->AddShaderDataByValue<Vec3>(TPGE_SHDR_CAMERA_POS, Cam->Transform.GetLocalPosition(), 0);
-				Args->AddShaderDataByValue<Vec3>(TPGE_SHDR_CAMERA_LDIR, Cam->GetLookDirection(), 0);
-				Args->AddShaderDataPtr(TPGE_SHDR_CAMERA_VIEW_MATRIX, &Cam->ViewMatrix, 0);
-				Args->AddShaderDataPtr(TPGE_SHDR_CAMERA_PROJ_MATRIX, &Cam->ProjectionMatrix, 0);
-				Args->AddShaderDataPtr(TPGE_SHDR_OBJ_MATRIX, &Object->Transform.World, 0);
-				Args->AddShaderDataPtr(TPGE_SHDR_LIGHT_OBJECTS, SceneLights, 0);
-				Args->AddShaderDataByValue<size_t>(TPGE_SHDR_LIGHT_COUNT, LightCount, 0);
-				Args->AddShaderDataByValue<bool>(TPGE_SHDR_DEBUG_SHADOWS, DebugShadows);
-				Args->AddShaderDataByValue<bool>(TPGE_SHDR_IS_IN_SHADOW, false);
-				Args->AddShaderDataPtr(TPGE_SHDR_TRI, nullptr, 0);
-
-				for (auto& ToDraw : ClippedScreenSpace)
-				{
-					//SceneLights, LightCount
-					Args->EditShaderData(TPGE_SHDR_TRI, &ToDraw, 0);
-
-
-
-					// Calc lighting (only if lighting is applied at a tri level)
-					if ((Core::DoLighting) && Object->SHADER_TYPE == ShaderTypes::SHADER_TRIANGLE)
-					{
-						Object->Shader(Args);
-					}
-
-					if (!Core::WireFrame)
-					{
-						if (!Core::ShowTriLines)
-						{
-							if (Core::DoMultiThreading)
-								Renderer::BaryCentricRasterizer(Core::DepthBuffer, Core::sx, Core::sy, EngineGdi, Object->Shader, Args);
-							else
-								Renderer::BaryCentricRasterizer(Core::DepthBuffer, Core::sx, Core::sy, EngineGdi, Object->Shader, Args);
-						}
-						else
-						{
-							if (Object->mesh->MeshName != "Ray")
-							{
-								EngineGdi->DrawFilledTriangle(PixelRound(ToDraw.Points[0].x), PixelRound(ToDraw.Points[0].y), PixelRound(ToDraw.Points[1].x), PixelRound(ToDraw.Points[1].y), PixelRound(ToDraw.Points[2].x), PixelRound(ToDraw.Points[2].y), BrushPP(RGB(ToDraw.Col.x, ToDraw.Col.y, ToDraw.Col.z)), PenPP(PS_SOLID, 1, RGB(1, 1, 1)));
-
-								//if (ShowNormals)
-								//{
-								//	Ray NormalRay = Ray(ToDraw.NormalPositions[0], ToDraw.NormDirections[0]);
-								//	NormalRay.GenerateMesh();
-
-								//	RenderMesh(Gdi, Cam, NormalRay.mesh, Scalar, RotationRads, Pos, Vec3(0, 0, 0), Vec3(1, 1, 1), 0.f, 0.f, 0.f, EngineShaders::Shader_Material);
-
-								//	NormalRay.mesh.UseSingleMat = true;
-
-								//	NormalRay = Ray(ToDraw.NormalPositions[1], ToDraw.NormDirections[0]);
-								//	NormalRay.GenerateMesh();
-								//	NormalRay.mesh.Mat.AmbientColor = Vec3(0, 0, 255);
-
-								//	RenderMesh(Gdi, Cam, NormalRay.mesh, Scalar, RotationRads, Pos, Vec3(0, 0, 0), Vec3(1, 1, 1), 0.f, 0.f, 0.f, EngineShaders::Shader_Material);
-
-								//	NormalRay = Ray(ToDraw.NormalPositions[2], ToDraw.NormDirections[0]);
-								//	NormalRay.GenerateMesh();
-								//	NormalRay.mesh.Mat.AmbientColor = Vec3(0, 0, 255);
-
-								//	RenderMesh(Gdi, Cam, NormalRay.mesh, Scalar, RotationRads, Pos, Vec3(0, 0, 0), Vec3(1, 1, 1), 0.f, 0.f, 0.f, EngineShaders::Shader_Material);
-
-								//	NormalRay = Ray(ToDraw.NormalPositions[3], ToDraw.NormDirections[0]);
-								//	NormalRay.GenerateMesh();
-								//	NormalRay.mesh.Mat.AmbientColor = Vec3(0, 0, 255);
-
-								//	RenderMesh(Gdi, Cam, NormalRay.mesh, Scalar, RotationRads, Pos, Vec3(0, 0, 0), Vec3(1, 1, 1), 0.f, 0.f, 0.f, EngineShaders::Shader_Material);
-								//}
-							}
-							else
-							{
-								EngineGdi->DrawFilledTriangle(PixelRound(ToDraw.Points[0].x), PixelRound(ToDraw.Points[0].y), PixelRound(ToDraw.Points[1].x), PixelRound(ToDraw.Points[1].y), PixelRound(ToDraw.Points[2].x), PixelRound(ToDraw.Points[2].y), BrushPP(RGB(ToDraw.Col.x, ToDraw.Col.y, ToDraw.Col.z)), PenPP(PS_SOLID, 1, RGB(ToDraw.Col.x, ToDraw.Col.y, ToDraw.Col.z)));
-							}
-						}
-					}
-					else
-					{
-						EngineGdi->DrawTriangle(PixelRound(ToDraw.Points[0].x), PixelRound(ToDraw.Points[0].y), PixelRound(ToDraw.Points[1].x), PixelRound(ToDraw.Points[1].y), PixelRound(ToDraw.Points[2].x), PixelRound(ToDraw.Points[2].y), PenPP(PS_SOLID, 1, RGB(ToDraw.Col.x, ToDraw.Col.y, ToDraw.Col.z)));
-					}
-				}
-				Args->Delete();
-
-			}
-
+			TerraPGE::Renderer::RenderMesh(Cam, SceneObjects[i], SceneLights, LightCount);
 		}
 	}
 
 
 	void RenderShadowMaps(Renderable** SceneObjects, LightObject** SceneLights, size_t ObjectCount, size_t LightCount, float* Buffer)
 	{
-		std::vector<Triangle> TrisToRender = {};
-		Triangle Clipped[2];
-		Vec3 NormPos = Vec3(0, 0, 0);
-		Vec3 NormDir = Vec3(0, 0, 0);
-		Vec3 TriNormal;
+		bool HasLight = LightCount >= 1;
 
-		bool HasLight = LightCount > 1;
-
-		// TODO MultiThread??
-		// TODO Allow vertex shaders (:
-		// Project and translate object 
-		for (int i = 0; i < ObjectCount; i++)
+		for (int objIdx = 0; objIdx < ObjectCount; objIdx++)
 		{
-			Renderable* Object = SceneObjects[i];
-			TrisToRender.reserve(Object->mesh->Triangles.size());
+			Renderable* Object = SceneObjects[objIdx];
 
 			for (const Triangle& Tri : Object->mesh->Triangles)
 			{
@@ -405,46 +449,30 @@ namespace TerraPGE::Renderer
 
 				for (int i = 0; i < 3; i++)
 				{
-					Proj.WorldSpaceVerts[i] = Proj.Points[i];
+					Proj.WorldSpaceVerts.Points[i] = Proj.Points.Points[i];
 				}
 
-				if (Core::DoShadows && HasLight)
+				if (Renderer::DoShadows && HasLight)
 				{
-					for (int i = 0; i < LightCount; i++)
+					// TODO Add more maps for supporting more lights
+					LightObject* Light = SceneLights[0];
+					// 3D Space -> Viewed Space -> Clipped Space
+
+					if (Light->Type == LightTypes::DirectionalLight)
 					{
-						LightObject* Light = SceneLights[i];
-						// 3D Space -> Viewed Space -> Clipped Space
+						const Matrix VpMatrix = Light->VpMatrices[0];
+						Proj.ApplyMatrix(VpMatrix);
 
-						if (Light->Type == LightTypes::DirectionalLight)
+						Renderer::BaryCentricRasterizerDepth(&Proj, Core::ShadowMap, (SIZE_T)Core::ShadowMapWidth, (SIZE_T)Core::ShadowMapHeight);
+					}
+					else if (Light->Type == LightTypes::PointLight)
+					{
+						for (int face = 0; face < 6; face++)
 						{
-
-							const Matrix VpMatrix = Light->VpMatrices[0];
+							Matrix VpMatrix = SceneLights[0]->VpMatrices[face];
 							Proj.ApplyMatrix(VpMatrix);
-							// Clipped Space -> NDC Space
-							Proj.ApplyPerspectiveDivide();
 
-							// Offset to viewport space (Ndc -> Screen Space)
-							Proj.Scale(Vec3((float)(Core::ShadowMapWidth * 0.5f), (float)(Core::ShadowMapHeight * 0.5f), 1.0f));
-							Proj.Translate(Vec3((float)(Core::ShadowMapWidth * 0.5f), (float)(Core::ShadowMapHeight * 0.5f), 0.0f));
-
-
-							Renderer::BaryCentricRasterizerDepth(&Proj, Core::ShadowMap, (SIZE_T)Core::ShadowMapWidth, (SIZE_T)Core::ShadowMapHeight, VpMatrix);
-						}
-						else if (SceneLights[i]->Type == LightTypes::PointLight)
-						{
-							for (int face = 0; face < 6; face++)
-							{
-								Matrix VpMatrix = SceneLights[i]->VpMatrices[face];
-								Proj.ApplyMatrix(VpMatrix);
-								// Clipped Space -> NDC Space
-								Proj.ApplyPerspectiveDivide();
-
-								// Offset to viewport space (Ndc -> Screen Space)
-								Proj.Scale(Vec3((float)(Core::ShadowMapWidth * 0.5f), (float)(Core::ShadowMapHeight * 0.5f), 1.0f));
-								Proj.Translate(Vec3((float)(Core::ShadowMapWidth * 0.5f), (float)(Core::ShadowMapHeight * 0.5f), 0.0f));
-
-								Renderer::BaryCentricRasterizerDepth(&Proj, Core::ShadowMap, (SIZE_T)Core::ShadowMapWidth, (SIZE_T)Core::ShadowMapHeight, VpMatrix);
-							}
+							Renderer::BaryCentricRasterizerDepth(&Proj, Core::ShadowMap, (SIZE_T)Core::ShadowMapWidth, (SIZE_T)Core::ShadowMapHeight);
 						}
 					}
 				}
@@ -452,11 +480,91 @@ namespace TerraPGE::Renderer
 		}
 	}
 
-
-	namespace Multithreaded
+	
+	void RenderEnvironment(EnvironmentRenderable** Objects, size_t Count)
 	{
+		//Vertex Shading
 
+		//for (int i = 0; i < Count; i++)
+		//{
+		//	Objects[i]->;
+		//}
 	}
+
+
+	void RenderSkybox(Camera* Cam, EnvironmentRenderable* sky)
+	{
+		if (sky == nullptr)
+			return;
+
+		const int W = Core::sx;
+		const int H = Core::sy;
+
+		const Matrix& Proj = Cam->GetProjectionMatrix();
+		const Matrix3x3 CamRot = Cam->GetRotationMatrix(); // rotation only
+		const float Fov = Cam->GetFov();
+
+		for (int y = 0; y < H; ++y)
+		{
+			for (int x = 0; x < W; ++x)
+			{
+				// skyboox render
+				Color skyColor = sky->Render(x, y, W, H, Fov, CamRot);
+
+				// 5. Write color
+				Core::SetPixelFrameBuffer(x, y, skyColor.R, skyColor.G, skyColor.B);
+			}
+		}
+	}
+
+
+	void RenderScene(Camera* Cam, Renderable** SceneObjects, LightObject** SceneLights, size_t ObjectCount, size_t LightCount, EnvironmentRenderable* Skybox = nullptr)
+	{
+		Renderer::RenderSkybox(Cam, Skybox);
+
+		Renderer::RenderShadowMaps(SceneObjects, SceneLights, ObjectCount, LightCount, Core::ShadowMap);
+
+		Renderer::RenderMeshes(Cam, SceneObjects, SceneLights, ObjectCount, LightCount);
+
+		//Renderer::RenderEnvironment();
+
+		RenderingCore::SwapFrameBuffer(Renderer::UseHDR, Renderer::DoGammaCorrection);
+	}
+
+
+
+
+	// TODO salvage this code for a debug routine?
+	//if (false)
+	//{
+		//if (Object->mesh->MeshName != "Ray")
+		//{
+			//EngineGdi->DrawFilledTriangle(PixelRound(ToDraw.Points[0].x), PixelRound(ToDraw.Points[0].y), PixelRound(ToDraw.Points[1].x), PixelRound(ToDraw.Points[1].y), PixelRound(ToDraw.Points[2].x), PixelRound(ToDraw.Points[2].y), BrushPP(RGB(ToDraw.Col.x, ToDraw.Col.y, ToDraw.Col.z)), PenPP(PS_SOLID, 1, RGB(1, 1, 1)));
+			//if (ShowNormals)
+			//{
+			//	Ray NormalRay = Ray(ToDraw.NormalPositions[0], ToDraw.NormDirections[0]);
+			//	NormalRay.GenerateMesh();
+			//	RenderMesh(Gdi, Cam, NormalRay.mesh, Scalar, RotationRads, Pos, Vec3(0, 0, 0), Vec3(1, 1, 1), 0.f, 0.f, 0.f, EngineShaders::Shader_Material);
+			//	NormalRay.mesh.UseSingleMat = true;
+			//	NormalRay = Ray(ToDraw.NormalPositions[1], ToDraw.NormDirections[0]);
+			//	NormalRay.GenerateMesh();
+			//	NormalRay.mesh.Mat.AmbientColor = Vec3(0, 0, 255);
+			//	RenderMesh(Gdi, Cam, NormalRay.mesh, Scalar, RotationRads, Pos, Vec3(0, 0, 0), Vec3(1, 1, 1), 0.f, 0.f, 0.f, EngineShaders::Shader_Material);
+			//	NormalRay = Ray(ToDraw.NormalPositions[2], ToDraw.NormDirections[0]);
+			//	NormalRay.GenerateMesh();
+			//	NormalRay.mesh.Mat.AmbientColor = Vec3(0, 0, 255);
+			//	RenderMesh(Gdi, Cam, NormalRay.mesh, Scalar, RotationRads, Pos, Vec3(0, 0, 0), Vec3(1, 1, 1), 0.f, 0.f, 0.f, EngineShaders::Shader_Material);
+			//	NormalRay = Ray(ToDraw.NormalPositions[3], ToDraw.NormDirections[0]);
+			//	NormalRay.GenerateMesh();
+			//	NormalRay.mesh.Mat.AmbientColor = Vec3(0, 0, 255);
+			//	RenderMesh(Gdi, Cam, NormalRay.mesh, Scalar, RotationRads, Pos, Vec3(0, 0, 0), Vec3(1, 1, 1), 0.f, 0.f, 0.f, EngineShaders::Shader_Material);
+			//}
+		//}
+		//else
+		//{
+			//EngineGdi->DrawFilledTriangle(PixelRound(ToDraw.Points[0].x), PixelRound(ToDraw.Points[0].y), PixelRound(ToDraw.Points[1].x), PixelRound(ToDraw.Points[1].y), PixelRound(ToDraw.Points[2].x), PixelRound(ToDraw.Points[2].y), BrushPP(RGB(ToDraw.Col.x, ToDraw.Col.y, ToDraw.Col.z)), PenPP(PS_SOLID, 1, RGB(ToDraw.Col.x, ToDraw.Col.y, ToDraw.Col.z)));
+		//}
+	//}
 
 
 	namespace SIMD
@@ -464,6 +572,130 @@ namespace TerraPGE::Renderer
 
 	}
 
+	namespace Multithreaded
+	{
+		void SwapFrameBufferByChunk(float* Frame, const uint64_t width, const uint64_t  y0, const uint64_t y1)
+		{
+			for (uint64_t y = y0; y < y1; ++y)
+			{
+				uint64_t rowBase = y * width * 3;
+
+				for (uint64_t x = 0; x < width; ++x)
+				{
+					float* ChannelPtr = Frame + rowBase + x * 3;
+
+					float Rf = 0.0f, Gf = 0.0f, Bf = 0.0f;
+					int R = 0, G = 0, B = 0;
+
+					Rf = ChannelPtr[0];
+					Gf = ChannelPtr[1];
+					Bf = ChannelPtr[2];
+
+					if (Renderer::UseHDR)
+					{
+						Rf /= (1.0f + Rf);
+						Gf /= (1.0f + Gf);
+						Bf /= (1.0f + Bf);
+					}
+
+					Rf = std::clamp<float>(Rf, 0, 1.0f);
+					Gf = std::clamp<float>(Gf, 0, 1.0f);
+					Bf = std::clamp<float>(Bf, 0, 1.0f);
+
+					if (Renderer::DoGammaCorrection)
+					{
+						// Gamma Correction
+						Rf = Color::LinearToSRGB_Channel(Rf);
+						Gf = Color::LinearToSRGB_Channel(Gf);
+						Bf = Color::LinearToSRGB_Channel(Bf);
+					}
+
+					// Final transformation to RGB Space
+					R = Rf * 255.0f;
+					G = Gf * 255.0f;
+					B = Bf * 255.0f;
+
+					// Write to out buffer
+					EngineGdi->QuickSetPixel(x, y, RGB(R, G, B));
+				}
+			}
+		}
+
+
+		void SwapFrameBuffer(float* Frame, uint64_t Width, uint64_t Height, bool Hdr, bool GammaCorrection)
+		{
+			uint64_t ChunkSz = std::max<uint64_t>(1, Height / Core::CpuCores);
+
+			for (uint64_t y = 0; y < Height; y += ChunkSz)
+			{
+				uint64_t y0 = y;
+				uint64_t y1 = std::min(y + ChunkSz, Height);
+
+				Core::ThreadPool.EnqueueTask([Frame, y0, y1, Width]()
+					{
+						SwapFrameBufferByChunk(Frame, Width, y0, y1);
+					});
+			}
+
+			Core::ThreadPool.WaitUntilAllTasksFinished();
+		}
+
+
+		void RenderSkyboxByChunk(EnvironmentRenderable* sky, const Camera* Cam, const uint64_t y0, const uint64_t y1, const uint64_t width, const uint64_t height, const float& Fov, const Matrix& Proj, const Matrix3x3& CamRot)
+		{
+			for (uint64_t y = y0; y < y1; ++y)
+			{
+				for (uint64_t x = 0; x < width; ++x)
+				{
+					Color skyColor = sky->Render(x, y, width, height, Fov, CamRot);
+
+					Core::SetPixelFrameBuffer(x, y, skyColor.R, skyColor.G, skyColor.B);
+				}
+			}
+		}
+
+
+		void RenderSkybox(Camera* Cam, EnvironmentRenderable* sky)
+		{
+			if (!sky) return;
+
+			const Matrix& Proj = Cam->GetProjectionMatrix();
+			const Matrix3x3 CamRot = Cam->GetRotationMatrix();
+
+			const uint64_t Width = Core::sx;
+			const uint64_t Height = Core::sy;
+
+			const uint64_t ChunkSz = std::max<uint64_t>(1, Height / Core::CpuCores);
+			const float Fov = Cam->GetFov();
+
+			for (uint64_t y = 0; y < Height; y += ChunkSz)
+			{
+				uint64_t y0 = y;
+				uint64_t y1 = std::min(y + ChunkSz, Height);
+
+				Core::ThreadPool.EnqueueTask([sky, Cam, y0, y1, Width, Height, &Fov, &Proj, &CamRot]()
+					{
+						RenderSkyboxByChunk(sky, Cam, y0, y1, Width, Height, Fov, Proj, CamRot);
+					});
+			}
+
+			Core::ThreadPool.WaitUntilAllTasksFinished();
+		}
+
+
+		void RenderScene(Camera* Cam, Renderable** SceneObjects, LightObject** SceneLights, size_t ObjectCount, size_t LightCount, EnvironmentRenderable* Skybox = nullptr)
+		{
+			Multithreaded::RenderSkybox(Cam, Skybox);
+
+			Renderer::RenderShadowMaps(SceneObjects, SceneLights, ObjectCount, LightCount, Core::ShadowMap);
+
+			Renderer::RenderMeshes(Cam, SceneObjects, SceneLights, ObjectCount, LightCount);
+
+			//Renderer::RenderEnvironment();
+
+			Multithreaded::SwapFrameBuffer(Core::FrameBuffer, Core::sx, Core::sy, UseHDR, Renderer::DoGammaCorrection);
+		}
+	}
 
 	namespace GPU
 	{

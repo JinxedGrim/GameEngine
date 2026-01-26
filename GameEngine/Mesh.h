@@ -4,150 +4,38 @@
 #include "Texture.h"
 #include "Materials.h"
 
-
-class ObjectTransform
+struct Vertex
 {
-private:
-	Vec3 LocalPosition = Vec3(1.0f, 5.0f, 1.0f);
-	Vec3 LocalScale = Vec3(1.0f, 1.0f, 1.0f);
-	Vec3 LocalEulerRotation;
-
-	void RecalculateLocal()
-	{
-		Local = Matrix::CreateScalarMatrix(LocalScale) * Matrix::CreateRotationMatrix(LocalEulerRotation) * Matrix::CreateTranslationMatrix(LocalPosition);
-	}
-
-public:
-	Matrix World = Matrix::CreateIdentity();
-	Matrix Normal = Matrix::CreateIdentity();
-	Matrix Local = Matrix::CreateIdentity();
-
-
-	ObjectTransform(const Vec3& pos = Vec3(0.0f, 0.0f, 0.0f), const Vec3& scale = Vec3(1.0f, 1.0f, 1.0f), const Vec3& euler = Vec3(0.0f, 0.0f, 0.0f)): LocalPosition(pos), LocalScale(scale), LocalEulerRotation(euler)
-	{
-		RecalculateLocal();
-	}
-
-
-	Matrix GetLocalRotationMatrix() const
-	{
-		Matrix R = Matrix::CreateIdentity();
-		// Copy just the rotation part of Local (upper-left 3x3)
-		for (int row = 0; row < 3; ++row)
-		{
-			for (int col = 0; col < 3; ++col)
-			{
-				R.fMatrix[row][col] = Local.fMatrix[row][col];
-			}
-		}
-
-		R.fMatrix[0][3] = R.fMatrix[1][3] = R.fMatrix[2][3] = 0.0f;
-		R.fMatrix[3][0] = R.fMatrix[3][1] = R.fMatrix[3][2] = 0.0f;
-
-		return R;
-	}
-
-
-	Matrix GetWorldMatrix() const
-	{
-		Matrix m = Local;
-		for (const ObjectTransform* p = Parent; p; p = p->Parent)
-			m = p->Local * m;
-		return m;
-	}
-
-
-	void SetWorldPosition(const Vec3& pos)
-	{
-		if (this->Parent)
-		{
-			Matrix invParent = Parent->GetWorldMatrix().InverseSRT();
-			this->LocalPosition = Vec3((invParent * Matrix::CreateTranslationMatrix(pos)).fMatrix[3][0], (invParent * Matrix::CreateTranslationMatrix(pos)).fMatrix[3][1], (invParent * Matrix::CreateTranslationMatrix(pos)).fMatrix[3][2]);
-		}
-		else
-			this->LocalPosition = pos;
-
-		RecalculateLocal();
-	}
-
-
-	Vec3 GetWorldPosition() const
-	{
-		if (!this->Parent)
-			return this->LocalPosition;
-
-		Matrix world = Parent->World * Local;
-
-		return Vec3(
-			world.fMatrix[3][0],
-			world.fMatrix[3][1],
-			world.fMatrix[3][2]
-		);
-	}
-
-
-	void SetParent(ObjectTransform* NewParent)
-	{
-		// Remove from old parent
-		if (Parent)
-		{
-			auto& otherChildren = Parent->Children;
-			otherChildren.erase(std::remove(otherChildren.begin(), otherChildren.end(), this), otherChildren.end());
-		}
-
-		Matrix worldBefore = GetWorldMatrix();
-
-		Parent = NewParent;
-		if (Parent) Parent->Children.push_back(this);
-
-		Matrix invParent = Parent ? Parent->GetWorldMatrix().InverseSRT() : Matrix::CreateIdentity();
-		Local = invParent * worldBefore;
-		Local.Decompose(LocalScale, LocalEulerRotation, LocalPosition);
-		RecalculateLocal();
-
-	}
-
-
-	void AddChild(ObjectTransform* child)
-	{
-		child->SetParent(this);
-	}
-
-
-	void WalkTransformChain()
-	{
-		this->World = this->Parent ? this->Parent->World * this->Local : this->Local;
-		for (auto* c : Children) c->WalkTransformChain();	
-	}
-
-
-	void SetLocalPosition(const Vec3& pos) { LocalPosition = pos; RecalculateLocal(); }
-	void SetLocalScale(const Vec3& s) { LocalScale = s; RecalculateLocal(); }
-	void SetLocalEulerAngles(const Vec3& r) { LocalEulerRotation = r; RecalculateLocal(); }
-
-	const Vec3& GetLocalPosition() const { return LocalPosition; }
-	const Vec3& GetLocalScale() const { return LocalScale; }
-	const Vec3& GetLocalEulerAngles() const { return LocalEulerRotation; }
-	
-public:
-	ObjectTransform* Parent = nullptr;
-	std::vector<ObjectTransform*> Children;
+	Vec4 Points[3];
+	Vec3 Normals[3];
 };
 
+struct VertexAttributes
+{
+	Vec3 Attribute[3];
+};
+
+struct ClipVertex
+{
+	Vec4 Clip;
+	Vec4 World;
+	Vec3 Normal;
+};
 
 class Triangle
 {
 	public:
 	Triangle()
 	{
-		memset(Points, 0, sizeof(Points));
+		memset(Points.Points, 0, sizeof(Points.Points));
+		memset(Points.Normals, 0, sizeof(Points.Normals));
 	}
 
 	Triangle(const Vec3& P1, const Vec3& P2, const Vec3& P3)
 	{
-		this->Points[0] = P1;
-		this->Points[1] = P2;
-		this->Points[2] = P3;
+		this->Points.Points[0] = P1;
+		this->Points.Points[1] = P2;
+		this->Points.Points[2] = P3;
 	}
 
 	Triangle(const Triangle& B)
@@ -157,82 +45,99 @@ class Triangle
 
 	void Translate(const Vec3& Value)
 	{
-		this->Points[0] += Value;
-		this->Points[1] += Value;
-		this->Points[2] += Value;
+		this->Points.Points[0] += Value;
+		this->Points.Points[1] += Value;
+		this->Points.Points[2] += Value;
 	}
 
 	const void Translated(Triangle* Out, const Vec3& Value)
 	{
-		Out->Points[0] = this->Points[0] + Value;
-		Out->Points[1] = this->Points[1] + Value;
-		Out->Points[2] = this->Points[2] + Value;
+		Out->Points.Points[0] = this->Points.Points[0] + Value;
+		Out->Points.Points[1] = this->Points.Points[1] + Value;
+		Out->Points.Points[2] = this->Points.Points[2] + Value;
 	}
 
 	void Scale(const Vec3& Value)
 	{
-		this->Points[0] *= Value;
-		this->Points[1] *= Value;
-		this->Points[2] *= Value;
+		this->Points.Points[0] *= Value;
+		this->Points.Points[1] *= Value;
+		this->Points.Points[2] *= Value;
 	}
 
 	const void Scaled(Triangle* Out, const Vec3& Value)
 	{
-		Out->Points[0] = this->Points[0] * Value;
-		Out->Points[1] = this->Points[1] * Value;
-		Out->Points[2] = this->Points[2] * Value;
+		Out->Points.Points[0] = this->Points.Points[0] * Value;
+		Out->Points.Points[1] = this->Points.Points[1] * Value;
+		Out->Points.Points[2] = this->Points.Points[2] * Value;
 	}
 
 	void Rotate(const Matrix& Rot)
 	{
-		this->Points[0] *= Rot;
-		this->Points[1] *= Rot;
-		this->Points[2] *= Rot;
+		this->Points.Points[0] *= Rot;
+		this->Points.Points[1] *= Rot;
+		this->Points.Points[2] *= Rot;
 	}
 
 	const void Rotated(Triangle* Out, const Matrix& Rot)
 	{
-		Out->Points[0] = this->Points[0] * Rot;
-		Out->Points[1] = this->Points[1] * Rot;
-		Out->Points[2] = this->Points[2] * Rot;
+		Out->Points.Points[0] = this->Points.Points[0] * Rot;
+		Out->Points.Points[1] = this->Points.Points[1] * Rot;
+		Out->Points.Points[2] = this->Points.Points[2] * Rot;
 	}
 
 	void ApplyMatrix(const Matrix& MatToApply)
 	{
-		this->Points[0] *= MatToApply;
-		this->Points[1] *= MatToApply;
-		this->Points[2] *= MatToApply;
+		this->Points.Points[0] *= MatToApply;
+		this->Points.Points[1] *= MatToApply;
+		this->Points.Points[2] *= MatToApply;
 	}
 
 	void ApplyPerspectiveDivide()
 	{
-		this->TexCoords[0].CorrectPerspective(this->Points[0].w);
-		this->TexCoords[1].CorrectPerspective(this->Points[1].w);
-		this->TexCoords[2].CorrectPerspective(this->Points[2].w);
+		this->TexCoords[0].CorrectPerspective(this->Points.Points[0].w);
+		this->TexCoords[1].CorrectPerspective(this->Points.Points[1].w);
+		this->TexCoords[2].CorrectPerspective(this->Points.Points[2].w);
 
-		this->Points[0].CorrectPerspective();
-		this->Points[1].CorrectPerspective();
-		this->Points[2].CorrectPerspective();
+		this->Points.Points[0].CorrectPerspective();
+		this->Points.Points[1].CorrectPerspective();
+		this->Points.Points[2].CorrectPerspective();
 	}
+
+
+	const bool IsWindingCCW(const Vec4& a, const Vec4& b, const Vec4& c) const
+	{
+		Vec3 ab = (b / b.w).GetVec3() - (a / a.w).GetVec3();
+		Vec3 ac = (c / c.w).GetVec3() - (a / a.w).GetVec3();
+		Vec3 n = ab.Cross(ac);
+
+		return n.z >= 0;  // CCW in LH DX
+	}
+
+
 
 	int ClipAgainstPlane(const Vec3& PointOnPlane, const Vec3& PlaneNormalized, Triangle& Out1, Triangle& Out2, bool DebugClip = false)
 	{
-		Vec4 p0 = this->Points[0];
-		Vec4 p1 = this->Points[1];
-		Vec4 p2 = this->Points[2];
+		// Attributes
+		Vec4 p0 = this->Points.Points[0];
+		Vec4 p1 = this->Points.Points[1];
+		Vec4 p2 = this->Points.Points[2];
+
 		TextureCoords& t0 = this->TexCoords[0];
 		TextureCoords& t1 = this->TexCoords[1];
 		TextureCoords& t2 = this->TexCoords[2];
+		//
+
+		// Attribute storage
+		Vec4* InsidePoints[3] = {};
+		Vec4* OutsidePoints[3] = {};
+		TextureCoords* InsideTex[3] = {};
+		TextureCoords* OutsideTex[3] = {};
+		//
 
 		float PlanePointDot = PlaneNormalized.Dot(PointOnPlane);
 		float dist0 = PlaneNormalized.Dot(p0) - PlanePointDot;
 		float dist1 = PlaneNormalized.Dot(p1) - PlanePointDot;
 		float dist2 = PlaneNormalized.Dot(p2) - PlanePointDot;
-
-		Vec4* InsidePoints[3] = {};
-		Vec4* OutsidePoints[3] = {};
-		TextureCoords* InsideTex[3] = {};
-		TextureCoords* OutsideTex[3] = {};
 		int InsideCount = 0;
 		int OutsideCount = 0;
 		int InsideTexCount = 0;
@@ -240,29 +145,35 @@ class Triangle
 
 		if (dist0 >= 0)
 		{
-			InsidePoints[InsideCount++] = &p0; InsideTex[InsideTexCount++] = &t0;
+			InsidePoints[InsideCount++] = &p0; 
+			InsideTex[InsideTexCount++] = &t0;
 		}
 		else
 		{
-			OutsidePoints[OutsideCount++] = &p0; OutsideTex[OutsideTexCount++] = &t0;
+			OutsidePoints[OutsideCount++] = &p0; 
+			OutsideTex[OutsideTexCount++] = &t0;
 		}
 
 		if (dist1 >= 0)
 		{
-			InsidePoints[InsideCount++] = &p1; InsideTex[InsideTexCount++] = &t1;
+			InsidePoints[InsideCount++] = &p1; 
+			InsideTex[InsideTexCount++] = &t1;
 		}
 		else
 		{
-			OutsidePoints[OutsideCount++] = &p1; OutsideTex[OutsideTexCount++] = &t1;
+			OutsidePoints[OutsideCount++] = &p1; 
+			OutsideTex[OutsideTexCount++] = &t1;
 		}
 
 		if (dist2 >= 0)
 		{
-			InsidePoints[InsideCount++] = &p2; InsideTex[InsideTexCount++] = &t2;
+			InsidePoints[InsideCount++] = &p2; 
+			InsideTex[InsideTexCount++] = &t2;
 		}
 		else
 		{
-			OutsidePoints[OutsideCount++] = &p2; OutsideTex[OutsideTexCount++] = &t2;
+			OutsidePoints[OutsideCount++] = &p2; 
+			OutsideTex[OutsideTexCount++] = &t2;
 		}
 
 		int Count = 0;
@@ -282,14 +193,14 @@ class Triangle
 				Out1.OverrideTextureColor = true;
 			}
 
-			Out1.Points[0] = *InsidePoints[0];
+			Out1.Points.Points[0] = *InsidePoints[0];
 			Out1.TexCoords[0] = *InsideTex[0];
 
 			float t = 0.0f;
-			Out1.Points[1] = InsidePoints[0]->CalculateIntersectionPoint(*OutsidePoints[0], PointOnPlane, PlaneNormalized, &t);
+			Out1.Points.Points[1] = InsidePoints[0]->CalculateIntersectionPoint(*OutsidePoints[0], PointOnPlane, PlaneNormalized, &t);
 			Out1.TexCoords[1] = InsideTex[0]->Lerp(*OutsideTex[0], t);
 
-			Out1.Points[2] = InsidePoints[0]->CalculateIntersectionPoint(*OutsidePoints[1], PointOnPlane, PlaneNormalized, &t);
+			Out1.Points.Points[2] = InsidePoints[0]->CalculateIntersectionPoint(*OutsidePoints[1], PointOnPlane, PlaneNormalized, &t);
 			Out1.TexCoords[2] = InsideTex[0]->Lerp(*OutsideTex[1], t);
 
 			Count = 1;
@@ -308,21 +219,21 @@ class Triangle
 			}
 
 
-			Out1.Points[0] = *InsidePoints[0];
-			Out1.Points[1] = *InsidePoints[1];
+			Out1.Points.Points[0] = *InsidePoints[0];
+			Out1.Points.Points[1] = *InsidePoints[1];
 			Out1.TexCoords[0] = *InsideTex[0];
 			Out1.TexCoords[1] = *InsideTex[1];
 
 			float t = 0.0f;
-			Out1.Points[2] = InsidePoints[0]->CalculateIntersectionPoint(*OutsidePoints[0], PointOnPlane, PlaneNormalized, &t);
+			Out1.Points.Points[2] = InsidePoints[0]->CalculateIntersectionPoint(*OutsidePoints[0], PointOnPlane, PlaneNormalized, &t);
 			Out1.TexCoords[2] = InsideTex[0]->Lerp(*OutsideTex[0], t);
 
-			Out2.Points[0] = *InsidePoints[1];
-			Out2.Points[1] = Out1.Points[2];
+			Out2.Points.Points[0] = *InsidePoints[1];
+			Out2.Points.Points[1] = Out1.Points.Points[2];
 			Out2.TexCoords[0] = *InsideTex[1];
 			Out2.TexCoords[1] = Out1.TexCoords[2];
 
-			Out2.Points[2] = InsidePoints[1]->CalculateIntersectionPoint(*OutsidePoints[0], PointOnPlane, PlaneNormalized, &t);
+			Out2.Points.Points[2] = InsidePoints[1]->CalculateIntersectionPoint(*OutsidePoints[0], PointOnPlane, PlaneNormalized, &t);
 			Out2.TexCoords[2] = InsideTex[1]->Lerp(*OutsideTex[0], t);
 
 			Count = 2;
@@ -331,14 +242,151 @@ class Triangle
 		return Count;
 	}
 
-	Vec4 Points[3] = {};
-	size_t Points_[3] = {};
+
+	int ClipAgainstPlane(const Vec4& plane, Triangle& Out1, Triangle& Out2, bool DebugClip) const
+	{
+		// Attributes to interp
+		Vec4 in[3] = { Points.Points[0], Points.Points[1], Points.Points[2] };
+		Vec4 world[3] = { WorldSpaceVerts.Points[0], WorldSpaceVerts.Points[1], WorldSpaceVerts.Points[2] };
+		Vec3 Normals[3] = { VertexNormals[0], VertexNormals[1], VertexNormals[2] };
+
+		float w[3] = { Points.Points[0].w, Points.Points[1].w, Points.Points[2].w }; // store original w
+		float d[3];
+		bool inside[3];
+
+		int inCount = 0;
+		for (int i = 0; i < 3; i++)
+		{
+			d[i] = plane.Dot(in[i]);
+			inside[i] = d[i] >= 0.0f;
+			if (inside[i]) inCount++;
+		}
+
+		if (inCount == 0) return 0;
+
+		auto IntersectPos = [&](int a, int b)
+		{
+			return d[a] / (d[a] - d[b]);
+		};
+
+		auto InterpolatePos = [&](int a, int b, Vec4* Inside, float t)
+		{
+			Vec4 pos = Inside[a] + (Inside[b] - Inside[a]) * t;
+
+			// Interpolate w
+			pos.w = w[a] + (w[b] - w[a]) * t;
+
+			return pos;
+		};
+
+		auto InterpolateVec3 = [&](int a, int b, Vec3* Inside, float t)
+		{
+				Vec3 pos = Inside[a] + (Inside[b] - Inside[a]) * t;
+				return pos;
+		};
+
+		std::vector<Vec4> outPos;
+		std::vector<Vec4> outWorld;
+		std::vector<Vec3> outNormal;
+
+		for (int i = 0; i < 3; i++)
+		{
+			int j = (i + 1) % 3;
+
+			if (inside[i])
+			{
+				outPos.push_back(in[i]);
+				outWorld.push_back(world[i]);
+				outNormal.push_back(Normals[i]);
+			}
+
+			if (inside[i] ^ inside[j])
+			{
+				float t = IntersectPos(i, j);
+				outPos.push_back(InterpolatePos(i, j, in, t));
+				outWorld.push_back(InterpolatePos(i, j, world, t));
+				outNormal.push_back(InterpolateVec3(i, j, Normals, t));
+			}
+		}
+
+		if (outPos.size() == 3)
+		{
+			Out1 = *this;
+			Out1.Points.Points[0] = outPos[0];
+			Out1.Points.Points[1] = outPos[1];
+			Out1.Points.Points[2] = outPos[2];
+			Out1.Points.Normals[0] = outNormal[0];
+			Out1.Points.Normals[1] = outNormal[1];
+			Out1.Points.Normals[2] = outNormal[2];
+			Out1.WorldSpaceVerts.Points[0] = outWorld[0];
+			Out1.WorldSpaceVerts.Points[1] = outWorld[1];
+			Out1.WorldSpaceVerts.Points[2] = outWorld[2];
+
+			if (DebugClip && this->OverrideTextureColor != true)
+			{
+				bool Same = true;
+
+				for (int i = 0; i < 3; i++)
+				{
+					if (!(Points.Points[i].GetVec3() == Out1.Points.Points[i].GetVec3()))
+					{
+						Same = false;
+						break;
+					}
+				}
+
+				if (!Same)
+				{
+					Out1.Col = Vec3(0, 255, 0);
+					Out1.OverrideTextureColor = true;
+				}
+			}
+
+			return 1;
+		}
+
+		if (outPos.size() == 4)
+		{
+			Out1 = *this;
+			Out1.Points.Points[0] = outPos[0];
+			Out1.Points.Points[1] = outPos[1];
+			Out1.Points.Points[2] = outPos[2];
+			Out1.Points.Normals[0] = outNormal[0];
+			Out1.Points.Normals[1] = outNormal[1];
+			Out1.Points.Normals[2] = outNormal[2];
+			Out1.WorldSpaceVerts.Points[0] = outWorld[0];
+			Out1.WorldSpaceVerts.Points[1] = outWorld[1];
+			Out1.WorldSpaceVerts.Points[2] = outWorld[2];
+
+			Out2 = *this;
+			Out1.Points.Points[0] = outPos[0];
+			Out1.Points.Points[1] = outPos[2];
+			Out1.Points.Points[2] = outPos[3];
+			Out1.Points.Normals[0] = outNormal[0];
+			Out1.Points.Normals[1] = outNormal[2];
+			Out1.Points.Normals[2] = outNormal[3];
+			Out1.WorldSpaceVerts.Points[0] = outWorld[0];
+			Out1.WorldSpaceVerts.Points[1] = outWorld[2];
+			Out1.WorldSpaceVerts.Points[2] = outWorld[3];
+
+			if (DebugClip)
+			{
+				Out1.Col = Vec3(255, 0, 0);
+				Out1.OverrideTextureColor = true;
+				Out2.Col = Vec3(0, 0, 255);
+				Out2.OverrideTextureColor = true;
+			}
+
+			return 2;
+		}
+
+		return 0;
+	}
 
 
-	Vec3 WorldSpaceVerts[3] = {};
-	Vec4 ViewSpaceVerts[3] = {};
-	Vec4 ClipSpaceVerts[3] = {};
+	Vertex Points;
 
+	Vertex WorldSpaceVerts = {};
 
 	Vec3 FaceNormal = Vec3();
 	Vec3 VertexNormals[3] = {};
@@ -405,9 +453,9 @@ class Mesh
 	{
 		for (int i = 0; i < this->Triangles.size(); i++)
 		{
-			this->Triangles.at(i).Points[0] *= Value;
-			this->Triangles.at(i).Points[1] *= Value;
-			this->Triangles.at(i).Points[2] *= Value;
+			this->Triangles.at(i).Points.Points[0] *= Value;
+			this->Triangles.at(i).Points.Points[1] *= Value;
+			this->Triangles.at(i).Points.Points[2] *= Value;
 		}
 	}
 
@@ -416,9 +464,9 @@ class Mesh
 		Mesh Out = *this;
 		for (int i = 0; i < this->Triangles.size(); i++)
 		{
-			Out.Triangles.at(i).Points[0] * Value;
-			Out.Triangles.at(i).Points[1] * Value;
-			Out.Triangles.at(i).Points[2] * Value;
+			Out.Triangles.at(i).Points.Points[0] * Value;
+			Out.Triangles.at(i).Points.Points[1] * Value;
+			Out.Triangles.at(i).Points.Points[2] * Value;
 		}
 	}
 
@@ -435,9 +483,9 @@ class Mesh
 		}
 	}
 
-	bool LoadMesh(std::string FnPath)
+	bool LoadMesh(std::string FnPath, std::string Prefix="Assets\\")
 	{
-		std::ifstream ifs = std::ifstream(FnPath);
+		std::ifstream ifs = std::ifstream(Prefix + FnPath);
 
 		if (!ifs.is_open())
 			return false;
@@ -449,7 +497,7 @@ class Mesh
 		std::string MtlLibFn = "";
 		Material* CurrMat = nullptr;
 
-		std::cout << "Loading Mesh: " << FnPath << std::endl;
+		std::cout << "Loading Mesh: " << Prefix + FnPath << std::endl;
 
 		while (!ifs.eof())
 		{
@@ -461,8 +509,6 @@ class Mesh
 
 			SS << Line;
 			std::string Str = SS.str();
-
-			std::cout << "Verts: ";
 
 			if (Str.find("v ") != std::string::npos)
 			{
@@ -542,20 +588,19 @@ class Mesh
 
 						Vec3 vertex = VertCache[vertexIndex];
 
-						// Store the texture coordinates for this vertex
 						if (texCoordIndex >= 0)
 							Tmp.TexCoords[i] = TexCache[texCoordIndex];
 						else
-							Tmp.TexCoords[i] = { 0, 0 }; // Default value if no texture coordinates provided
+							Tmp.TexCoords[i] = { 0, 0 }; 
 
 						if (normalIndex >= 0)
 							Tmp.FaceNormal = NormalCache[normalIndex];
 
-						Tmp.Points[i] = vertex;
+						Tmp.Points.Points[i] = vertex;
 					}
 
-					Tmp.Material = CurrMat; // Assign the current material to the triangle
-					Tmp.HasTexture = (Tmp.Material->Textures.size() > 0 && Tmp.Material->Textures.at(0)->Used);
+					Tmp.Material = CurrMat; 
+					Tmp.HasTexture = (Tmp.Material != nullptr && Tmp.Material->Textures.size() > 0 && Tmp.Material->Textures.at(0) != nullptr);
 
 					this->Triangles.push_back(Tmp);
 				}
@@ -565,7 +610,7 @@ class Mesh
 				//char Prefix[7];
 				std::string MaterialFn;
 				SS >> Unused >> Unused >> Unused >> Unused >> Unused >> Unused >> MaterialFn;
-				CurrMat = Material::LoadMaterial(MtlLibFn, MaterialFn); // Update the current material
+				CurrMat = Material::LoadMaterialFile(MtlLibFn, MaterialFn, Prefix);
 				this->MatCount++;
 				this->Materials.push_back(CurrMat);
 			}
@@ -573,14 +618,11 @@ class Mesh
 			{
 				SS >> Unused >> Unused >> Unused >> Unused >> Unused >> Unused >> MtlLibFn;
 			}
+		}
 
 #ifdef _DEBUG
-			std::cout << VertexCache.size() << " Normals: ";
-			std::cout << Normals.size() << " TexturedCahce: " << TexCache.size();
-			std::cout << " Faces: " << Triangles.size() << "\r";
+		std::cout << "Done" << std::endl;
 #endif
-
-		}
 
 		FnPath = FnPath.substr(FnPath.find_last_of("/\\") + 1);
 		FnPath = FnPath.substr(0, FnPath.find_last_of(".obj") - 3);
@@ -610,7 +652,7 @@ class Mesh
 	{
 		for (Triangle& Tri : this->Triangles)
 		{
-			Vec3 Norm = (Tri.Points[1] - Tri.Points[0]).GetVec3().CrossNormalized((Tri.Points[2] - Tri.Points[0]));
+			Vec3 Norm = (Tri.Points.Points[1] - Tri.Points.Points[0]).GetVec3().CrossNormalized((Tri.Points.Points[2] - Tri.Points.Points[0]));
 			this->Normals.push_back(Norm);
 			Tri.FaceNormal = Norm;
 
@@ -681,9 +723,9 @@ class Cube : public Mesh
 
 		for (int i = 0; i < CubeMesh.Triangles.size(); i++)
 		{
-			this->Triangles[i].Points[0] *= Vec3(Length, Width, Height);
-			this->Triangles[i].Points[1] *= Vec3(Length, Width, Height);
-			this->Triangles[i].Points[2] *= Vec3(Length, Width, Height);
+			this->Triangles[i].Points.Points[0] *= Vec3(Length, Width, Height);
+			this->Triangles[i].Points.Points[1] *= Vec3(Length, Width, Height);
+			this->Triangles[i].Points.Points[2] *= Vec3(Length, Width, Height);
 
 			this->Triangles[i].HasTexture = true;
 			this->Triangles[i].Material = Mat;
