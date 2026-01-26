@@ -275,6 +275,7 @@ namespace TerraPGE::Renderer
 						// 5. Sample shadow map
 						int MapIdx = ContIdx((int)ShadowUV.x, (int)ShadowUV.y, Core::ShadowMapWidth);
 
+						// TODO BAD INTERP
 						ShadowMapDepth = Core::ShadowMap[MapIdx] + ShadowMapBias;
 						ShadowDepth = ShadowUV.z;
 
@@ -368,6 +369,13 @@ namespace TerraPGE::Renderer
 
 					// Set pixel in pixel buffer
 					Color* FragmentColor = BaseArgs->FindShaderResourcePtr<Color*>(TPGE_SHDR_FRAG_COLOR);
+
+					if (!UseHDR)
+					{
+						std::clamp<float>(FragmentColor->R, 0.0f, 1.0f);
+						std::clamp<float>(FragmentColor->G, 0.0f, 1.0f);
+						std::clamp<float>(FragmentColor->B, 0.0f, 1.0f);
+					}
 
 					TerraPGE::Core::SetPixelFrameBuffer(x, y, FragmentColor->R, FragmentColor->G, FragmentColor->B);
 

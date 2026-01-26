@@ -92,17 +92,16 @@ namespace TerraPGE::Renderer
 				Gf = ChannelPtr[1];
 				Bf = ChannelPtr[2];
 
-				if (!Renderer::UseHDR)
+				if (Renderer::UseHDR)
 				{
-					// Clamp 0-1
-					Rf = std::clamp<float>(Rf, 0, 1.0f);
-					Gf = std::clamp<float>(Gf, 0, 1.0f);
-					Bf = std::clamp<float>(Bf, 0, 1.0f);
+					Rf /= (1.0f + Rf);
+					Gf /= (1.0f + Gf);
+					Bf /= (1.0f + Bf);
 				}
 
-				Rf /= (1.0f + Rf) * Renderer::UseHDR;
-				Gf /= (1.0f + Gf) * Renderer::UseHDR;
-				Bf /= (1.0f + Bf) * Renderer::UseHDR;
+				Rf = std::clamp<float>(Rf, 0, 1.0f);
+				Gf = std::clamp<float>(Gf, 0, 1.0f);
+				Bf = std::clamp<float>(Bf, 0, 1.0f);
 
 				if (Renderer::DoGammaCorrection)
 				{
@@ -574,56 +573,117 @@ namespace TerraPGE::Renderer
 
 	namespace Multithreaded
 	{
-		void SwapFrameBuffer(bool Hdr, bool GammaCorrection)
+		void SwapFrameBufferByChunk(float* Frame, const uint64_t width, const uint64_t  y0, const uint64_t y1)
 		{
-			for (int i = 0; i < Core::sx * Core::sy; i++)
+			for (uint64_t y = y0; y < y1; ++y)
 			{
-				int index = i * 3;
-				float* ChannelPtr = Core::FrameBuffer + index;
+				uint64_t rowBase = y * width * 3;
 
-				float Rf, Gf, Bf = 0.0f;
-				int R, G, B = 0;
-
-				Rf = ChannelPtr[0];
-				Gf = ChannelPtr[1];
-				Bf = ChannelPtr[2];
-
-				if (!Renderer::UseHDR)
+				for (uint64_t x = 0; x < width; ++x)
 				{
-					// Clamp 0-1
+					float* ChannelPtr = Frame + rowBase + x * 3;
+
+					float Rf = 0.0f, Gf = 0.0f, Bf = 0.0f;
+					int R = 0, G = 0, B = 0;
+
+					Rf = ChannelPtr[0];
+					Gf = ChannelPtr[1];
+					Bf = ChannelPtr[2];
+
+					if (Renderer::UseHDR)
+					{
+						Rf /= (1.0f + Rf);
+						Gf /= (1.0f + Gf);
+						Bf /= (1.0f + Bf);
+					}
+
 					Rf = std::clamp<float>(Rf, 0, 1.0f);
 					Gf = std::clamp<float>(Gf, 0, 1.0f);
 					Bf = std::clamp<float>(Bf, 0, 1.0f);
+
+					if (Renderer::DoGammaCorrection)
+					{
+						// Gamma Correction
+						Rf = Color::LinearToSRGB_Channel(Rf);
+						Gf = Color::LinearToSRGB_Channel(Gf);
+						Bf = Color::LinearToSRGB_Channel(Bf);
+					}
+
+					// Final transformation to RGB Space
+					R = Rf * 255.0f;
+					G = Gf * 255.0f;
+					B = Bf * 255.0f;
+
+					// Write to out buffer
+					EngineGdi->QuickSetPixel(x, y, RGB(R, G, B));
 				}
-
-				Rf /= (1.0f + Rf) * Renderer::UseHDR;
-				Gf /= (1.0f + Gf) * Renderer::UseHDR;
-				Bf /= (1.0f + Bf) * Renderer::UseHDR;
-
-				if (Renderer::DoGammaCorrection)
-				{
-					// Gamma Correction
-					Rf = Color::LinearToSRGB_Channel(Rf);
-					Gf = Color::LinearToSRGB_Channel(Gf);
-					Bf = Color::LinearToSRGB_Channel(Bf);
-				}
-
-				// Final transformation to RGB Space
-				R = Rf * 255.0f;
-				G = Gf * 255.0f;
-				B = Bf * 255.0f;
-
-				int y = i / Core::sx;
-				int x = i % Core::sx;
-
-				// Write to out buffer
-				EngineGdi->QuickSetPixel(x, y, RGB(R, G, B));
 			}
 		}
 
+
+		void SwapFrameBuffer(float* Frame, uint64_t Width, uint64_t Height, bool Hdr, bool GammaCorrection)
+		{
+			uint64_t ChunkSz = std::max<uint64_t>(1, Height / Core::CpuCores);
+
+			for (uint64_t y = 0; y < Height; y += ChunkSz)
+			{
+				uint64_t y0 = y;
+				uint64_t y1 = std::min(y + ChunkSz, Height);
+
+				Core::ThreadPool.EnqueueTask([Frame, y0, y1, Width]()
+					{
+						SwapFrameBufferByChunk(Frame, Width, y0, y1);
+					});
+			}
+
+			Core::ThreadPool.WaitUntilAllTasksFinished();
+		}
+
+
+		void RenderSkyboxByChunk(EnvironmentRenderable* sky, Camera* Cam, uint64_t y0, uint64_t y1, uint64_t width, uint64_t height, const Matrix& Proj, const Matrix3x3& CamRot)
+		{
+			for (uint64_t y = y0; y < y1; ++y)
+			{
+				for (uint64_t x = 0; x < width; ++x)
+				{
+					Color skyColor = sky->Render(x, y, width, height, CamRot);
+
+					Core::SetPixelFrameBuffer(x, y, skyColor.R, skyColor.G, skyColor.B);
+				}
+			}
+		}
+
+
+		void RenderSkybox(Camera* Cam, EnvironmentRenderable* sky)
+		{
+			if (!sky) return;
+
+			const Matrix& Proj = Cam->GetProjectionMatrix();
+			const Matrix3x3 CamRot = Cam->GetRotationMatrix();
+
+			const uint64_t Width = Core::sx;
+			const uint64_t Height = Core::sy;
+
+			const uint64_t ChunkSz = std::max<uint64_t>(1, Height / Core::CpuCores);
+
+			for (uint64_t y = 0; y < Height; y += ChunkSz)
+			{
+				uint64_t y0 = y;
+				uint64_t y1 = std::min(y + ChunkSz, Height);
+
+				Core::ThreadPool.EnqueueTask([sky, Cam, y0, y1, Width, Height, &Proj, &CamRot]()
+					{
+						RenderSkyboxByChunk(sky, Cam, y0, y1, Width, Height, Proj, CamRot);
+					});
+			}
+
+			Core::ThreadPool.WaitUntilAllTasksFinished();
+		}
+
+
 		void RenderScene(Camera* Cam, Renderable** SceneObjects, LightObject** SceneLights, size_t ObjectCount, size_t LightCount, EnvironmentRenderable* Skybox = nullptr)
 		{
-			Renderer::RenderSkybox(Cam, Skybox);
+			Multithreaded::RenderSkybox(Cam, Skybox);
 
 			Renderer::RenderShadowMaps(SceneObjects, SceneLights, ObjectCount, LightCount, Core::ShadowMap);
 
@@ -631,7 +691,7 @@ namespace TerraPGE::Renderer
 
 			//Renderer::RenderEnvironment();
 
-			Multithreaded::SwapFrameBuffer(UseHDR, Renderer::DoGammaCorrection);
+			Multithreaded::SwapFrameBuffer(Core::FrameBuffer, Core::sx, Core::sy, UseHDR, Renderer::DoGammaCorrection);
 		}
 	}
 

@@ -156,6 +156,7 @@ class ThreadManager
 	std::mutex CoutStream;
 	std::condition_variable TaskConditionVar;
 	std::condition_variable QueueSzConditionVar;
+	std::atomic<size_t> TasksInProgress{ 0 };
 
 
 	void WorkerLoop()
@@ -195,7 +196,10 @@ class ThreadManager
 
 			if (Task)
 			{
+				TasksInProgress++;
 				Task();
+				TasksInProgress--;
+				QueueSzConditionVar.notify_all(); // notify WaitUntilAllTasksFinished
 			}
 		}
 	}
@@ -254,14 +258,10 @@ class ThreadManager
 
 	void WaitUntilAllTasksFinished()
 	{
-		size_t CurrentTasks = 0;
-		do
-		{
-			std::unique_lock<std::mutex> QueueLock(this->QueueMutex);
-			QueueSzConditionVar.wait(QueueLock, [=]() { return Queue.empty(); });
-
-			CurrentTasks = Queue.size();
-		} while (CurrentTasks != 0);
+		std::unique_lock<std::mutex> Lock(this->QueueMutex);
+		QueueSzConditionVar.wait(Lock, [this]() {
+			return Queue.empty() && TasksInProgress.load() == 0;
+		});
 	}
 
 	~ThreadManager()
