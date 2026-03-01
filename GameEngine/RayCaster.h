@@ -204,18 +204,22 @@ bool RayIntersectsCapsule(const Ray& ray, const Vec3& p0, const Vec3& p1, float 
 }
 
 
-bool RaycastMesh(const Ray& ray, const std::vector<Triangle>& triangles, RaycastHit* outHit, Matrix* ModelMatrix)
+bool RaycastMesh(Ray ray, const std::vector<Triangle>& triangles, RaycastHit* outHit, Matrix* InverseWorld)
 {
 	bool foundHit = false;
 	float closest = FLT_MAX;
 
 	RaycastHit temp;
+	Vec3 worldRayOrigin = ray.origin;
+	ray.origin = (ray.origin * *InverseWorld);
+	ray.direction = ray.direction * *InverseWorld;
 
 	for (const Triangle& tri : triangles)
 	{
-		Vec3 v0 = tri.Points.Points[0] * *ModelMatrix;
-		Vec3 v1 = tri.Points.Points[1] * *ModelMatrix;
-		Vec3 v2 = tri.Points.Points[2] * *ModelMatrix;
+		Vec3 v0 = tri.Points.Points[0];
+		Vec3 v1 = tri.Points.Points[1];
+		Vec3 v2 = tri.Points.Points[2];
+
 		if (RayIntersectsTriangle(ray, v0, v1, v2, &temp))
 		{
 			if (temp.distance < closest)
@@ -226,6 +230,20 @@ bool RaycastMesh(const Ray& ray, const std::vector<Triangle>& triangles, Raycast
 			}
 		}
 	}
+
+
+	if (!foundHit)
+		return false;
+
+	Matrix world = InverseWorld->QuickInversed();
+
+	outHit->point = Vec3(Vec4(outHit->point, 1.0f) * world);
+
+	Matrix normalMatrix = world.QuickInversed();
+	normalMatrix.Transpose();
+
+	outHit->normal = (Vec3(Vec4(outHit->normal, 0.0f) * normalMatrix));
+	outHit->distance = worldRayOrigin.Distance(outHit->point);
 
 	return foundHit;
 }

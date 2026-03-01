@@ -33,8 +33,6 @@
 #include "../../../Source/repos/GlLoader/GlLoader/GlLoader.h"
 #endif
 
-#define FLOAT_LOWEST_BIAS 0.0005
-
 namespace TerraPGE::Core
 {
 	std::string FpsStr = "Fps: ";
@@ -93,9 +91,14 @@ namespace TerraPGE::Core
 		Core::Log("[I] (" + CallerTag + ") " + Message);
 	}
 
-	void LogError(std::string CallerTag, std::string Message, int Level)
+	void LogWarning(std::string CallerTag, std::string Message)
 	{
 		Core::Log("[W] (" + CallerTag + ") " + Message);
+	}
+
+	void LogError(std::string CallerTag, std::string Message, int Level)
+	{
+		Core::Log("[E] (" + CallerTag + ") " + Message);
 	}
 
 

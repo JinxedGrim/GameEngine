@@ -33,8 +33,8 @@ class RigidBody
 {
 public:
 	bool IsGrounded = false;
-	float mass = 5.0;   // kg
-	float restitution = 0.1f;  // bounce factor [0–1]
+	float mass = 20.0;   // kg
+	float restitution = 0.01f;  // bounce factor [0–1]
     float KineticFriction = WOOD_KINETIC_FRICTION;
     float StaticFriction = WOOD_STATIC_FRICTION;
     float Drag = 0.0f;

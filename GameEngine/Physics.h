@@ -33,21 +33,25 @@ namespace TerraPGE::Physics
         return (mu1 + mu2) * 0.5f;
     }
 
+
     // The kinetic friction average function is an approximation to this
     inline float KineticFrictionMultiply(float mu1, float mu2)
     {
         return mu1 * mu2;
     }
 
+
     __inline Vec3 IntegrateGravity(float dt)
     {
         return GRAVITY_ACCELERATION_VECTOR * dt;
     }
 
+
     __inline Vec3 IntegrateVelocity(const Vec3& Velocity, float dt)
     {
         return Velocity * dt;
     }
+
 
     __inline Vec3 IntegrateFriction(float mu_k, float mu_k2, float mass, float dt, Vec3 Velocity, Vec3 NormalVector = Vec3(0, 1, 0))
     {
@@ -91,6 +95,7 @@ namespace TerraPGE::Physics
         return DeltaVelocity;
     }
 
+
     void Integrate(Collider* collider, float dt, GameObject* Floor, const RaycastHit* FloorHit, bool ApplyGravity = true)
     {
         if (!collider->PhysicsEnabled)
@@ -125,11 +130,13 @@ namespace TerraPGE::Physics
             if (collider->body.Velocity.y < 0.0f)
             {
                 // calculate bounce
-                float v_n = collider->body.Velocity.Dot(FloorHit->normal);
-                collider->body.Velocity.y = -collider->body.Velocity.y * collider->body.restitution;
-                if (v_n >= 0) return;
-                Vec3 j =  FloorHit->normal * (-(1 + collider->body.restitution) * v_n) / (1.0f / collider->body.mass);
-                collider->body.Velocity += j / collider->body.mass;  // p += j; v = p/m
+                //float v_n = collider->body.Velocity.Dot(FloorHit->normal);
+                
+                //collider->body.Velocity.y = -collider->body.Velocity.y * collider->body.restitution;
+ 
+                //if (v_n >= 0) return;
+                //Vec3 j =  FloorHit->normal * (-(1 + collider->body.restitution) * v_n) / (1.0f / collider->body.mass);
+                //collider->body.Velocity += j / collider->body.mass;  // p += j; v = p/m
 
                 if (std::abs(collider->body.Velocity.y) < 0.05f) // small threshold
                 {
@@ -143,4 +150,6 @@ namespace TerraPGE::Physics
             collider->body.IsGrounded = false;
         }
     }
+
+
 }

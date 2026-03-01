@@ -177,6 +177,7 @@
     <ClInclude Include="..\..\..\..\Desktop\My Stuff\My Librarys\Graphics\WndCreator.hpp" />
     <ClInclude Include="..\..\..\..\Desktop\My Stuff\My Librarys\Intrinsics\ParrallelPP.h" />
     <ClInclude Include="..\..\GlLoader\GlLoader\GlLoader.h" />
+    <ClInclude Include="BufferUtils.h" />
     <ClInclude Include="Camera.h" />
     <ClInclude Include="Collider.h" />
     <ClInclude Include="EngineCore.h" />

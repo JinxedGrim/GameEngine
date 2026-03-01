@@ -16,11 +16,16 @@
 // X. implement a prefab system
 // X. Fix physics ray cast for ground detection (is mesh local space needs to be world)
 // X. Bloom
+// X Add some PBR stuff (metallness, roughness)
 // X. Skybox sun sampling (color/intensity/exposure/etc)
 // X. Caclulate Vertex norms for all 3 vertices and store them
 // X. Better reosource management
 // X. Fix camera PointAt
-// X. PBR lighting
+// X. Full PBR lighting
+// X. Clear coat layers
+// X. Sub surface scattering
+// X. GGX 
+// X. IBL || IBL approxZ
 // X. Audio system 
 // X. Voice 
 // X. SpotLights
@@ -230,19 +235,43 @@ namespace TerraPGE
 			// Run fixed update as many times as needed
 			while (physicsAccumulator >= PhysicsTick)
 			{
+				//TODO replace with a max constant
 				for (size_t idx = 0; idx < SceneRenderQueue->size(); idx++)
 				{
-					if(ApplyGravity)
-						for (size_t idx2 = 0; idx2 < SceneRenderQueue->size(); idx2++)
+					if (!RenderQueue[idx]->collider.PhysicsEnabled)
+						continue;
+
+					if (ApplyGravity)
+					{
+						float minDistance = 9999.0f;
+
+						for (int idx2 = 0; idx2 < SceneRenderQueue->size(); idx2++)
 						{
-							Ray down(RenderQueue[idx]->Transform.GetWorldPosition(), Vec3(0, -1, 0));
+							if (idx == idx2)
+								continue;
+
+							Matrix floorInv = RenderQueue[idx2]->Transform.GetWorldMatrix().QuickInversed();
+
+							Vec3 localOrigin = RenderQueue[idx]->Transform.GetWorldPosition();
+
+							// Transform direction (w = 0)
+							Vec3 localDir = Vec3(0.0f, -1.0f, 0.0f);
+
+							Ray down(localOrigin, localDir);
 							RaycastHit Out;
-							if (RaycastMesh(down, RenderQueue[idx]->mesh->Triangles, &Out))
-							{
-								Floor = RenderQueue[idx];
-								FloorHit = Out;
+
+							if (RaycastMesh(down, RenderQueue[idx2]->mesh->Triangles, &Out, &floorInv))
+							{								
+								if (Out.distance < minDistance)
+								{
+									Floor = RenderQueue[idx2];
+									FloorHit = Out;
+
+									minDistance = Out.distance;
+								}
 							}
 						}
+					}
 
 					if (RenderQueue[idx]->collider.PhysicsEnabled)
 					{

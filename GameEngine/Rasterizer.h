@@ -8,9 +8,8 @@
 
 namespace TerraPGE::Renderer
 {
-	float ShadowMapBias = FLOAT_LOWEST_BIAS;
 	bool DebugDepthBuffer = false;
-	bool DebugShadows = false;
+	bool DebugShadows = true;
 	bool DebugShadowMap = false;
 	bool DebugShadowValue = false;
 	bool SkipDepthTesting = false;
@@ -242,6 +241,7 @@ namespace TerraPGE::Renderer
 					InterpolatedWorldPos.y = Interp.PerspectiveCorrectInterpolate(world0.y, world1.y, world2.y, v0.w, v1.w, v2.w);
 					InterpolatedWorldPos.z = Interp.PerspectiveCorrectInterpolate(world0.z, world1.z, world2.z, v0.w, v1.w, v2.w);
 
+
 					if (false)
 					{
 						Vec3 Color = RasterUtils::MapInterpedVec3ToColor(world0, world1, world2, InterpolatedWorldPos);
@@ -251,33 +251,40 @@ namespace TerraPGE::Renderer
 
 					if (Renderer::DoShadows && HasLight)
 					{
-						Matrix LightVp = Lights[0]->VpMatrices[0];
+						bool isInShadow = Lights[0]->SampleShadowMap(Core::ShadowMap, Core::ShadowMapWidth, Core::ShadowMapHeight, InterpolatedWorldPos, &ShadowDepth , &ShadowMapDepth);
+
+//						ShadowDepth = ShadowUV.z;);
+
+
+//						Matrix LightVp = Lights[0]->VpMatrices[0];
 
 						// 2. Transform interpolated world position to light clip-space
-						Vec4 LightClip = Vec4(InterpolatedWorldPos, 1.0f) * LightVp;
+//						Vec4 LightClip = Vec4(InterpolatedWorldPos, 1.0f) * LightVp;
 
 						// 3. Divide by W, map to shadow map
-						Vec3 ShadowUV;
+//						Vec3 ShadowUV;
 
-						float invW = 1.0f / LightClip.w;
+//						float invW = 1.0f / LightClip.w;
 
-						ShadowUV.x = LightClip.x * invW;
-						ShadowUV.y = LightClip.y * invW;
-						ShadowUV.z = LightClip.z * invW;
+//						ShadowUV.x = LightClip.x * invW;
+//						ShadowUV.y = LightClip.y * invW;
+//						ShadowUV.z = LightClip.z * invW;
 
 						// NDC x,y -> [-1,1] -> [0,1]
-						ShadowUV.x = ShadowUV.x * 0.5f + 0.5f;
-						ShadowUV.y = ShadowUV.y * 0.5f + 0.5f; // flip Y
+//						ShadowUV.x = ShadowUV.x * 0.5f + 0.5f;
+//						ShadowUV.y = ShadowUV.y * 0.5f + 0.5f; // flip Y
 
-						int ShadowX = int(ShadowUV.x * Core::ShadowMapWidth);
-						int ShadowY = int(ShadowUV.y * Core::ShadowMapHeight);
+//						int ShadowX = int(ShadowUV.x * Core::ShadowMapWidth);
+//						int ShadowY = int(ShadowUV.y * Core::ShadowMapHeight);
 
 						// 5. Sample shadow map
-						int MapIdx = ContIdx(ShadowX, ShadowY, Core::ShadowMapWidth);
+//						int MapIdx = ContIdx(ShadowX, ShadowY, Core::ShadowMapWidth);
 
 						// TODO BAD INTERP
-						ShadowMapDepth = Core::ShadowMap[MapIdx] + ShadowMapBias;
-						ShadowDepth = ShadowUV.z;
+//						ShadowMapDepth = Core::ShadowMap[MapIdx] + ShadowMapBias;
+//						ShadowDepth = ShadowUV.z;
+
+
 
 						if (MidPixel && (DebugShadows || DebugShadowValue || DebugShadows))
 						{
@@ -304,7 +311,7 @@ namespace TerraPGE::Renderer
 							continue;
 						}
 
-						if (ShadowDepth > ShadowMapDepth)
+						if (isInShadow)
 						{
 							BaseArgs->EditShaderDataValue(TPGE_SHDR_IS_IN_SHADOW, true);
 
