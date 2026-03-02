@@ -204,15 +204,20 @@ bool RayIntersectsCapsule(const Ray& ray, const Vec3& p0, const Vec3& p1, float 
 }
 
 
-bool RaycastMesh(Ray ray, const std::vector<Triangle>& triangles, RaycastHit* outHit, Matrix* InverseWorld)
+// this overload is meant only to be used for a WorldRay && local set of triangles
+// it will first transform the ray into the objects space then it will it preform the ray cast
+bool RaycastMesh(Ray ray, const std::vector<Triangle>& triangles, RaycastHit* outHit, Matrix* ObjectWorld)
 {
 	bool foundHit = false;
 	float closest = FLT_MAX;
 
+	Matrix InverseWorld = ObjectWorld->Inversed();
+	Matrix3x3 normalMatrix = ObjectWorld->GetBasis3x3().Inversed();
+
 	RaycastHit temp;
 	Vec3 worldRayOrigin = ray.origin;
-	ray.origin = (ray.origin * *InverseWorld);
-	ray.direction = ray.direction * *InverseWorld;
+	ray.origin = ray.origin * InverseWorld;
+	ray.direction = (Vec4(ray.direction, 0.0f) * InverseWorld).GetVec3().Normalized();
 
 	for (const Triangle& tri : triangles)
 	{
@@ -231,18 +236,11 @@ bool RaycastMesh(Ray ray, const std::vector<Triangle>& triangles, RaycastHit* ou
 		}
 	}
 
-
 	if (!foundHit)
 		return false;
 
-	Matrix world = InverseWorld->QuickInversed();
-
-	outHit->point = Vec3(Vec4(outHit->point, 1.0f) * world);
-
-	Matrix normalMatrix = world.QuickInversed();
-	normalMatrix.Transpose();
-
-	outHit->normal = (Vec3(Vec4(outHit->normal, 0.0f) * normalMatrix));
+	outHit->normal = (outHit->normal * normalMatrix.Transposed()).Normalized();
+	outHit->point = outHit->point * *ObjectWorld;
 	outHit->distance = worldRayOrigin.Distance(outHit->point);
 
 	return foundHit;

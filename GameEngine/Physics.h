@@ -96,6 +96,12 @@ namespace TerraPGE::Physics
     }
 
 
+    float CalculateRestituion()
+    {
+        return 0.0f;
+    }
+
+
     void Integrate(Collider* collider, float dt, GameObject* Floor, const RaycastHit* FloorHit, bool ApplyGravity = true)
     {
         if (!collider->PhysicsEnabled)
@@ -111,6 +117,18 @@ namespace TerraPGE::Physics
         // Integrate position (all axes)
         Vec3 deltaWorld = IntegrateVelocity(collider->body.Velocity, dt);
 
+        if (Floor && deltaWorld.y < 0.0f)
+        {
+            float distanceToFloor = FloorHit->distance;
+
+            if (-deltaWorld.y > distanceToFloor)
+            {
+                deltaWorld.y = -distanceToFloor;
+                collider->body.Velocity.y = 0.0f;
+                collider->body.IsGrounded = true;
+            }
+        }
+            //set y
         collider->Transform->SetLocalEulerAngles(
             collider->Transform->GetLocalEulerAngles() + collider->body.AngularVelocity * dt
         );
@@ -144,12 +162,10 @@ namespace TerraPGE::Physics
                     collider->body.IsGrounded = true;
                 }
             }
+
+            return;
         }
-        else
-        {
-            collider->body.IsGrounded = false;
-        }
+
+        collider->body.IsGrounded = false;
     }
-
-
 }

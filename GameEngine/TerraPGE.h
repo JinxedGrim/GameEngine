@@ -250,21 +250,23 @@ namespace TerraPGE
 							if (idx == idx2)
 								continue;
 
-							Matrix floorInv = RenderQueue[idx2]->Transform.GetWorldMatrix().QuickInversed();
+							Renderable* FloorCandidate = RenderQueue[idx2];
+							Matrix CandidateWorld = FloorCandidate->Transform.GetWorldMatrix();
 
-							Vec3 localOrigin = RenderQueue[idx]->Transform.GetWorldPosition();
+							Vec3 ObjectWorldPos = RenderQueue[idx]->Transform.GetWorldPosition();
 
-							// Transform direction (w = 0)
-							Vec3 localDir = Vec3(0.0f, -1.0f, 0.0f);
+							//TODO Define somewhere / Derive from gravity derection
+							Vec3 WorldDown = Vec3(0.0f, -1.0f, 0.0f);
 
-							Ray down(localOrigin, localDir);
+							Ray down(ObjectWorldPos, WorldDown);
 							RaycastHit Out;
 
-							if (RaycastMesh(down, RenderQueue[idx2]->mesh->Triangles, &Out, &floorInv))
-							{								
+							if (RaycastMesh(down, FloorCandidate->mesh->Triangles, &Out, &CandidateWorld))
+							{
+								TerraPGE::Core::Log("RaycastMesh is true");
 								if (Out.distance < minDistance)
 								{
-									Floor = RenderQueue[idx2];
+									Floor = FloorCandidate;
 									FloorHit = Out;
 
 									minDistance = Out.distance;

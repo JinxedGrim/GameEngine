@@ -108,10 +108,16 @@ public:
 	OBBColliderParams     _OBBParams;
 	CapsuleColliderParams _capsuleParams;
 
-	Collider()
+    Collider() = delete;
+
+
+	Collider(ObjectTransform* Transform)
 	{
 		this->PhysicsEnabled = false;
+        this->Transform = Transform;
+        this->type = ColliderType::None;
 	}
+
 
 	Collider(RigidBody body, ColliderType Type, ObjectTransform* Transform, void* Params = nullptr)
 	{
@@ -239,6 +245,12 @@ public:
     }
 
 
+    Vec3 GetPosition()
+    {
+
+    }
+
+
     //static OBBColliderParams CalculateOBB(const std::vector<Triangle>& triangles)
     //{
     //    // 1. Compute covariance matrix
@@ -252,6 +264,7 @@ public:
     //        }
     //    mean = mean / float(count);
 
+
     //    float cov[3][3] = { 0 };
     //    for (const auto& tri : triangles)
     //        for (int i = 0; i < 3; i++)
@@ -262,17 +275,21 @@ public:
     //            cov[2][0] += p.z * p.x; cov[2][1] += p.z * p.y; cov[2][2] += p.z * p.z;
     //        }
 
+
     //    // 2. Divide by count
     //    for (int r = 0; r < 3; r++)
     //        for (int c = 0; c < 3; c++)
     //            cov[r][c] /= float(count);
 
+
     //    // 3. Eigenvectors of covariance = principal axes (for simplicity, assume you have a function)
     //    Matrix3x3 axes = Eigenvectors(cov); // TODO: implement or use library
+
 
     //    // 4. Project points onto axes to get min/max along each
     //    Vec3 minP(FLT_MAX, FLT_MAX, FLT_MAX);
     //    Vec3 maxP(-FLT_MAX, -FLT_MAX, -FLT_MAX);
+
 
     //    for (const auto& tri : triangles)
     //        for (int i = 0; i < 3; i++)
@@ -283,10 +300,12 @@ public:
     //                (tri.Points[i] - mean).xyz().Dot(axes[2])
     //            );
 
+
     //            minP.x = std::min(minP.x, pLocal.x); maxP.x = std::max(maxP.x, pLocal.x);
     //            minP.y = std::min(minP.y, pLocal.y); maxP.y = std::max(maxP.y, pLocal.y);
     //            minP.z = std::min(minP.z, pLocal.z); maxP.z = std::max(maxP.z, pLocal.z);
     //        }
+
 
     //    OBBColliderParams result;
     //    result.offset = mean + axes[0] * ((minP.x + maxP.x) * 0.5f)     
@@ -311,6 +330,7 @@ public:
     //        }
     //    mean = mean / float(count);
 
+
     //    float cov[3][3] = { 0 };
     //    for (const auto& tri : triangles)
     //        for (int i = 0; i < 3; i++)
@@ -321,13 +341,16 @@ public:
     //            cov[2][0] += p.z * p.x; cov[2][1] += p.z * p.y; cov[2][2] += p.z * p.z;
     //        }
 
+
     //    for (int r = 0; r < 3; r++)
     //        for (int c = 0; c < 3; c++)
     //            cov[r][c] /= float(count);
 
+
     //    // 2. Compute eigenvectors -> choose eigenvector with largest eigenvalue as axis
     //    Matrix3x3 axes = Eigenvectors(cov);
     //    Vec3 axis = axes[0]; // assume axes[0] corresponds to largest eigenvalue
+
 
     //    // 3. Project points onto axis to get height
     //    float minProj = FLT_MAX, maxProj = -FLT_MAX;
@@ -340,10 +363,12 @@ public:
     //            minProj = std::min(minProj, proj);
     //            maxProj = std::max(maxProj, proj);
 
+
     //            // distance to axis for radius
     //            Vec3 closestPoint = mean + axis * proj;
     //            radiusSq = std::max(radiusSq, (tri.Points[i] - closestPoint).xyz().LengthSquared());
     //        }
+
 
     //    CapsuleColliderParams result;
     //    result.axis = axis;
@@ -894,6 +919,11 @@ private:
                 o->_capsuleParams.radius,
                 o->_capsuleParams.halfHeight
             );
+        default:
+            // replace TODO
+            throw(0xEE);
+            //TerraPGE::Core::LogError("[Collision]", "Invalid Collider Type!", 1);
+            break;
         }
 
         return false;

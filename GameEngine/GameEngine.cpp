@@ -111,7 +111,7 @@ class ExampleScene : public TerraPGE::Scene
 		CubeRender = DEBUG_NEW TerraPGE::Renderable(CubeMsh, this->MainCamera, Vec3(1.0f, 1.0f, 1.0f), Vec3(0.0f, 0.0f, 0.0f), Vec3(0.0f, 5.f, -4.0f), TerraPGE::EngineShaders::DefaultShader);
 		CubeRender->collider.PhysicsEnabled = false;
 		Ak47Render = DEBUG_NEW TerraPGE::Renderable(CubeMesh2, this->MainCamera, Vec3(1.0f, 1.0f, 1.0f), Vec3(0.0f, 0.0f, 0.0f), Vec3(0.0f, 6.f, 4.0f), TerraPGE::EngineShaders::DefaultShader);
-		PlaneRender = DEBUG_NEW TerraPGE::Renderable(Plane, this->MainCamera, Vec3(2.0f, 2.0f, 1.0f), Vec3(0.0f, 0.0f, 0.0f), Vec3(0.0f, 0.0f, 0.0f), TerraPGE::EngineShaders::DefaultShader);
+		PlaneRender = DEBUG_NEW TerraPGE::Renderable(Plane, this->MainCamera, Vec3(2.0f, 1.0f, 2.0f), Vec3(0.0f, 0.0f, 0.0f), Vec3(0.0f, 0.0f, 0.0f), TerraPGE::EngineShaders::DefaultShader);
 		//TerraPGE::EngineShaders::Shader_Frag_Phong         Shader_Texture_Only
 		CubeRender->mesh->MeshName = "SmileCube";
 
@@ -491,19 +491,20 @@ class ExampleScene : public TerraPGE::Scene
 	TerraPGE::Renderable* GetHoveredObj(const std::vector<TerraPGE::Renderable*>* ToRender)
 	{
 		TerraPGE::Renderable* hovered = nullptr;
+		this->MainCamera->Transform.WalkTransformChain();
+
 		for (TerraPGE::Renderable* obj : *ToRender)
 		{
-			this->MainCamera->Transform.WalkTransformChain();
-			Matrix inv = obj->Transform.World.QuickInversed();
-			Vec3 localOrigin = this->MainCamera->Transform.GetWorldPosition() * inv;
-			Vec3 localDir = ((this->MainCamera->GetLookDirection())).Normalized();
-
+			Matrix inv = obj->Transform.GetWorldMatrix();
+			Vec3 Dir = this->MainCamera->GetLookDirection();
+			Vec3 Origin = this->MainCamera->Transform.GetWorldPosition();
 
 			if (!obj) continue;
 
-			Ray camRay = Ray(localOrigin, localDir);
+			Ray camRay = Ray(Origin, Dir);
+
 			RaycastHit Out;
-			if (RaycastMesh(camRay, obj->mesh->Triangles, &Out))
+			if (RaycastMesh(camRay, obj->mesh->Triangles, &Out, &inv))
 			{
 				if (Out.hit)
 					hovered = obj;

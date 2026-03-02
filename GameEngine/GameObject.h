@@ -10,12 +10,14 @@ public:
 	GameObject(const Vec3& Scalar, const Vec3& EulerRotatiom, const Vec3& Pos, const bool PhysicsEnabled = false)
 	{
 		this->Transform = ObjectTransform(Pos, Scalar, EulerRotatiom);
+		this->collider = Collider(&(this->Transform));
 		this->collider.PhysicsEnabled = false;
 	}
 
 	GameObject(const Vec3& Pos, const bool PhysicsEnabled = false)
 	{
 		this->Transform = ObjectTransform(Pos, Vec3(1.0f, 1.0f, 1.0f), Vec3(0.0f, 0.0f, 0.0f));
+		this->collider = Collider(&(this->Transform));
 		this->collider.PhysicsEnabled = false;
 	}
 
@@ -101,5 +103,5 @@ public:
 	}
 
 	ObjectTransform Transform = ObjectTransform(Vec3(0.0f, 0.0f, 0.0f), Vec3(1.0f, 1.0f, 1.0f), Vec3(0.0f, 0.0f, 0.0f));
-	Collider collider;
+	Collider collider = Collider(nullptr);
 };

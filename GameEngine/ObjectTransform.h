@@ -111,7 +111,7 @@ public:
 		Parent = NewParent;
 		if (Parent) Parent->Children.push_back(this);
 
-		Matrix invParent = Parent ? Parent->GetWorldMatrix().InverseSRT() : Matrix::CreateIdentity();
+		Matrix invParent = Parent ? Parent->GetWorldMatrix().Inversed() : Matrix::CreateIdentity();
 		Local = invParent * worldBefore;
 		RecalculateLocalMatrix();
 	}
