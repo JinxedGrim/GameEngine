@@ -73,7 +73,7 @@ public:
 	{
 		if (this->Parent)
 		{
-			Matrix invParent = Parent->GetWorldMatrix().InverseSRT();
+			Matrix invParent = Parent->GetWorldMatrix().Inversed();
 			this->LocalPosition = pos * invParent;
 		}
 		else
@@ -81,6 +81,21 @@ public:
 
 		RecalculateLocalMatrix();
 	}
+
+
+	void SetWorldEulerAngles(const Vec3& r) 
+	{ 
+		if (this->Parent)
+		{
+			Matrix invParent = Parent->GetWorldMatrix().Inversed();
+			this->LocalEulerRotation = r * invParent;
+		}
+		else
+			this->LocalEulerRotation = r;
+
+		RecalculateLocalMatrix(); 
+	}
+
 
 
 	Vec3 GetWorldPosition() const

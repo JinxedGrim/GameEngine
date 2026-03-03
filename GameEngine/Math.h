@@ -23,6 +23,14 @@
 #include "VectorMath.h"
 #include "MatrixMath.h"
 
+struct Ray
+{
+	Vec3 origin;
+	Vec3 direction;
+	Ray(const Vec3& o, const Vec3& d) : origin(o), direction(d.Normalized()) {}
+};
+
+
 Vec3 Vec3::operator * (const Matrix& m) const
 {
 	// For row-Vector, row-major, left handed storage:

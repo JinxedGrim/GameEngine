@@ -2,16 +2,6 @@
 #include "Math.h"
 #include "GameObject.h"
 
-
-struct Ray
-{
-	Vec3 origin;
-	Vec3 direction; // MUST be normalized
-
-	Ray(const Vec3& o, const Vec3& d) : origin(o), direction(d.Normalized()) {}
-};
-
-
 struct RaycastHit
 {
 	bool hit = false;
@@ -212,12 +202,14 @@ bool RaycastMesh(Ray ray, const std::vector<Triangle>& triangles, RaycastHit* ou
 	float closest = FLT_MAX;
 
 	Matrix InverseWorld = ObjectWorld->Inversed();
-	Matrix3x3 normalMatrix = ObjectWorld->GetBasis3x3().Inversed();
+	Matrix3x3 normalMatrix = ObjectWorld->GetBasis3x3();
 
 	RaycastHit temp;
 	Vec3 worldRayOrigin = ray.origin;
 	ray.origin = ray.origin * InverseWorld;
-	ray.direction = (Vec4(ray.direction, 0.0f) * InverseWorld).GetVec3().Normalized();
+	ray.direction = (ray.direction * normalMatrix.Inversed()).Normalized();
+
+	std::cout << "ray.origin: " << ray.origin << " dir: " << ray.direction << std::endl;
 
 	for (const Triangle& tri : triangles)
 	{
@@ -239,12 +231,13 @@ bool RaycastMesh(Ray ray, const std::vector<Triangle>& triangles, RaycastHit* ou
 	if (!foundHit)
 		return false;
 
-	outHit->normal = (outHit->normal * normalMatrix.Transposed()).Normalized();
+	outHit->normal = (outHit->normal * normalMatrix).Normalized();
 	outHit->point = outHit->point * *ObjectWorld;
 	outHit->distance = worldRayOrigin.Distance(outHit->point);
 
 	return foundHit;
 }
+
 
 bool RaycastMesh(const Ray& ray, const std::vector<Triangle>& triangles, RaycastHit* outHit)
 {

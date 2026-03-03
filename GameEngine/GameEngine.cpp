@@ -529,7 +529,7 @@ class ExampleScene : public TerraPGE::Scene
 		//}
 
 		this->AddLight(&Dl);
-		HoveredRend = GetHoveredObj(this->GetObjects());
+		//HoveredRend = GetHoveredObj(this->GetObjects());
 	}
 
 

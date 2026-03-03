@@ -117,6 +117,7 @@ namespace TerraPGE::Physics
         // Integrate position (all axes)
         Vec3 deltaWorld = IntegrateVelocity(collider->body.Velocity, dt);
 
+        /*
         if (Floor && deltaWorld.y < 0.0f)
         {
             float distanceToFloor = FloorHit->distance;
@@ -127,13 +128,13 @@ namespace TerraPGE::Physics
                 collider->body.Velocity.y = 0.0f;
                 collider->body.IsGrounded = true;
             }
-        }
+        }*/
             //set y
-        collider->Transform->SetLocalEulerAngles(
-            collider->Transform->GetLocalEulerAngles() + collider->body.AngularVelocity * dt
+        collider->SetEulerAngles(
+            collider->GetEulerAngles() + collider->body.AngularVelocity * dt
         );
 
-        collider->Transform->SetLocalPosition(collider->Transform->GetLocalPosition() + deltaWorld);
+        collider->SetPosition(collider->GetPosition() + deltaWorld);
 
         if (collider->type == ColliderType::None)
             return;
@@ -141,9 +142,11 @@ namespace TerraPGE::Physics
         // Ground collision
         if (Floor && collider->TestCollision(&Floor->collider))
         {
-            Vec3 worldPos = collider->Transform->GetWorldPosition();
+            Vec3 worldPos = collider->GetPosition();
             worldPos.y = FloorHit->point.y;
-            collider->Transform->SetLocalPosition(worldPos);
+            collider->SetPosition(worldPos);
+            collider->body.Velocity.y = 0.0f;
+
 
             if (collider->body.Velocity.y < 0.0f)
             {
@@ -153,7 +156,7 @@ namespace TerraPGE::Physics
                 //collider->body.Velocity.y = -collider->body.Velocity.y * collider->body.restitution;
  
                 //if (v_n >= 0) return;
-                //Vec3 j =  FloorHit->normal * (-(1 + collider->body.restitution) * v_n) / (1.0f / collider->body.mass);
+                //Vec3 j = FloorHit->normal * (-(1 + collider->body.restitution) * v_n) / (1.0f / collider->body.mass);
                 //collider->body.Velocity += j / collider->body.mass;  // p += j; v = p/m
 
                 if (std::abs(collider->body.Velocity.y) < 0.05f) // small threshold

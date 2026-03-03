@@ -261,9 +261,13 @@ namespace TerraPGE
 							Ray down(ObjectWorldPos, WorldDown);
 							RaycastHit Out;
 
-							if (RaycastMesh(down, FloorCandidate->mesh->Triangles, &Out, &CandidateWorld))
+							//if (RaycastMesh(down, FloorCandidate->mesh->Triangles, &Out, &CandidateWorld))
+							if(FloorCandidate->collider.TestRay(down, Out))
 							{
-								TerraPGE::Core::Log("RaycastMesh is true");
+								std::stringstream str;
+								str << "RaycastMesh is true: " << Out.point << " Norm: " << Out.normal << " Dist: " << Out.distance;
+
+								TerraPGE::Core::Log(str.str());
 								if (Out.distance < minDistance)
 								{
 									Floor = FloorCandidate;

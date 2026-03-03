@@ -97,16 +97,17 @@ struct CapsuleColliderParams
 
 class Collider
 {
+    ObjectTransform* Transform = nullptr;
 public:
 	ColliderType type;
 	RigidBody body; // maybe just a pointer to the renderable (or mesh) rigidbody
-    ObjectTransform* Transform = nullptr;
 	bool PhysicsEnabled = false;
 	// TODO Breaak these up to seperate classes use polymorphism prolly
 	SphereColliderParams  _sphereParams;
 	AABBColliderParams    _AABBParams;
 	OBBColliderParams     _OBBParams;
 	CapsuleColliderParams _capsuleParams;
+
 
     Collider() = delete;
 
@@ -165,11 +166,11 @@ public:
 	{
         switch (this->type)
         {
-        case ColliderType::Sphere:   return this->TestSphere(other);
-        case ColliderType::AABB:     return this->TestAABB(other);
-        case ColliderType::OBB:      return this->TestOBB(other);
-        case ColliderType::Capsule:  return this->TestCapsule(other);
-        default: return false;
+            case ColliderType::Sphere:   return this->TestSphere(other);
+            case ColliderType::AABB:     return this->TestAABB(other);
+            case ColliderType::OBB:      return this->TestOBB(other);
+            case ColliderType::Capsule:  return this->TestCapsule(other);
+            default: return false;
         }
 	}
 
@@ -245,9 +246,39 @@ public:
     }
 
 
-    Vec3 GetPosition()
+    Vec3 GetPosition() const
     {
+        return this->Transform->GetWorldPosition();
+    }
 
+
+    Vec3 GetWorldMatrix() const
+    {
+        return this->Transform->GetWorldPosition();
+    }
+
+
+    Vec3 GetEulerAngles() const 
+    {
+        return this->Transform->GetWorldRotation();
+    }
+
+
+    void SetEulerAngles(const Vec3& NewAngles)
+    {
+        this->Transform->SetWorldEulerAngles(NewAngles);
+    }
+
+
+    void SetPosition(const Vec3& Pos)
+    {
+        this->Transform->SetWorldPosition(Pos);
+    }
+
+
+    Vec3 GetParentScale() const 
+    {
+        return this->Transform->GetLocalScale();
     }
 
 
@@ -674,173 +705,6 @@ public:
         return distSq <= r * r;
     }
 
-
-    static inline bool RayVSphere(const Vec3& ro, const Vec3& rd, const Vec3& c, float r, float& t)
-    {
-        Vec3 oc = ro - c;
-        float b = oc.Dot(rd);
-        float cval = oc.LengthSquared() - r * r;
-        float disc = b * b - cval;
-        if (disc < 0) return false;
-
-        t = -b - sqrtf(disc);
-        return t >= 0;
-    }
-
-
-    static inline bool RayVAABB(const Vec3& ro, const Vec3& rd, const Vec3& bPos, const Vec3& e, float& t)
-    {
-        float tmin = (bPos.x - e.x - ro.x) / rd.x;
-        float tmax = (bPos.x + e.x - ro.x) / rd.x;
-        if (tmin > tmax) std::swap(tmin, tmax);
-
-        float tymin = (bPos.y - e.y - ro.y) / rd.y;
-        float tymax = (bPos.y + e.y - ro.y) / rd.y;
-        if (tymin > tymax) std::swap(tymin, tymax);
-
-        if ((tmin > tymax) || (tymin > tmax))
-            return false;
-
-        if (tymin > tmin)
-            tmin = tymin;
-        if (tymax < tmax)
-            tmax = tymax;
-
-        float tzmin = (bPos.z - e.z - ro.z) / rd.z;
-        float tzmax = (bPos.z + e.z - ro.z) / rd.z;
-        if (tzmin > tzmax) std::swap(tzmin, tzmax);
-
-        if ((tmin > tzmax) || (tzmin > tmax))
-            return false;
-
-        if (tzmin > tmin)
-            tmin = tzmin;
-        if (tzmax < tmax)
-            tmax = tzmax;
-
-        t = tmin >= 0 ? tmin : tmax; // pick first intersection in front of ray
-        return t >= 0;
-    }
-
-
-    static inline bool RayOBB(const Vec3& rayOrig, const Vec3& rayDir, const Vec3& obbPos, const Vec3& halfExt, const Matrix3x3& axes, float& tOut)
-    {
-        // Transform to OBB local space
-        Vec3 p = rayOrig - obbPos;
-        Vec3 localOrig(
-            p.Dot(axes[0]),
-            p.Dot(axes[1]),
-            p.Dot(axes[2])
-        );
-
-        Vec3 localDir(
-            rayDir.Dot(axes[0]),
-            rayDir.Dot(axes[1]),
-            rayDir.Dot(axes[2])
-        );
-
-        // Ray vs AABB test in local space
-        float tMin = 0.0f;
-        float tMax = 1e9f;
-
-        for (int i = 0; i < 3; i++)
-        {
-            float o = localOrig[i];
-            float d = localDir[i];
-            float minB = -halfExt[i];
-            float maxB = halfExt[i];
-
-            if (fabs(d) < 1e-6f)
-            {
-                if (o < minB || o > maxB) return false;
-            }
-            else
-            {
-                float t1 = (minB - o) / d;
-                float t2 = (maxB - o) / d;
-                if (t1 > t2) std::swap(t1, t2);
-
-                if (t1 > tMin) tMin = t1;
-                if (t2 < tMax) tMax = t2;
-
-                if (tMin > tMax) return false;
-            }
-        }
-
-        tOut = tMin;
-        return true;
-    }
-
-
-    static inline bool RayCapsule(const Vec3& rayOrig, const Vec3& rayDir, const Vec3& capPos, float radius, float halfH, float& tOut)
-    {
-        // Capsule segment endpoints
-        Vec3 a = CapsuleSegmentA(capPos, halfH);
-        Vec3 b = CapsuleSegmentB(capPos, halfH);
-        Vec3 ab = b - a;
-        float abLenSq = ab.Dot(ab);
-
-        // Compute the closest point between ray and the capsule axis segment
-        Vec3 ao = rayOrig - a;
-
-        float dDotAB = rayDir.Dot(ab);
-        float aoDotAB = ao.Dot(ab);
-
-        float A = abLenSq - dDotAB * dDotAB;
-        float B = abLenSq * ao.Dot(rayDir) - aoDotAB * dDotAB;
-        float C = abLenSq * ao.Dot(ao) - aoDotAB * aoDotAB - radius * radius * abLenSq;
-
-        // Quadratic discriminant
-        float disc = B * B - A * C;
-        if (disc < 0.0f) return false;
-
-        float sqrtD = sqrtf(disc);
-        float t = (-B - sqrtD) / A;
-        if (t < 0.0f) return false;
-
-        // Check if closest point lies within cylinder *segment*
-        float proj = aoDotAB + t * dDotAB;
-        if (proj < 0.0f || proj > abLenSq)
-        {
-            // Check spherical caps instead
-            float tSphere;
-
-            // Hit sphere at A
-            Vec3 ao2 = rayOrig - a;
-            float B2 = rayDir.Dot(ao2);
-            float C2 = ao2.Dot(ao2) - radius * radius;
-            float disc2 = B2 * B2 - C2;
-            if (disc2 >= 0.0f)
-            {
-                tSphere = -B2 - sqrtf(disc2);
-                if (tSphere >= 0.0f)
-                {
-                    tOut = tSphere;
-                    return true;
-                }
-            }
-
-            // Hit sphere at B
-            Vec3 bo2 = rayOrig - b;
-            float B3 = rayDir.Dot(bo2);
-            float C3 = bo2.Dot(bo2) - radius * radius;
-            float disc3 = B3 * B3 - C3;
-            if (disc3 >= 0.0f)
-            {
-                tSphere = -B3 - sqrtf(disc3);
-                if (tSphere >= 0.0f)
-                {
-                    tOut = tSphere;
-                    return true;
-                }
-            }
-
-            return false;
-        }
-
-        tOut = t;
-        return true;
-    }
 private:
 
     bool TestSphere(const Collider* o)  const
@@ -886,6 +750,8 @@ private:
     bool TestAABB(const Collider* o) const
     {
         Vec3 p1 = Transform->GetWorldPosition() + _AABBParams.offset;
+        Vec3 e1 = _AABBParams.halfExtents * this->GetParentScale();
+        Vec3 Scale = o->GetParentScale();
 
         switch (o->type)
         {
@@ -894,27 +760,27 @@ private:
                 o->Transform->GetWorldPosition() + o->_sphereParams.Offset,
                 o->_sphereParams.radius,
                 p1,
-                _AABBParams.halfExtents
+                e1
             );
 
         case ColliderType::AABB:
             return AABBvAABB(
-                p1, _AABBParams.halfExtents,
-                o->Transform->GetWorldPosition() + o->_AABBParams.offset,
-                o->_AABBParams.halfExtents
+                p1, e1,
+                this->GetPosition() + o->_AABBParams.offset,
+                o->_AABBParams.halfExtents * Scale
             );
 
         case ColliderType::OBB:
             return AABBvOBB(
-                p1, _AABBParams.halfExtents,
+                p1, _AABBParams.halfExtents * this->GetParentScale(),
                 o->Transform->GetWorldPosition() + o->_OBBParams.offset,
-                o->_OBBParams.halfExtents,
+                e1,
                 o->_OBBParams.orientation
             );
 
         case ColliderType::Capsule:
             return AABBvCapsule(
-                p1, _AABBParams.halfExtents,
+                p1, e1,
                 o->Transform->GetWorldPosition() + o->_capsuleParams.offset,
                 o->_capsuleParams.radius,
                 o->_capsuleParams.halfHeight
