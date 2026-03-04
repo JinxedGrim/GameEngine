@@ -168,11 +168,11 @@ namespace TerraPGE
 
 		std::vector<Renderable*> Roots;
 
-		SceneManager* _sceneManager = SceneManager::Create(CurrScene);
-
 		Wnd.RegisterRawInput();
 		Renderer::RenderingCore::PrepareRenderingBackend(Wnd);
 		Core::UpdateWindow(Wnd, &msg);
+		SceneManager* _sceneManager = SceneManager::Create(CurrScene);
+
 		UpdateLoadingScreen();
 		CurrScene->BeginScene(Wnd);
 		
@@ -208,9 +208,6 @@ namespace TerraPGE
 
 			Roots = CurrScene->GetRoots();
 
-			Renderable* Floor = nullptr;
-			RaycastHit FloorHit;
-
 			for (size_t idx = 0; idx < SceneLights->size(); idx++)
 			{
 				LightsToRender[idx] = SceneLights->at(idx);
@@ -238,6 +235,10 @@ namespace TerraPGE
 				//TODO replace with a max constant
 				for (size_t idx = 0; idx < SceneRenderQueue->size(); idx++)
 				{
+					Renderable* Floor = nullptr;
+					RaycastHit FloorHit;
+					Collider* FloorCollider = nullptr;
+
 					if (!RenderQueue[idx]->collider.PhysicsEnabled)
 						continue;
 
@@ -268,6 +269,7 @@ namespace TerraPGE
 								if (Out.distance < minDistance)
 								{
 									Floor = FloorCandidate;
+									FloorCollider = &(FloorCandidate->collider);
 									FloorHit = Out;
 
 									minDistance = Out.distance;
@@ -278,7 +280,7 @@ namespace TerraPGE
 
 					if (RenderQueue[idx]->collider.PhysicsEnabled)
 					{
-						Physics::Integrate(&((RenderQueue[idx])->collider), PhysicsTick, Floor, &FloorHit);
+						Physics::Integrate(&((RenderQueue[idx])->collider), PhysicsTick, FloorCollider, &FloorHit);
 					}
 				}
 

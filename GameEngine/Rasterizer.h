@@ -9,7 +9,7 @@
 namespace TerraPGE::Renderer
 {
 	bool DebugDepthBuffer = false;
-	bool DebugShadows = true;
+	bool DebugShadows = false;
 	bool DebugShadowMap = false;
 	bool DebugShadowValue = false;
 	bool SkipDepthTesting = false;
@@ -253,39 +253,6 @@ namespace TerraPGE::Renderer
 					{
 						bool isInShadow = Lights[0]->SampleShadowMap(Core::ShadowMap, Core::ShadowMapWidth, Core::ShadowMapHeight, InterpolatedWorldPos, &ShadowDepth , &ShadowMapDepth);
 
-//						ShadowDepth = ShadowUV.z;);
-
-
-//						Matrix LightVp = Lights[0]->VpMatrices[0];
-
-						// 2. Transform interpolated world position to light clip-space
-//						Vec4 LightClip = Vec4(InterpolatedWorldPos, 1.0f) * LightVp;
-
-						// 3. Divide by W, map to shadow map
-//						Vec3 ShadowUV;
-
-//						float invW = 1.0f / LightClip.w;
-
-//						ShadowUV.x = LightClip.x * invW;
-//						ShadowUV.y = LightClip.y * invW;
-//						ShadowUV.z = LightClip.z * invW;
-
-						// NDC x,y -> [-1,1] -> [0,1]
-//						ShadowUV.x = ShadowUV.x * 0.5f + 0.5f;
-//						ShadowUV.y = ShadowUV.y * 0.5f + 0.5f; // flip Y
-
-//						int ShadowX = int(ShadowUV.x * Core::ShadowMapWidth);
-//						int ShadowY = int(ShadowUV.y * Core::ShadowMapHeight);
-
-						// 5. Sample shadow map
-//						int MapIdx = ContIdx(ShadowX, ShadowY, Core::ShadowMapWidth);
-
-						// TODO BAD INTERP
-//						ShadowMapDepth = Core::ShadowMap[MapIdx] + ShadowMapBias;
-//						ShadowDepth = ShadowUV.z;
-
-
-
 						if (MidPixel && (DebugShadows || DebugShadowValue || DebugShadows))
 						{
 							TestDepth = ShadowDepth;
@@ -457,6 +424,88 @@ namespace TerraPGE::Renderer
 			}
 		}
 	}
+
+
+	namespace MultiThreaded
+	{
+		// input tri is clip space
+		void __fastcall RasterizeDepth(Triangle* ClipSpaceTri, float* Buffer, const SIZE_T BufferWidth, const SIZE_T BufferHeight)
+		{
+			float z0 = ClipSpaceTri->Points.Points[0].z;
+			float z1 = ClipSpaceTri->Points.Points[1].z;
+			float z2 = ClipSpaceTri->Points.Points[2].z;
+
+			ClipSpaceTri->ApplyPerspectiveDivide();
+			ClipSpaceTri->Scale(Vec3((float)((BufferWidth - 1) * 0.5f), (float)((BufferHeight - 1) * 0.5f), 1.0f));
+			ClipSpaceTri->Translate(Vec3((float)((BufferWidth - 1) * 0.5f), (float)((BufferHeight - 1) * 0.5f), 0.0f));
+
+			// Screen Space
+			Vec4 v0 = ClipSpaceTri->Points.Points[0];
+			Vec4 v1 = ClipSpaceTri->Points.Points[1];
+			Vec4 v2 = ClipSpaceTri->Points.Points[2];
+
+			const float v1y_Sub_v2y = v1.y - v2.y;
+			const float v2y_Sub_v0y = v2.y - v0.y;
+			const float v0x_Sub_v2x = v0.x - v2.x;
+			const float v2x_Sub_v1x = v2.x - v1.x;
+
+			BaryCoords Interp;
+
+			// --- 2. Compute triangle bounding box ---
+			int minX = std::max(0, (int)std::floor(std::min({ v0.x, v1.x, v2.x })));
+			int maxX = std::min(BufferWidth - 1, (SIZE_T)std::ceil(std::max({ v0.x, v1.x, v2.x })));
+			int minY = std::max(0, (int)std::floor(std::min({ v0.y, v1.y, v2.y })));
+			int maxY = std::min(BufferHeight - 1, (SIZE_T)std::ceil(std::max({ v0.y, v1.y, v2.y })));
+
+			float denom = (v1y_Sub_v2y) * (v0x_Sub_v2x)+(v2.x - v1.x) * (v0.y - v2.y);
+
+			if (denom == 0.0f) return; // Degenerate triangle
+
+			for (int y = minY; y <= maxY; y++)
+			{
+				for (int x = minX; x <= maxX; x++)
+				{
+					// Compute barycentric coordinates
+					float alpha = (v1y_Sub_v2y * ((x + 0.5f) - v2.x) + (v2x_Sub_v1x) * ((y + 0.5f) - v2.y)) / denom;
+					float beta = (v2y_Sub_v0y * ((x + 0.5f) - v2.x) + (v0x_Sub_v2x) * ((y + 0.5f) - v2.y)) / denom;
+					float gamma = 1.0f - alpha - beta;
+
+					if (alpha < 0 || beta < 0 || gamma < 0) continue;
+
+					Interp.SetBary(alpha, beta, gamma);
+
+					// this is correct for non ortho projection TODO make a switch for this in my main renderer and here 
+					float Depth = Interp.PerspectiveCorrectInterpolate(v0.z, v1.z, v2.z, v0.w, v1.w, v2.w);
+
+					if (Depth < 0.0f)
+						continue;
+
+					int idx = ContIdx(x, y, BufferWidth);
+
+					if (Depth < Buffer[idx])
+					{
+						Buffer[idx] = Depth;
+					}
+				}
+			}
+		}
+	}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 	/* ALL OLD  CODE DONT BOTHER WITH THIS IT'S TRASH

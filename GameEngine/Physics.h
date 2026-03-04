@@ -102,7 +102,7 @@ namespace TerraPGE::Physics
     }
 
 
-    void Integrate(Collider* collider, float dt, GameObject* Floor, const RaycastHit* FloorHit, bool ApplyGravity = true)
+    void Integrate(Collider* collider, float dt, Collider* Floor, const RaycastHit* FloorHit, bool ApplyGravity = true)
     {
         if (!collider->PhysicsEnabled)
             return;
@@ -112,7 +112,7 @@ namespace TerraPGE::Physics
             collider->body.Velocity += IntegrateGravity(dt);
         
         if (collider->body.IsGrounded)
-            collider->body.Velocity += IntegrateFriction(collider->body.KineticFriction, Floor->collider.body.KineticFriction, collider->body.mass, dt, collider->body.Velocity);
+            collider->body.Velocity += IntegrateFriction(collider->body.KineticFriction, Floor->body.KineticFriction, collider->body.mass, dt, collider->body.Velocity);
 
         // Integrate position (all axes)
         Vec3 deltaWorld = IntegrateVelocity(collider->body.Velocity, dt);
@@ -140,7 +140,7 @@ namespace TerraPGE::Physics
             return;
 
         // Ground collision
-        if (Floor && collider->TestCollision(&Floor->collider))
+        if (Floor && collider->TestCollision(Floor))
         {
             Vec3 worldPos = collider->GetPosition();
             worldPos.y = FloorHit->point.y;

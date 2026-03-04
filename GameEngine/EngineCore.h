@@ -48,7 +48,7 @@ namespace TerraPGE::Core
 	// move all to TPGE
 	bool FpsEngineCounter = true;
 	bool DoMultiThreading = true;
-	bool SimdAcceleration = false;
+	bool SimdAcceleration = true;
 	bool GpuAcceleration = false;
 
 	int CpuCores = 0;
@@ -56,14 +56,10 @@ namespace TerraPGE::Core
 	std::vector<std::wstring> GPUDevNames = {};
 	std::wstring PrimaryGPUDevName;
 	SIZE_T MaxMemoryMB = 0;
+
 	ThreadManager ThreadPool;
-#ifdef SSE_SIMD_42_SUPPORT
 	CPUID CpuId(1);
 	SupportedInstructions SimdInfo = { 0 };
-#else
-	CPUID CpuId(1);
-	SupportedInstructions SimdInfo = { 0 };
-#endif
 
 	// move to TPGE keep all and add a switch for updating keyboard input (allow user to disable all input)
 	bool UpdateMouseIn = true;
@@ -86,15 +82,18 @@ namespace TerraPGE::Core
 		std::cout << Message << std::endl;
 	}
 
+
 	void LogInfo(std::string CallerTag, std::string Message)
 	{
 		Core::Log("[I] (" + CallerTag + ") " + Message);
 	}
+	
 
 	void LogWarning(std::string CallerTag, std::string Message)
 	{
 		Core::Log("[W] (" + CallerTag + ") " + Message);
 	}
+
 
 	void LogError(std::string CallerTag, std::string Message, int Level)
 	{
@@ -115,6 +114,7 @@ namespace TerraPGE::Core
 
 		return (k.QuadPart + u.QuadPart) * 100; // FILETIME = 100ns units
 	}
+
 
 	double CalculateCpuUsage(uint64_t cpuTimeDeltaNs, uint64_t wallTimeDeltaNs, int coreCount)
 	{
@@ -140,6 +140,7 @@ namespace TerraPGE::Core
 		return memState.lTotalCount / 1024 / 1024;
 	}
 
+
 	std::wstring GetDevList()
 	{
 		std::wstring out = L"";
@@ -152,18 +153,16 @@ namespace TerraPGE::Core
 		return out;
 	}
 
+
 	void GetCpuInfo()
 	{
 		SYSTEM_INFO SysInf;
 
 		SimdInfo = CpuId.GetSupportedInstructions();
-		CpuId.LogCpuInfo();
-
 		GetSystemInfo(&SysInf);
 		TerraPGE::Core::CpuCores = SysInf.dwNumberOfProcessors;
-
-		std::cout << "Cores: " << TerraPGE::Core::CpuCores << std::endl;
 	}
+
 
 	void UpdateSystemInfo()
 	{
@@ -221,6 +220,7 @@ namespace TerraPGE::Core
 	// Delete buffers
 	void EngineCleanup()
 	{
+		Log("EngineCleanup called");
 		// Cleanup buffers
 		delete[] DepthBuffer;
 		delete[] ShadowMap;

@@ -175,7 +175,6 @@
     <ClInclude Include="..\..\..\..\Desktop\My Stuff\My Librarys\Graphics\GdiPP.hpp" />
     <ClInclude Include="..\..\..\..\Desktop\My Stuff\My Librarys\Graphics\TerraGL.h" />
     <ClInclude Include="..\..\..\..\Desktop\My Stuff\My Librarys\Graphics\WndCreator.hpp" />
-    <ClInclude Include="..\..\..\..\Desktop\My Stuff\My Librarys\Intrinsics\ParrallelPP.h" />
     <ClInclude Include="..\..\GlLoader\GlLoader\GlLoader.h" />
     <ClInclude Include="BufferUtils.h" />
     <ClInclude Include="Camera.h" />
@@ -187,6 +186,7 @@
     <ClInclude Include="MatrixMath.h" />
     <ClInclude Include="Mesh.h" />
     <ClInclude Include="ObjectTransform.h" />
+    <ClInclude Include="ParrallelPP.h" />
     <ClInclude Include="Physics.h" />
     <ClInclude Include="Rasterizer.h" />
     <ClInclude Include="RayCaster.h" />

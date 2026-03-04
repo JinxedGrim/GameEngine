@@ -1,7 +1,9 @@
 #pragma once
+#include "ParrallelPP.h"
 #include "Rasterizer.h"
 #include "Renderable.h"
 #include "EnvironmentRenderable.h"
+#include "ParrallelPP.h"
 
 namespace TerraPGE::Renderer
 {
@@ -26,14 +28,27 @@ namespace TerraPGE::Renderer
 	{
 		void PrepareRenderingBackend(WndCreator& Wnd)
 		{
+			Core::UpdateSystemInfo();
+			std::stringstream msg;
+			Core::Log("[CPU] Rendering Backend selected");
+			msg << "[CPU] Cores: " << Core::CpuCores << "[SIMD] ";
+			Core::Log(msg.str());
+			Core::CpuId.LogCpuInfo();
+
+
 			switch (CurrBackend)
 			{
+
 				case RenderingBackend::CPU:
+				{
 					EngineGdi = new GdiPP(Wnd.Wnd, true);
 					Core::sx = Wnd.GetClientArea().Width;
 					Core::sy = Wnd.GetClientArea().Height;
 
-					Core::UpdateSystemInfo();
+					msg.clear();
+					msg << "[CPU] Created GDI object with WxH: " << Core::sx << "x" << Core::sy << std::endl;
+
+					Core::Log(msg.str());
 
 					delete[] Core::DepthBuffer;
 					delete[] Core::FrameBuffer;
@@ -44,9 +59,11 @@ namespace TerraPGE::Renderer
 
 					// Initial Client Region
 					EngineGdi->UpdateClientRgn();
+					Core::Log("[CPU] Rendering backend created successfully");
 					break;
+				}
 				default:
-					std::cout << "Backend Not Found" << std::endl;
+					Core::LogError("[RENDERER]", "Unsupported Rendering backend!", 1);
 			}
 		}
 
@@ -91,25 +108,22 @@ namespace TerraPGE::Renderer
 				Rf = ChannelPtr[0];
 				Gf = ChannelPtr[1];
 				Bf = ChannelPtr[2];
-
-				if (Renderer::UseHDR)
-				{
-					Rf /= (1.0f + Rf);
-					Gf /= (1.0f + Gf);
-					Bf /= (1.0f + Bf);
-				}
+				
+				// this is done to remove branches
+				float hdrMask = Renderer::UseHDR ? 1.0f : 0.0f;
+				Rf = Rf + hdrMask * ((Rf / (1.0f + Rf)) - Rf);
+				Gf = Gf + hdrMask * ((Gf / (1.0f + Gf)) - Gf);
+				Bf = Bf + hdrMask * ((Bf / (1.0f + Bf)) - Bf);
 
 				Rf = std::clamp<float>(Rf, 0, 1.0f);
 				Gf = std::clamp<float>(Gf, 0, 1.0f);
 				Bf = std::clamp<float>(Bf, 0, 1.0f);
 
-				if (Renderer::DoGammaCorrection)
-				{
-					// Gamma Correction
-					Rf = Color::LinearToSRGB_Channel(Rf);
-					Gf = Color::LinearToSRGB_Channel(Gf);
-					Bf = Color::LinearToSRGB_Channel(Bf);
-				}
+				// this is done to remove branches
+				float gammaMask = Renderer::DoGammaCorrection ? 1.0f : 0.0f;
+				Rf = Rf + gammaMask * (Color::LinearToSRGB_Channel(Rf) - Rf);
+				Gf = Gf + gammaMask * (Color::LinearToSRGB_Channel(Gf) - Gf);
+				Bf = Bf + gammaMask * (Color::LinearToSRGB_Channel(Bf) - Bf);
 
 				// Final transformation to RGB Space
 				R = Rf * 255.0f;
@@ -569,13 +583,87 @@ namespace TerraPGE::Renderer
 
 	namespace SIMD
 	{
+		namespace SSE
+		{
+			static __inline void ApplyHDR(__m128& R, __m128& G, __m128& B, const __m128& HdrMask, const __m128& one)
+			{
+				R = _mm_add_ps(R, _mm_mul_ps(HdrMask, _mm_sub_ps(_mm_div_ps(R, _mm_add_ps(one, R)), R)));
+				G = _mm_add_ps(G, _mm_mul_ps(HdrMask, _mm_sub_ps(_mm_div_ps(G, _mm_add_ps(one, G)), G)));
+				B = _mm_add_ps(B, _mm_mul_ps(HdrMask, _mm_sub_ps(_mm_div_ps(B, _mm_add_ps(one, B)), B)));
+			}
 
+			void SwapFrameBuffer(bool Hdr, bool GammaCorrection, uint8_t* OutBuffer)
+			{
+				const int pixelCount = Core::sx * Core::sy;
+
+				const __m128 zero = _mm_set1_ps(0.0f);
+				const __m128 one = _mm_set1_ps(1.0f);
+				const __m128 max1 = _mm_set1_ps(1.0f);
+				const __m128 scale = _mm_set1_ps(255.0f);
+
+				const __m128 hdrMask = _mm_set1_ps(Renderer::UseHDR ? 1.0f : 0.0f);
+				const __m128 gammaMask = _mm_set1_ps(Renderer::DoGammaCorrection ? 1.0f : 0.0f);
+
+				int i = 0;
+				for (; i <= pixelCount - 4; i += 4)
+				{
+					float* src = Core::FrameBuffer + i * 3;
+
+					__m128 R;
+					__m128 G;
+					__m128 B;
+
+					// Load 12 floats (4 pixels)
+					SIMDUtils::SSE::LoadRGB4(src, R, G, B);
+
+					// HDR
+					ApplyHDR(R, G, B, hdrMask, one);
+
+					SIMDUtils::SSE::ClampRGBFloat4(R, G, B, zero, max1);
+
+					// Gamma
+					//R = _mm_add_ps(R, _mm_mul_ps(gammaMask, _mm_sub_ps(Color::LinearToSRGB_Channel(R), R)));
+					//G = _mm_add_ps(G, _mm_mul_ps(gammaMask, _mm_sub_ps(Color::LinearToSRGB_Channel(G), G)));
+					//B = _mm_add_ps(B, _mm_mul_ps(gammaMask, _mm_sub_ps(Color::LinearToSRGB_Channel(B), B)));
+
+					// Scale
+					R = _mm_mul_ps(R, scale);
+					G = _mm_mul_ps(G, scale);
+					B = _mm_mul_ps(B, scale);
+
+					// Convert to integers
+					__m128i Ri = _mm_cvtps_epi32(R);
+					__m128i Gi = _mm_cvtps_epi32(G);
+					__m128i Bi = _mm_cvtps_epi32(B);
+
+					// Pack 32->16->8
+					Ri = _mm_packus_epi32(Ri, Ri);
+					Gi = _mm_packus_epi32(Gi, Gi);
+					Bi = _mm_packus_epi32(Bi, Bi);
+
+					alignas(16) uint8_t r[16], g[16], b[16];
+					_mm_store_si128((__m128i*)r, Ri);
+					_mm_store_si128((__m128i*)g, Gi);
+					_mm_store_si128((__m128i*)b, Bi);
+
+					// Interleave BGR into 12-byte output
+					uint8_t* out = OutBuffer + i * 3;
+					out[0] = b[0];  out[1] = g[0];  out[2] = r[0];
+					out[3] = b[1];  out[4] = g[1];  out[5] = r[1];
+					out[6] = b[2];  out[7] = g[2];  out[8] = r[2];
+					out[9] = b[3];  out[10] = g[3];  out[11] = r[3];
+				}
+
+			}
+		}
 	}
 
 	namespace Multithreaded
 	{
 		void SwapFrameBufferByChunk(float* Frame, const uint64_t width, const uint64_t  y0, const uint64_t y1)
 		{
+			float hdrMask = Renderer::UseHDR ? 1.0f : 0.0f;
+
 			for (uint64_t y = y0; y < y1; ++y)
 			{
 				uint64_t rowBase = y * width * 3;
@@ -591,12 +679,9 @@ namespace TerraPGE::Renderer
 					Gf = ChannelPtr[1];
 					Bf = ChannelPtr[2];
 
-					if (Renderer::UseHDR)
-					{
-						Rf /= (1.0f + Rf);
-						Gf /= (1.0f + Gf);
-						Bf /= (1.0f + Bf);
-					}
+					Rf = Rf + hdrMask * ((Rf / (1.0f + Rf)) - Rf);
+					Gf = Gf + hdrMask * ((Gf / (1.0f + Gf)) - Gf);
+					Bf = Bf + hdrMask * ((Bf / (1.0f + Bf)) - Bf);
 
 					Rf = std::clamp<float>(Rf, 0, 1.0f);
 					Gf = std::clamp<float>(Gf, 0, 1.0f);

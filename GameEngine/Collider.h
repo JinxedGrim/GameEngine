@@ -165,6 +165,9 @@ public:
 
 	bool TestCollision(const Collider* other)  const
 	{
+        if (other == nullptr)
+            return false;
+
         switch (this->type)
         {
             case ColliderType::Sphere:   return this->TestSphere(other);
