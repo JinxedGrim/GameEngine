@@ -611,9 +611,9 @@ namespace TerraPGE::Renderer
 				B = _mm_add_ps(B, _mm_mul_ps(HdrMask, _mm_sub_ps(_mm_div_ps(B, _mm_add_ps(one, B)), B)));
 			}
 
-			void SwapFrameBuffer(bool Hdr, bool GammaCorrection, uint8_t* OutBuffer)
+			void SwapFrameBuffer(float* Src, const int& Width, const int& Height, unsigned __int8* OutBuffer, const bool Hdr, const bool GammaCorrection)
 			{
-				const int pixelCount = Core::sx * Core::sy;
+				const int pixelCount = Width * Height;
 
 				const __m128 zero = _mm_set1_ps(0.0f);
 				const __m128 one = _mm_set1_ps(1.0f);
@@ -626,7 +626,7 @@ namespace TerraPGE::Renderer
 				int i = 0;
 				for (; i <= pixelCount - 4; i += 4)
 				{
-					float* src = Core::FrameBuffer + i * 3;
+					float* src = Src + i * 3;
 
 					__m128 R;
 					__m128 G;
@@ -641,38 +641,76 @@ namespace TerraPGE::Renderer
 					SIMDUtils::SSE::ClampRGBFloat4(R, G, B, zero, max1);
 
 					// Gamma
-					//R = _mm_add_ps(R, _mm_mul_ps(gammaMask, _mm_sub_ps(Color::LinearToSRGB_Channel(R), R)));
-					//G = _mm_add_ps(G, _mm_mul_ps(gammaMask, _mm_sub_ps(Color::LinearToSRGB_Channel(G), G)));
-					//B = _mm_add_ps(B, _mm_mul_ps(gammaMask, _mm_sub_ps(Color::LinearToSRGB_Channel(B), B)));
+					R = SIMDUtils::SSE::LinearToSRGB4(R);
+					G = SIMDUtils::SSE::LinearToSRGB4(G);
+					B = SIMDUtils::SSE::LinearToSRGB4(B);
 
 					// Scale
 					R = _mm_mul_ps(R, scale);
 					G = _mm_mul_ps(G, scale);
 					B = _mm_mul_ps(B, scale);
 
-					// Convert to integers
-					__m128i Ri = _mm_cvtps_epi32(R);
-					__m128i Gi = _mm_cvtps_epi32(G);
-					__m128i Bi = _mm_cvtps_epi32(B);
-
-					// Pack 32->16->8
-					Ri = _mm_packus_epi32(Ri, Ri);
-					Gi = _mm_packus_epi32(Gi, Gi);
-					Bi = _mm_packus_epi32(Bi, Bi);
-
-					alignas(16) uint8_t r[16], g[16], b[16];
-					_mm_store_si128((__m128i*)r, Ri);
-					_mm_store_si128((__m128i*)g, Gi);
-					_mm_store_si128((__m128i*)b, Bi);
+					__m128i r, g, b;
+					SIMDUtils::SSE::RGB4ToByte(R, G, B, r, g, b);
 
 					// Interleave BGR into 12-byte output
 					uint8_t* out = OutBuffer + i * 3;
-					out[0] = b[0];  out[1] = g[0];  out[2] = r[0];
-					out[3] = b[1];  out[4] = g[1];  out[5] = r[1];
-					out[6] = b[2];  out[7] = g[2];  out[8] = r[2];
-					out[9] = b[3];  out[10] = g[3];  out[11] = r[3];
+					SIMDUtils::SSE::RGBStoreBGR(r, g, b, out);
 				}
 
+				for (; i < pixelCount; ++i)
+				{
+					int index = i * 3;
+					float* ChannelPtr = Src + index;
+
+					float Rf, Gf, Bf = 0.0f;
+					int R, G, B = 0;
+
+					Rf = ChannelPtr[0];
+					Gf = ChannelPtr[1];
+					Bf = ChannelPtr[2];
+
+					// this is done to remove branches
+					float hdrMask = Renderer::UseHDR ? 1.0f : 0.0f;
+					Rf = Rf + hdrMask * ((Rf / (1.0f + Rf)) - Rf);
+					Gf = Gf + hdrMask * ((Gf / (1.0f + Gf)) - Gf);
+					Bf = Bf + hdrMask * ((Bf / (1.0f + Bf)) - Bf);
+
+					Rf = std::clamp<float>(Rf, 0, 1.0f);
+					Gf = std::clamp<float>(Gf, 0, 1.0f);
+					Bf = std::clamp<float>(Bf, 0, 1.0f);
+
+					// this is done to remove branches
+					float gammaMask = Renderer::DoGammaCorrection ? 1.0f : 0.0f;
+					Rf = Rf + gammaMask * (Color::LinearToSRGB_Channel(Rf) - Rf);
+					Gf = Gf + gammaMask * (Color::LinearToSRGB_Channel(Gf) - Gf);
+					Bf = Bf + gammaMask * (Color::LinearToSRGB_Channel(Bf) - Bf);
+
+					// Final transformation to RGB Space
+					R = Rf * 255.0f;
+					G = Gf * 255.0f;
+					B = Bf * 255.0f;
+
+					int y = i / Core::sx;
+					int x = i % Core::sx;
+
+					// Write to out buffer
+					EngineGdi->QuickSetPixel(x, y, RGB(R, G, B));
+				}
+			}
+
+			void RenderScene(Camera* Cam, Renderable** SceneObjects, LightObject** SceneLights, size_t ObjectCount, size_t LightCount, EnvironmentRenderable* Skybox = nullptr)
+			{
+				Renderer::RenderSkybox(Cam, Skybox);
+
+				Renderer::RenderShadowMaps(SceneObjects, SceneLights, ObjectCount, LightCount, Core::ShadowMap);
+
+				Renderer::RenderMeshes(Cam, SceneObjects, SceneLights, ObjectCount, LightCount);
+
+				//Renderer::RenderEnvironment();
+
+				Renderer::SIMD::SSE::SwapFrameBuffer(Core::FrameBuffer, Core::sx, Core::sy, Renderer::EngineGdi->GetPixelBuffer(), Renderer::UseHDR, Renderer::DoGammaCorrection);
+				Renderer::EngineGdi->SetNeedsPixelsRedrawn();
 			}
 		}
 	}

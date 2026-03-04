@@ -383,6 +383,16 @@ public:
         }
     }
 
+    BYTE* GetPixelBuffer()
+    {
+        return this->PixelBuffer;
+    }
+
+    void SetNeedsPixelsRedrawn()
+    {
+        this->NeedsPixelsDrawn = true;
+    }
+
     // disable copy
     //GdiPP(const GdiPP&) = delete;
     //GdiPP& operator=(const GdiPP&) = delete;

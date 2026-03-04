@@ -48,7 +48,7 @@ namespace TerraPGE::Core
 
 	// move all to TPGE
 	bool FpsEngineCounter = true;
-	bool DoMultiThreading = true;
+	bool DoMultiThreading = false;
 	bool SimdAcceleration = true;
 	bool GpuAcceleration = false;
 

@@ -235,25 +235,114 @@ namespace SIMDUtils
 	{
 		static inline void LoadRGB4(const float* src, __m128& R, __m128& G, __m128& B)
 		{
-			__m128 a = _mm_loadu_ps(src + 0);
-			__m128 b = _mm_loadu_ps(src + 4);
-			__m128 c = _mm_loadu_ps(src + 8);
-
-			R = _mm_set_ps(a.m128_f32[3], c.m128_f32[1], b.m128_f32[2], a.m128_f32[0]);
-			G = _mm_set_ps(c.m128_f32[2], b.m128_f32[0], b.m128_f32[1], a.m128_f32[1]);
-			B = _mm_set_ps(c.m128_f32[3], c.m128_f32[0], b.m128_f32[3], a.m128_f32[2]);
+			R = _mm_setr_ps(src[0], src[3], src[6], src[9]);
+			G = _mm_setr_ps(src[1], src[4], src[7], src[10]);
+			B = _mm_setr_ps(src[2], src[5], src[8], src[11]);
 		}
+
 
 		static inline void ClampFloat4(__m128& Val, const __m128& Min, const __m128& Max)
 		{
 			Val = _mm_min_ps(Max, _mm_max_ps(Min, Val));
 		}
 
+
 		static inline void ClampRGBFloat4(__m128& R, __m128& G, __m128& B, const __m128& Min, const __m128& Max)
 		{
 			ClampFloat4(R, Min, Max);
 			ClampFloat4(G, Min, Max);
 			ClampFloat4(B, Min, Max);
+		}
+
+
+		static inline void RGB4ToByte(const __m128& InR, const __m128& InG, const __m128& InB, __m128i& OutR, __m128i& OutG, __m128i& OutB)
+		{
+			__m128 max255 = _mm_set1_ps(255.0f);
+			__m128 min0 = _mm_set1_ps(0.0f);
+
+			OutR = _mm_cvtps_epi32(InR);
+			OutG = _mm_cvtps_epi32(InG);
+			OutB = _mm_cvtps_epi32(InB);
+
+			OutR = _mm_packus_epi16(_mm_packs_epi32(OutR, _mm_setzero_si128()), _mm_setzero_si128());
+			OutG = _mm_packus_epi16(_mm_packs_epi32(OutG, _mm_setzero_si128()), _mm_setzero_si128());
+			OutB = _mm_packus_epi16(_mm_packs_epi32(OutB, _mm_setzero_si128()), _mm_setzero_si128());
+		}
+
+
+		static inline void RGBStoreBGR(const __m128i& Ri, const __m128i& Gi, const __m128i& Bi, unsigned __int8* Dst)
+		{
+			alignas(16) uint8_t tmp[16];
+
+			// unpack each channel to bytes
+			_mm_storeu_si128((__m128i*)tmp, Ri); // 16 bytes, only first 4 used
+			uint8_t* r = tmp;
+
+			_mm_storeu_si128((__m128i*)tmp, Gi);
+			uint8_t* g = tmp;
+
+			_mm_storeu_si128((__m128i*)tmp, Bi);
+			uint8_t* b = tmp;
+
+			// store sequentially as B G R triplets
+			alignas(16) uint8_t rTmp[16], gTmp[16], bTmp[16];
+			_mm_storeu_si128((__m128i*)rTmp, Ri);
+			_mm_storeu_si128((__m128i*)gTmp, Gi);
+			_mm_storeu_si128((__m128i*)bTmp, Bi);
+
+			for (int i = 0; i < 4; i++)
+			{
+				Dst[i * 3 + 0] = bTmp[i];
+				Dst[i * 3 + 1] = gTmp[i];
+				Dst[i * 3 + 2] = rTmp[i];
+			}
+		}
+
+
+		static inline __m128 GammaPow24_Approx(__m128 x)
+		{
+			const __m128 a = _mm_set1_ps(0.305306011f);
+			const __m128 b = _mm_set1_ps(0.682171111f);
+			const __m128 c = _mm_set1_ps(0.012522878f);
+
+			__m128 x2 = _mm_mul_ps(x, x);
+			__m128 x3 = _mm_mul_ps(x2, x);
+
+			return _mm_add_ps(
+				_mm_add_ps(_mm_mul_ps(x3, a),
+					_mm_mul_ps(x2, b)),
+				_mm_mul_ps(x, c)
+			);
+		}
+
+
+		static inline __m128 LinearToSRGB4(__m128 c)
+		{
+			const __m128 zero = _mm_set1_ps(0.0f);
+			const __m128 one = _mm_set1_ps(1.0f);
+			const __m128 threshold = _mm_set1_ps(0.0031308f);
+			const __m128 a = _mm_set1_ps(12.92f);
+			const __m128 b = _mm_set1_ps(1.055f);
+			const __m128 c055 = _mm_set1_ps(0.055f);
+
+			// Clamp input
+			c = _mm_min_ps(one, _mm_max_ps(zero, c));
+
+			// Compute mask for linear region
+			__m128 mask = _mm_cmple_ps(c, threshold);
+
+			// Linear portion
+			__m128 linear = _mm_mul_ps(a, c);
+
+			// Non-linear portion (gamma 1/2.4)
+			float tmp[4];
+			_mm_storeu_ps(tmp, c);
+			for (int i = 0; i < 4; i++)
+				tmp[i] = 1.055f * powf(tmp[i], 1.0f / 2.4f) - 0.055f;
+			__m128 nonlinear = _mm_loadu_ps(tmp);
+
+			// Blend linear/non-linear
+			return _mm_blendv_ps(nonlinear, linear, mask);
 		}
 	}
 }

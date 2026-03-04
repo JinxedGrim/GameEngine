@@ -293,8 +293,10 @@ namespace TerraPGE
 
 			CurrScene->MainCamera->Transform.WalkTransformChain();
 
-			if (!Core::DoMultiThreading)
+			if (!Core::DoMultiThreading && !Core::SimdAcceleration)
 				Renderer::RenderScene(CurrScene->MainCamera, RenderQueue, LightsToRender, SceneRenderQueue->size(), SceneLights->size(), CurrScene->SkyboxToRender);
+			else if (!Core::DoMultiThreading)
+				Renderer::SIMD::SSE::RenderScene(CurrScene->MainCamera, RenderQueue, LightsToRender, SceneRenderQueue->size(), SceneLights->size(), CurrScene->SkyboxToRender);
 			else
 				Renderer::Multithreaded::RenderScene(CurrScene->MainCamera, RenderQueue, LightsToRender, SceneRenderQueue->size(), SceneLights->size(), CurrScene->SkyboxToRender);
 

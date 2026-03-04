@@ -310,7 +310,7 @@ class ExampleScene : public TerraPGE::Scene
 				case 0:
 					break;
 				case 1:
-					TerraPGE::DoPhysics = !TerraPGE::DoPhysics;
+					TerraPGE::Core::SimdAcceleration = !TerraPGE::Core::SimdAcceleration;
 					break;
 				case 2:
 					TerraPGE::Renderer::DoLighting = !TerraPGE::Renderer::DoLighting;
@@ -327,6 +327,7 @@ class ExampleScene : public TerraPGE::Scene
 				case 0:
 					break;
 				case 1:
+					TerraPGE::DoPhysics = !TerraPGE::DoPhysics;
 					break;
 				case 2:
 					TerraPGE::Renderer::DoShadows = !TerraPGE::Renderer::DoShadows;
@@ -622,11 +623,12 @@ class ExampleScene : public TerraPGE::Scene
 			
 			static std::string EngineMenu =         "    (TAB) Engine Settings";
 			static std::string CpuStr     =         "    CPU: ";
-			static std::wstring GpuStr     =         L"    GPU: ";
-			static std::string SIMDStr    =         "    SIMD Support : ";
+			static std::wstring GpuStr     =       L"    GPU: ";
+			static std::string SIMDStr    =         "    SIMD Support: ";
 
 			static std::string MultiThreadingStr =  "    (F2)  MultiThreading: ";
-			static std::string PhysicsEngineStr =   "    (F3)  PhysicsEnabled: ";
+			static std::string SimdAccelStr =       "    (F3)  SIMD Accelleration: ";
+			static std::string PhysicsEngineStr =   "    (F4)  PhysicsEnabled: ";
 
 			static std::string RendererMenu =       "    (TAB) Renderer Settings";
 			static std::string CullingStr =         "    (F2)  Culling: ";
@@ -637,7 +639,7 @@ class ExampleScene : public TerraPGE::Scene
 			static std::string GammaCorrectionStr = "    (F7)  GammCorrection: ";
 			static std::string DbgClip =            "    (F8)  DebugClip: ";
 			static std::string DbgShadows =         "    (F9)  DebugShadows: ";
-			static std::string DepthStr =            "    Depth: ";
+			static std::string DepthStr =           "    Depth: ";
 
 			Vec3 LocalPos = MainCamera->GetLocalPosition();
 			Vec3 WorldPos = MainCamera->GetWorldPosition();
@@ -660,7 +662,8 @@ class ExampleScene : public TerraPGE::Scene
 				Gdi->DrawStringA(20, 100, SIMDStr + TerraPGE::Core::SimdInfo.GetSupportString(), RGB(255, 0, 0), TRANSPARENT);
 				Gdi->DrawStringW(20, 120, GpuStr + TerraPGE::Core::GetDevList(), RGB(255, 0, 0), TRANSPARENT);
 				Gdi->DrawStringA(20, 140, MultiThreadingStr + std::to_string(TerraPGE::Core::DoMultiThreading), RGB(255, 0, 0), TRANSPARENT);
-				Gdi->DrawStringA(20, 160, PhysicsEngineStr + std::to_string(TerraPGE::DoPhysics), RGB(255, 0, 0), TRANSPARENT);
+				Gdi->DrawStringA(20, 160, SimdAccelStr + std::to_string(TerraPGE::Core::SimdAcceleration), RGB(255, 0, 0), TRANSPARENT);
+				Gdi->DrawStringA(20, 180, PhysicsEngineStr + std::to_string(TerraPGE::DoPhysics), RGB(255, 0, 0), TRANSPARENT);
 
 			}
 			else if (DebugMenuTab == 2)

@@ -431,7 +431,7 @@ public:
 			return 1.055f * powf(c, 1.0f / 2.4f) - 0.055f;
 	}
 
-	inline float SRGBToLinear_Channel(float c)
+	static inline float SRGBToLinear_Channel(float c)
 	{
 		c = std::clamp(c, 0.0f, 1.0f);
 
