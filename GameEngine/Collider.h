@@ -2,6 +2,7 @@
 #include "Math.h"
 #include "ObjectTransform.h"
 #include "Mesh.h"
+#include "RayCaster.h"
 
 #define ICE_KINETIC_FRICTION 0.03
 #define STEEL_KINETIC_FRICTION 0.15
@@ -173,6 +174,19 @@ public:
             default: return false;
         }
 	}
+
+
+    bool TestCollision(const Ray* ray, RaycastHit* OutHit)  const
+    {
+        switch (this->type)
+        {
+            case ColliderType::Sphere:   return RayIntersectsSphere(*ray, this->GetPosition() + this->_sphereParams.Offset, _sphereParams.radius, OutHit);
+            case ColliderType::AABB:     return RayIntersectsAABB(*ray, this->GetPosition() + this->_AABBParams.offset, _AABBParams.halfExtents * this->GetParentScale(), OutHit);
+            case ColliderType::OBB:      return RayIntersectsOBB(*ray, this->GetPosition() + this->_OBBParams.offset, _OBBParams.halfExtents * this->GetParentScale(), _OBBParams.orientation, OutHit);
+            case ColliderType::Capsule:  return RayIntersectsCapsule(*ray, this->GetPosition() + this->_capsuleParams.offset, _capsuleParams.axis,  _capsuleParams.radius, OutHit);
+            default: return false;
+        }
+    }
 
 
     static bool TestCollision(const Collider* A, const Collider* B) 

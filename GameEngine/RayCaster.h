@@ -8,7 +8,6 @@ struct RaycastHit
 	float distance = 0.0f;
 	Vec3 point;
 	Vec3 normal;
-	const Collider* hitCollider = nullptr;
 };
 
 

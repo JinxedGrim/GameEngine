@@ -261,13 +261,10 @@ namespace TerraPGE
 							Ray down(ObjectWorldPos, WorldDown);
 							RaycastHit Out;
 
+							//TODO Decide if i want this mesh based or collider based (collider  since physics? but mesh has better accuracy for falling)
 							//if (RaycastMesh(down, FloorCandidate->mesh->Triangles, &Out, &CandidateWorld))
-							if(FloorCandidate->collider.TestRay(down, Out))
+							if(FloorCandidate->collider.TestCollision(&down, &Out))
 							{
-								std::stringstream str;
-								str << "RaycastMesh is true: " << Out.point << " Norm: " << Out.normal << " Dist: " << Out.distance;
-
-								TerraPGE::Core::Log(str.str());
 								if (Out.distance < minDistance)
 								{
 									Floor = FloorCandidate;
