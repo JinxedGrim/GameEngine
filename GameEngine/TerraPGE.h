@@ -156,16 +156,14 @@ namespace TerraPGE
 
 
 		// Counters
-		MSG msg                   = { 0 };
-		double ElapsedTime        = 0.0;
-		double physicsAccumulator = 0.0;
-		CurrScene = FirstScene;
-
+		MSG msg                      = { 0 };
+		double ElapsedTime           = 0.0;
+		double physicsAccumulator    = 0.0;
+		LightObject** LightsToRender = nullptr;
+		CurrScene                    = FirstScene;
 		Renderable** RenderQueue                         = nullptr;
 		const std::vector<Renderable*>* SceneRenderQueue = nullptr;
-		LightObject** LightsToRender                     = nullptr;
 		const std::vector<LightObject*>* SceneLights     = nullptr;
-
 		std::vector<Renderable*> Roots;
 
 		Wnd.RegisterRawInput();
@@ -305,7 +303,7 @@ namespace TerraPGE
 
 			if (Core::FpsEngineCounter)
 			{
-				uint64_t CpuFrameDelta = Core::GetCpuUsageInfo() - CpuFrameStart;
+				double CpuFrameDelta = Core::GetCpuUsageInfo() - CpuFrameStart;
 				Renderer::DrawFpsCounter(Wnd, Fps, CurrMB, ElapsedTime, Core::CalculateCpuUsage(CpuFrameDelta * 1e-9, ElapsedTime, Core::CpuCores));
 			}
 

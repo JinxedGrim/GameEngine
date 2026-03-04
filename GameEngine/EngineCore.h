@@ -41,6 +41,7 @@ namespace TerraPGE::Core
 	int sx = GetSystemMetrics(SM_CXSCREEN);
 	int sy = GetSystemMetrics(SM_CYSCREEN);
 
+	//TODO make camera intrinsic
 	float FOV = 90.0f;
 	float FNEAR = 0.1f;
 	float FFAR = 100.0f;
@@ -101,7 +102,7 @@ namespace TerraPGE::Core
 	}
 
 
-	uint64_t GetCpuUsageInfo()
+	double  GetCpuUsageInfo()
 	{
 		FILETIME creation, exit, kernel, user;
 		GetProcessTimes(GetCurrentProcess(), &creation, &exit, &kernel, &user);
@@ -116,7 +117,7 @@ namespace TerraPGE::Core
 	}
 
 
-	double CalculateCpuUsage(uint64_t cpuTimeDeltaNs, uint64_t wallTimeDeltaNs, int coreCount)
+	double CalculateCpuUsage(double  cpuTimeDeltaNs, double  wallTimeDeltaNs, int coreCount)
 	{
 		return (double)cpuTimeDeltaNs / (double)(wallTimeDeltaNs * coreCount) * 100.0;
 	}

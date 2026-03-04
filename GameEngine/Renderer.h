@@ -30,23 +30,38 @@ namespace TerraPGE::Renderer
 		{
 			Core::UpdateSystemInfo();
 			std::stringstream msg;
-			Core::Log("[CPU] Rendering Backend selected");
-			msg << "[CPU] Cores: " << Core::CpuCores << "[SIMD] ";
+			Core::Log("[RENDERER] Rendering Backend selected");
+			msg << "[RENDERER] Name:   Cores: " << Core::CpuCores << " [SIMD] " << Core::SimdInfo.GetSupportString();;
 			Core::Log(msg.str());
-			Core::CpuId.LogCpuInfo();
+
+			if (Core::SimdInfo.SSE42)
+			{
+				Core::Log("[RENDERER] Detected >= SSE 4.2 Activating SIMD Acceleration");
+				Core::SimdAcceleration = true;
+			}
+			else
+				Core::SimdAcceleration = false;
+
+			msg.str("");
+			msg.clear();
+			std::wstring GpuDev = TerraPGE::Core::GetDevList();
+			std::string s(GpuDev.begin(), GpuDev.end());
+			msg << "[RENDERER] Other Devices: " << s << std::endl;
+			Core::Log(msg.str());
+
 
 
 			switch (CurrBackend)
 			{
-
 				case RenderingBackend::CPU:
 				{
 					EngineGdi = new GdiPP(Wnd.Wnd, true);
 					Core::sx = Wnd.GetClientArea().Width;
 					Core::sy = Wnd.GetClientArea().Height;
 
+					msg.str("");
 					msg.clear();
-					msg << "[CPU] Created GDI object with WxH: " << Core::sx << "x" << Core::sy << std::endl;
+					msg << "[CPU] Created GDI object with WxH: " << Core::sx << "x" << Core::sy;
 
 					Core::Log(msg.str());
 
@@ -363,14 +378,18 @@ namespace TerraPGE::Renderer
 	{
 #ifdef UNICODE
 		// Draw FPS and some debug info
-		std::wstring Str = Core::FpsWStr + std::to_wstring(Fps) + L" Cpu/Time: " + std::to_wstring(CpuUsage) + L"/" + std::to_wstring(FrameTime) + L" Memory Usage: " + std::to_wstring(CurrMB) + L"/" + std::to_wstring(Core::MaxMemoryMB) + L" MB " + std::to_wstring(Core::GetUsedHeap()) + L"MB (Heap)" + (Core::DoMultiThreading ? L"(MultiThreaded)" : L"");
+		std::wstringstream ss;
+		ss << std::fixed << std::setprecision(2) << Core::FpsWStr << Fps << L" Cpu/Time: " << CpuUsage << L"/" << FrameTime << L" Memory Usage: " << CurrMB << L"/" 
+			<< Core::MaxMemoryMB << L" MB " << (Core::DoMultiThreading ? L"(MultiThreaded)" : L"") << (Core::SimdAcceleration ? L" (SIMD)" : L"");
+
 		//Wnd.SetWndTitle(Str);
-		Renderer::EngineGdi->DrawStringW(20, 20, Str, RGB(255, 0, 0), TRANSPARENT);
+		Renderer::EngineGdi->DrawStringW(20, 20, ss.str(), RGB(255, 0, 0), TRANSPARENT);
 #endif
 #ifndef UNICODE
-		std::string Str = FpsStr + std::to_string(Fps) + " Memory Usage: " + std::to_string(CurrMB) + "/" + std::to_string(Core::MaxMemoryMB) + " MB " + (DoMultiThreading ? "(MultiThreaded)" : "");;
-		//Wnd.SetWndTitle(Str);
-		EngineGdi.DrawStringA(20, 20, Str, RGB(255, 0, 0), TRANSPARENT);
+		std::stringstream ss;
+		ss << std::fixed << std::setprecision(2) << Core::FpsStr << Fps << " Cpu/Time: " << CpuUsage << "/" << FrameTime << " Memory Usage: " << CurrMB << "/"
+			<< Core::MaxMemoryMB << " MB " << (Core::DoMultiThreading ? "(MultiThreaded)" : "") << (Core::SimdAcceleration ? " (SIMD)" : L"");		//Wnd.SetWndTitle(Str);
+		EngineGdi.DrawStringA(20, 20, ss.str(), RGB(255, 0, 0), TRANSPARENT);
 #endif
 	}
 
