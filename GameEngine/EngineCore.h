@@ -26,7 +26,6 @@
 #include "ParrallelPP.h"
 
 #ifdef SSE_SIMD_42_SUPPORT
-#include "Intrinsics/VectorExHelper.h"
 #endif
 
 #ifdef GPU_SUPPORT
@@ -61,6 +60,7 @@ namespace TerraPGE::Core
 	ThreadManager ThreadPool;
 	CPUID CpuId(1);
 	SupportedInstructions SimdInfo = { 0 };
+	std::string CpuName;
 
 	// move to TPGE keep all and add a switch for updating keyboard input (allow user to disable all input)
 	bool UpdateMouseIn = true;
@@ -162,6 +162,7 @@ namespace TerraPGE::Core
 		SimdInfo = CpuId.GetSupportedInstructions();
 		GetSystemInfo(&SysInf);
 		TerraPGE::Core::CpuCores = SysInf.dwNumberOfProcessors;
+		TerraPGE::Core::CpuName = CpuId.GetProcessorName();
 	}
 
 

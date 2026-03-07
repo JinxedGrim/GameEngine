@@ -30,8 +30,8 @@ namespace TerraPGE::Renderer
 		{
 			Core::UpdateSystemInfo();
 			std::stringstream msg;
-			Core::Log("[RENDERER] Rendering Backend selected");
-			msg << "[RENDERER] Name:   Cores: " << Core::CpuCores << " [SIMD] " << Core::SimdInfo.GetSupportString();;
+			Core::Log("[RENDERER] Initializing Rendering Backend");
+			msg << "[CPU] Name: " << TerraPGE::Core::CpuName << std::endl << "[CPU] Cores: " << Core::CpuCores << std::endl << "[CPU] " << Core::SimdInfo.GetSupportString();
 			Core::Log(msg.str());
 
 			if (Core::SimdInfo.SSE42)
@@ -74,7 +74,7 @@ namespace TerraPGE::Renderer
 
 					// Initial Client Region
 					EngineGdi->UpdateClientRgn();
-					Core::Log("[CPU] Rendering backend created successfully");
+					Core::Log("[CPU] Rendering backend created successfully\n");
 					break;
 				}
 				default:
@@ -611,6 +611,92 @@ namespace TerraPGE::Renderer
 				B = _mm_add_ps(B, _mm_mul_ps(HdrMask, _mm_sub_ps(_mm_div_ps(B, _mm_add_ps(one, B)), B)));
 			}
 
+			
+			void SwapFrameBufferByChunk(float* Frame, const unsigned __int32 width, const unsigned __int32  y0, const unsigned __int32 y1)
+			{
+				float hdrMask = Renderer::UseHDR ? 1.0f : 0.0f;
+
+				const __m128 zero = _mm_set1_ps(0.0f);
+				const __m128 one = _mm_set1_ps(1.0f);
+				const __m128 max1 = _mm_set1_ps(1.0f);
+				const __m128 scale = _mm_set1_ps(255.0f);
+
+				const __m128 HdrMask = _mm_set1_ps(hdrMask);
+				const __m128 gammaMask = _mm_set1_ps(Renderer::DoGammaCorrection ? 1.0f : 0.0f);
+
+				for (unsigned __int32 y = y0; y < y1; ++y)
+				{
+					unsigned __int32 rowBase = y * width * 3;
+					unsigned __int32 x = 0;
+
+					for (; x+3 < width; x+=4)
+					{
+						float* ChannelPtr = Frame + rowBase + x * 3;
+
+						__m128 R, G, B;
+
+						SIMDUtils::SSE::LoadRGB4(ChannelPtr, R, G, B);
+
+						ApplyHDR(R, G, B, HdrMask, one);
+
+						SIMDUtils::SSE::ClampRGBFloat4(R, G, B, zero, max1);
+
+						// Gamma
+						SIMDUtils::SSE::LinearToSRGB4(R);
+						SIMDUtils::SSE::LinearToSRGB4(G);
+						SIMDUtils::SSE::LinearToSRGB4(B);
+
+						// Scale
+						R = _mm_mul_ps(R, scale);
+						G = _mm_mul_ps(G, scale);
+						B = _mm_mul_ps(B, scale);
+
+						__m128i r, g, b;
+						SIMDUtils::SSE::RGB4ToByte(R, G, B, r, g, b);
+
+						// Interleave BGR into 12-byte output
+						uint8_t* out = Renderer::EngineGdi->GetPixelBuffer() + rowBase + x * 3;
+						SIMDUtils::SSE::RGBStoreBGR(r, g, b, out);
+					}
+					for (; x < width; ++x)
+					{
+						float* ChannelPtr = Frame + rowBase + x * 3;
+
+						float Rf = 0.0f, Gf = 0.0f, Bf = 0.0f;
+						int R = 0, G = 0, B = 0;
+
+						Rf = ChannelPtr[0];
+						Gf = ChannelPtr[1];
+						Bf = ChannelPtr[2];
+
+						Rf = Rf + hdrMask * ((Rf / (1.0f + Rf)) - Rf);
+						Gf = Gf + hdrMask * ((Gf / (1.0f + Gf)) - Gf);
+						Bf = Bf + hdrMask * ((Bf / (1.0f + Bf)) - Bf);
+
+						Rf = std::clamp<float>(Rf, 0, 1.0f);
+						Gf = std::clamp<float>(Gf, 0, 1.0f);
+						Bf = std::clamp<float>(Bf, 0, 1.0f);
+
+						if (Renderer::DoGammaCorrection)
+						{
+							// Gamma Correction
+							Rf = Color::LinearToSRGB_Channel(Rf);
+							Gf = Color::LinearToSRGB_Channel(Gf);
+							Bf = Color::LinearToSRGB_Channel(Bf);
+						}
+
+						// Final transformation to RGB Space
+						R = Rf * 255.0f;
+						G = Gf * 255.0f;
+						B = Bf * 255.0f;
+
+						// Write to out buffer
+						EngineGdi->QuickSetPixel(x, y, RGB(R, G, B));
+					}
+				}
+			}
+
+
 			void SwapFrameBuffer(float* Src, const int& Width, const int& Height, unsigned __int8* OutBuffer, const bool Hdr, const bool GammaCorrection)
 			{
 				const int pixelCount = Width * Height;
@@ -628,9 +714,7 @@ namespace TerraPGE::Renderer
 				{
 					float* src = Src + i * 3;
 
-					__m128 R;
-					__m128 G;
-					__m128 B;
+					__m128 R, G, B;
 
 					// Load 12 floats (4 pixels)
 					SIMDUtils::SSE::LoadRGB4(src, R, G, B);
@@ -641,14 +725,14 @@ namespace TerraPGE::Renderer
 					SIMDUtils::SSE::ClampRGBFloat4(R, G, B, zero, max1);
 
 					// Gamma
-					R = SIMDUtils::SSE::LinearToSRGB4(R);
-					G = SIMDUtils::SSE::LinearToSRGB4(G);
-					B = SIMDUtils::SSE::LinearToSRGB4(B);
+					SIMDUtils::SSE::LinearToSRGB4(R);
+					SIMDUtils::SSE::LinearToSRGB4(G);
+					SIMDUtils::SSE::LinearToSRGB4(B);
 
 					// Scale
-					R = _mm_mul_ps(R, scale);
-					G = _mm_mul_ps(G, scale);
-					B = _mm_mul_ps(B, scale);
+					_mm_mul_ps(R, scale);
+					_mm_mul_ps(G, scale);
+					_mm_mul_ps(B, scale);
 
 					__m128i r, g, b;
 					SIMDUtils::SSE::RGB4ToByte(R, G, B, r, g, b);
@@ -699,6 +783,7 @@ namespace TerraPGE::Renderer
 				}
 			}
 
+
 			void RenderScene(Camera* Cam, Renderable** SceneObjects, LightObject** SceneLights, size_t ObjectCount, size_t LightCount, EnvironmentRenderable* Skybox = nullptr)
 			{
 				Renderer::RenderSkybox(Cam, Skybox);
@@ -709,7 +794,8 @@ namespace TerraPGE::Renderer
 
 				//Renderer::RenderEnvironment();
 
-				Renderer::SIMD::SSE::SwapFrameBuffer(Core::FrameBuffer, Core::sx, Core::sy, Renderer::EngineGdi->GetPixelBuffer(), Renderer::UseHDR, Renderer::DoGammaCorrection);
+				Renderer::RenderingCore::SwapFrameBuffer(Renderer::UseHDR, Renderer::DoGammaCorrection);
+				//Renderer::SIMD::SSE::SwapFrameBuffer(Core::FrameBuffer, Core::sx, Core::sy, Renderer::EngineGdi->GetPixelBuffer(), Renderer::UseHDR, Renderer::DoGammaCorrection);
 				Renderer::EngineGdi->SetNeedsPixelsRedrawn();
 			}
 		}
@@ -717,15 +803,15 @@ namespace TerraPGE::Renderer
 
 	namespace Multithreaded
 	{
-		void SwapFrameBufferByChunk(float* Frame, const uint64_t width, const uint64_t  y0, const uint64_t y1)
+		void SwapFrameBufferByChunk(float* Frame, const unsigned __int32 width, const unsigned __int32  y0, const unsigned __int32 y1)
 		{
 			float hdrMask = Renderer::UseHDR ? 1.0f : 0.0f;
 
-			for (uint64_t y = y0; y < y1; ++y)
+			for (unsigned __int32 y = y0; y < y1; ++y)
 			{
-				uint64_t rowBase = y * width * 3;
+				unsigned __int32 rowBase = y * width * 3;
 
-				for (uint64_t x = 0; x < width; ++x)
+				for (unsigned __int32 x = 0; x < width; ++x)
 				{
 					float* ChannelPtr = Frame + rowBase + x * 3;
 
@@ -763,7 +849,6 @@ namespace TerraPGE::Renderer
 			}
 		}
 
-
 		void SwapFrameBuffer(float* Frame, uint64_t Width, uint64_t Height, bool Hdr, bool GammaCorrection)
 		{
 			uint64_t ChunkSz = std::max<uint64_t>(1, Height / Core::CpuCores);
@@ -773,10 +858,16 @@ namespace TerraPGE::Renderer
 				uint64_t y0 = y;
 				uint64_t y1 = std::min(y + ChunkSz, Height);
 
-				Core::ThreadPool.EnqueueTask([Frame, y0, y1, Width]()
-					{
-						SwapFrameBufferByChunk(Frame, Width, y0, y1);
-					});
+				if(!Core::SimdAcceleration)
+					Core::ThreadPool.EnqueueTask([Frame, y0, y1, Width]()
+						{
+							SwapFrameBufferByChunk(Frame, Width, y0, y1);
+						});
+				else
+					Core::ThreadPool.EnqueueTask([Frame, y0, y1, Width]()
+						{
+							Renderer::SIMD::SSE::SwapFrameBufferByChunk(Frame, Width, y0, y1);
+						});
 			}
 
 			Core::ThreadPool.WaitUntilAllTasksFinished();

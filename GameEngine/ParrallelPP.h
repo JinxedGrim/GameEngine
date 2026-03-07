@@ -107,6 +107,22 @@ class CPUID
 
 	}
 
+	static std::string GetProcessorName() 
+	{
+		char name[49] = { 0 }; // 48 chars + null terminator
+		uint32_t* ptr = reinterpret_cast<uint32_t*>(name);
+
+		for (unsigned i = 0; i < 3; ++i) {
+			CPUID cpu(0x80000002 + i);
+			ptr[i * 4 + 0] = cpu.EAX();
+			ptr[i * 4 + 1] = cpu.EBX();
+			ptr[i * 4 + 2] = cpu.ECX();
+			ptr[i * 4 + 3] = cpu.EDX();
+		}
+
+		return std::string(name);
+	}
+
 	SupportedInstructions GetSupportedInstructions()
 	{
 		SupportedInstructions Out;
@@ -272,18 +288,6 @@ namespace SIMDUtils
 
 		static inline void RGBStoreBGR(const __m128i& Ri, const __m128i& Gi, const __m128i& Bi, unsigned __int8* Dst)
 		{
-			alignas(16) uint8_t tmp[16];
-
-			// unpack each channel to bytes
-			_mm_storeu_si128((__m128i*)tmp, Ri); // 16 bytes, only first 4 used
-			uint8_t* r = tmp;
-
-			_mm_storeu_si128((__m128i*)tmp, Gi);
-			uint8_t* g = tmp;
-
-			_mm_storeu_si128((__m128i*)tmp, Bi);
-			uint8_t* b = tmp;
-
 			// store sequentially as B G R triplets
 			alignas(16) uint8_t rTmp[16], gTmp[16], bTmp[16];
 			_mm_storeu_si128((__m128i*)rTmp, Ri);
@@ -299,24 +303,27 @@ namespace SIMDUtils
 		}
 
 
-		static inline __m128 GammaPow24_Approx(__m128 x)
+		static inline void GammaApproxSqrt(__m128& c)
 		{
-			const __m128 a = _mm_set1_ps(0.305306011f);
-			const __m128 b = _mm_set1_ps(0.682171111f);
-			const __m128 c = _mm_set1_ps(0.012522878f);
+			const __m128 zero = _mm_set1_ps(0.0f);
+			const __m128 one = _mm_set1_ps(1.0f);
 
-			__m128 x2 = _mm_mul_ps(x, x);
-			__m128 x3 = _mm_mul_ps(x2, x);
+			c = _mm_min_ps(one, _mm_max_ps(zero, c));
 
-			return _mm_add_ps(
-				_mm_add_ps(_mm_mul_ps(x3, a),
-					_mm_mul_ps(x2, b)),
-				_mm_mul_ps(x, c)
-			);
+			__m128 s1 = _mm_sqrt_ps(c);
+			__m128 s2 = _mm_sqrt_ps(s1);
+
+			const __m128 k1 = _mm_set1_ps(0.585122381f);
+			const __m128 k2 = _mm_set1_ps(0.783140355f);
+
+			__m128 term1 = _mm_mul_ps(s2, k1);
+			__m128 term2 = _mm_mul_ps(s1, k2);
+
+			c = _mm_add_ps(term1, term2);
 		}
 
 
-		static inline __m128 LinearToSRGB4(__m128 c)
+		static inline void SlowGamma(__m128& c)
 		{
 			const __m128 zero = _mm_set1_ps(0.0f);
 			const __m128 one = _mm_set1_ps(1.0f);
@@ -325,13 +332,9 @@ namespace SIMDUtils
 			const __m128 b = _mm_set1_ps(1.055f);
 			const __m128 c055 = _mm_set1_ps(0.055f);
 
-			// Clamp input
 			c = _mm_min_ps(one, _mm_max_ps(zero, c));
 
-			// Compute mask for linear region
 			__m128 mask = _mm_cmple_ps(c, threshold);
-
-			// Linear portion
 			__m128 linear = _mm_mul_ps(a, c);
 
 			// Non-linear portion (gamma 1/2.4)
@@ -342,7 +345,13 @@ namespace SIMDUtils
 			__m128 nonlinear = _mm_loadu_ps(tmp);
 
 			// Blend linear/non-linear
-			return _mm_blendv_ps(nonlinear, linear, mask);
+			c = _mm_blendv_ps(nonlinear, linear, mask);
+		}
+
+
+		static inline void LinearToSRGB4(__m128& c)
+		{
+			GammaApproxSqrt(c);
 		}
 	}
 }
