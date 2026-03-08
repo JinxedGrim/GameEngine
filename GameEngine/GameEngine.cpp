@@ -684,8 +684,8 @@ class ExampleScene : public TerraPGE::Scene
 
 		if (this->Paused)
 		{
-			static std::string PauseTitle = "Paused";
-			Gdi->DrawStringA(TerraPGE::Core::sx / 2, TerraPGE::Core::sy / 2, PauseTitle, RGB(255, 255, 255), TRANSPARENT);
+			const static std::string PauseTitle = "Paused";
+			TerraPGE::Renderer::RenderingCore::RenderFormattedText(TerraPGE::Core::sx / 2, TerraPGE::Core::sy / 2, PauseTitle, RGB(255, 255, 255), TRANSPARENT);
 		}
 
 		DrawCrosshair(Gdi);

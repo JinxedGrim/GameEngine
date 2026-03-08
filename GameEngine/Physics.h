@@ -96,7 +96,7 @@ namespace TerraPGE::Physics
     }
 
 
-    float CalculateRestituion()
+    float IntegrateRestitution(float r)
     {
         return 0.0f;
     }
@@ -158,6 +158,8 @@ namespace TerraPGE::Physics
                 //if (v_n >= 0) return;
                 //Vec3 j = FloorHit->normal * (-(1 + collider->body.restitution) * v_n) / (1.0f / collider->body.mass);
                 //collider->body.Velocity += j / collider->body.mass;  // p += j; v = p/m
+
+
 
                 if (std::abs(collider->body.Velocity.y) < 0.05f) // small threshold
                 {

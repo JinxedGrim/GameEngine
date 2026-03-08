@@ -51,7 +51,7 @@ __pragma(warning(default:6387))
 
 
 
-    COLORREF GetBrushColor(HBRUSH brush)
+COLORREF GetBrushColor(HBRUSH brush)
 {
     LOGBRUSH lbr;
     if (GetObject(brush, sizeof(lbr), &lbr) != sizeof(lbr)) {
@@ -160,6 +160,7 @@ public:
 private:
     std::shared_ptr<HBRUSH> Brush;
 };
+
 
 class PenPP
 {
@@ -274,6 +275,7 @@ private:
     bool NeedsDestroyed = false;
     int RefCount = 0;
 };
+
 
 class GdiPP
 {
@@ -396,6 +398,27 @@ public:
     // disable copy
     //GdiPP(const GdiPP&) = delete;
     //GdiPP& operator=(const GdiPP&) = delete;
+
+    __inline int MeasureTextWidth(const char* text)
+    {
+        SIZE size;
+        GetTextExtentPoint32A(this->MemDC, text, strlen(text), &size);
+        return size.cx;
+    }
+
+    __inline int MeasureTextHeight(const char* text)
+    {
+        SIZE size;
+        GetTextExtentPoint32A(this->MemDC, text, strlen(text), &size);
+        return size.cy;
+    }
+
+    __inline SIZE MeasureText(const char* text)
+    {
+        SIZE size;
+        GetTextExtentPoint32A(this->MemDC, text, strlen(text), &size);
+        return size;
+    }
 
     ~GdiPP() // dtor 
     {

@@ -3,7 +3,6 @@
 #include "Rasterizer.h"
 #include "Renderable.h"
 #include "EnvironmentRenderable.h"
-#include "ParrallelPP.h"
 
 namespace TerraPGE::Renderer
 {
@@ -12,6 +11,23 @@ namespace TerraPGE::Renderer
 		CPU = 0,
 		MULTITHREADED = 1,
 		GPU = 2
+	};
+
+	struct TEXT_PARAMS
+	{
+		int X = 0;
+		int Y = 0;
+		COLORREF Clr = RGB(0, 0, 0);
+		std::string Text = "";
+
+
+		TEXT_PARAMS(const int x, const int y, const std::string text, COLORREF clr)
+		{
+			this->X = x;
+			this->Y = y;
+			this->Text = text;
+			this->Clr = clr;
+		}
 	};
 
 	static RenderingBackend CurrBackend = RenderingBackend::CPU;
@@ -92,6 +108,157 @@ namespace TerraPGE::Renderer
 		void SetClearColor(int BrushIdx)
 		{
 			ClearBrush = (HBRUSH)GetStockObject(BrushIdx);
+		}
+
+
+		// Some sort of way to force backend to implement this
+		// Probably this Renderer Becomes a class thats derivable
+		void RenderFormattedText(const int& startX, const int& startY, const std::string& str, const COLORREF& InitialColor, const int& BkMode = TRANSPARENT)
+		{
+			int lastPoint = 0;
+			std::vector<TEXT_PARAMS> SubStrs;
+
+			int CurrX = startX;
+			int CurrY = startY;
+			COLORREF CurrColor = InitialColor;
+			int CurrBkMode = BkMode;
+
+			for (int i = 0; i < str.length(); i++)
+			{
+				if (i == str.length() - 1)
+				{
+					std::string sub = str.substr(lastPoint);
+					SubStrs.push_back(TEXT_PARAMS(CurrX, CurrY, sub, CurrColor));
+					lastPoint = i;
+					i = lastPoint;
+				}
+				else if (str.at(i) == '\n')
+				{
+					SubStrs.push_back(TEXT_PARAMS(CurrX, CurrY, str.substr(lastPoint, i - lastPoint), CurrColor));
+					CurrY += 20; // TODO Dont hardcode this (ratio?) also (font, size etc)
+					CurrX = startX;
+					lastPoint = i;
+				}
+				else if (str.at(i) == '\\' && str.at(i+1) == '^')
+				{
+					switch (str.at(i+2))
+					{
+						case 'c':
+						{
+							// switch color
+							int r, g, b;
+							int consumed = 0;
+
+							if (sscanf_s(&str[i], "\\^c{%d}{%d}{%d}%n", &r, &g, &b, &consumed) == 3)
+							{
+								std::string sub = str.substr(lastPoint, i - lastPoint);
+								SubStrs.push_back(TEXT_PARAMS(CurrX, CurrY, sub, CurrColor));
+								CurrX += EngineGdi->MeasureTextWidth(sub.c_str());
+
+								i += consumed - 1;
+								lastPoint = i + 1;
+								CurrColor = RGB(r, g, b);
+							}
+							break;
+						}
+						case 'x':
+						{
+							int consumed = 0;
+							int offsetX = 0;
+
+							if (sscanf_s(&str[i], "\\^x{%d}%n", &offsetX, &consumed) == 1)
+							{
+								std::string sub = str.substr(lastPoint, i - lastPoint);
+								SubStrs.push_back(TEXT_PARAMS(CurrX, CurrY, sub, CurrColor));
+								CurrX += EngineGdi->MeasureTextWidth(sub.c_str());
+
+								i += consumed - 1;
+								lastPoint = i + 1;
+								CurrX += offsetX;
+							}
+							break;
+						}
+						case 'y':
+						{
+							int consumed = 0;
+							int offsetY = 0;
+
+							if (sscanf_s(&str[i], "\\^x{%d}%n", &offsetY, &consumed) == 1)
+							{
+								std::string sub = str.substr(lastPoint, i - lastPoint);
+								SubStrs.push_back(TEXT_PARAMS(CurrX, CurrY, sub, CurrColor));
+								CurrX += EngineGdi->MeasureTextWidth(sub.c_str());
+
+								i += consumed - 1;
+								lastPoint = i + 1;
+								CurrY += offsetY;
+							}
+							break;
+						}
+						case 'r':
+						{
+							int consumed = 3;
+							std::string sub = str.substr(lastPoint, i - lastPoint);
+							SubStrs.push_back(TEXT_PARAMS(CurrX, CurrY, sub, CurrColor));
+							CurrX += EngineGdi->MeasureTextWidth(sub.c_str());
+
+							i += consumed - 1;
+							lastPoint = i + 1;
+
+							CurrColor = InitialColor;
+							break;
+						}
+						case 'e':
+						{
+							int consumed = 0;
+							std::string effect;
+
+							if (sscanf_s(&str[i], "\\^e{%s}%n", &str, &consumed) == 1)
+							{
+								if (effect == "Rainbow")
+								{
+									std::string sub = str.substr(lastPoint, i - lastPoint);
+									SubStrs.push_back(TEXT_PARAMS(CurrX, CurrY, sub, CurrColor));
+									CurrX += EngineGdi->MeasureTextWidth(sub.c_str());
+
+									i += consumed - 1;
+									lastPoint = i + 1;
+									// TODO  Set rainbow flag
+								}
+
+								i += consumed - 1;
+								lastPoint = i + 1;
+							}
+						}
+					}
+				}
+			}
+
+			for (const TEXT_PARAMS& params : SubStrs)
+			{
+				Core::Log(params.Text);
+				EngineGdi->DrawStringA(params.X, params.Y, params.Text, params.Clr, BkMode);
+			}
+		}
+
+
+		void DrawFpsCounter(WndCreator& Wnd, const float& Fps, const SIZE_T CurrMB, double FrameTime, double CpuUsage)
+		{
+#ifdef UNICODE
+			// Draw FPS and some debug info
+			std::wstringstream ss;
+			ss << std::fixed << std::setprecision(2) << Core::FpsWStr << Fps << L" Cpu/Time: " << CpuUsage << L"/" << FrameTime << L" Memory Usage: " << CurrMB << L"/"
+				<< Core::MaxMemoryMB << L" MB " << (Core::DoMultiThreading ? L"(MultiThreaded)" : L"") << (Core::SimdAcceleration ? L" (SIMD)" : L"");
+
+			//Wnd.SetWndTitle(Str);
+			Renderer::EngineGdi->DrawStringW(20, 20, ss.str(), RGB(255, 0, 0), TRANSPARENT);
+#endif
+#ifndef UNICODE
+			std::stringstream ss;
+			ss << std::fixed << std::setprecision(2) << Core::FpsStr << Fps << " Cpu/Time: " << CpuUsage << "/" << FrameTime << " Memory Usage: " << CurrMB << "/"
+				<< Core::MaxMemoryMB << " MB " << (Core::DoMultiThreading ? "(MultiThreaded)" : "") << (Core::SimdAcceleration ? " (SIMD)" : L"");		//Wnd.SetWndTitle(Str);
+			EngineGdi.DrawStringA(20, 20, ss.str(), RGB(255, 0, 0), TRANSPARENT);
+#endif
 		}
 
 
@@ -366,34 +533,6 @@ namespace TerraPGE::Renderer
 	}
 
 
-	// Some sort of way to force backend to implement this
-	// Probably this Renderer Becomes a class thats derivable
-	void RenderFormattedText(std::string)
-	{
-
-	}
-
-
-	void DrawFpsCounter(WndCreator& Wnd, const float& Fps, const SIZE_T CurrMB, double FrameTime, double CpuUsage)
-	{
-#ifdef UNICODE
-		// Draw FPS and some debug info
-		std::wstringstream ss;
-		ss << std::fixed << std::setprecision(2) << Core::FpsWStr << Fps << L" Cpu/Time: " << CpuUsage << L"/" << FrameTime << L" Memory Usage: " << CurrMB << L"/" 
-			<< Core::MaxMemoryMB << L" MB " << (Core::DoMultiThreading ? L"(MultiThreaded)" : L"") << (Core::SimdAcceleration ? L" (SIMD)" : L"");
-
-		//Wnd.SetWndTitle(Str);
-		Renderer::EngineGdi->DrawStringW(20, 20, ss.str(), RGB(255, 0, 0), TRANSPARENT);
-#endif
-#ifndef UNICODE
-		std::stringstream ss;
-		ss << std::fixed << std::setprecision(2) << Core::FpsStr << Fps << " Cpu/Time: " << CpuUsage << "/" << FrameTime << " Memory Usage: " << CurrMB << "/"
-			<< Core::MaxMemoryMB << " MB " << (Core::DoMultiThreading ? "(MultiThreaded)" : "") << (Core::SimdAcceleration ? " (SIMD)" : L"");		//Wnd.SetWndTitle(Str);
-		EngineGdi.DrawStringA(20, 20, ss.str(), RGB(255, 0, 0), TRANSPARENT);
-#endif
-	}
-
-
 	void RenderMesh(Camera* Cam, Renderable* Object, LightObject** SceneLights, size_t LightCount)
 	{
 		std::vector<Triangle> ClipSpaceTris = RenderingUtils::VertexShader(Cam, Object);
@@ -563,41 +702,6 @@ namespace TerraPGE::Renderer
 
 		RenderingCore::SwapFrameBuffer(Renderer::UseHDR, Renderer::DoGammaCorrection);
 	}
-
-
-
-
-	// TODO salvage this code for a debug routine?
-	//if (false)
-	//{
-		//if (Object->mesh->MeshName != "Ray")
-		//{
-			//EngineGdi->DrawFilledTriangle(PixelRound(ToDraw.Points[0].x), PixelRound(ToDraw.Points[0].y), PixelRound(ToDraw.Points[1].x), PixelRound(ToDraw.Points[1].y), PixelRound(ToDraw.Points[2].x), PixelRound(ToDraw.Points[2].y), BrushPP(RGB(ToDraw.Col.x, ToDraw.Col.y, ToDraw.Col.z)), PenPP(PS_SOLID, 1, RGB(1, 1, 1)));
-			//if (ShowNormals)
-			//{
-			//	Ray NormalRay = Ray(ToDraw.NormalPositions[0], ToDraw.NormDirections[0]);
-			//	NormalRay.GenerateMesh();
-			//	RenderMesh(Gdi, Cam, NormalRay.mesh, Scalar, RotationRads, Pos, Vec3(0, 0, 0), Vec3(1, 1, 1), 0.f, 0.f, 0.f, EngineShaders::Shader_Material);
-			//	NormalRay.mesh.UseSingleMat = true;
-			//	NormalRay = Ray(ToDraw.NormalPositions[1], ToDraw.NormDirections[0]);
-			//	NormalRay.GenerateMesh();
-			//	NormalRay.mesh.Mat.AmbientColor = Vec3(0, 0, 255);
-			//	RenderMesh(Gdi, Cam, NormalRay.mesh, Scalar, RotationRads, Pos, Vec3(0, 0, 0), Vec3(1, 1, 1), 0.f, 0.f, 0.f, EngineShaders::Shader_Material);
-			//	NormalRay = Ray(ToDraw.NormalPositions[2], ToDraw.NormDirections[0]);
-			//	NormalRay.GenerateMesh();
-			//	NormalRay.mesh.Mat.AmbientColor = Vec3(0, 0, 255);
-			//	RenderMesh(Gdi, Cam, NormalRay.mesh, Scalar, RotationRads, Pos, Vec3(0, 0, 0), Vec3(1, 1, 1), 0.f, 0.f, 0.f, EngineShaders::Shader_Material);
-			//	NormalRay = Ray(ToDraw.NormalPositions[3], ToDraw.NormDirections[0]);
-			//	NormalRay.GenerateMesh();
-			//	NormalRay.mesh.Mat.AmbientColor = Vec3(0, 0, 255);
-			//	RenderMesh(Gdi, Cam, NormalRay.mesh, Scalar, RotationRads, Pos, Vec3(0, 0, 0), Vec3(1, 1, 1), 0.f, 0.f, 0.f, EngineShaders::Shader_Material);
-			//}
-		//}
-		//else
-		//{
-			//EngineGdi->DrawFilledTriangle(PixelRound(ToDraw.Points[0].x), PixelRound(ToDraw.Points[0].y), PixelRound(ToDraw.Points[1].x), PixelRound(ToDraw.Points[1].y), PixelRound(ToDraw.Points[2].x), PixelRound(ToDraw.Points[2].y), BrushPP(RGB(ToDraw.Col.x, ToDraw.Col.y, ToDraw.Col.z)), PenPP(PS_SOLID, 1, RGB(ToDraw.Col.x, ToDraw.Col.y, ToDraw.Col.z)));
-		//}
-	//}
 
 
 	namespace SIMD
@@ -801,6 +905,7 @@ namespace TerraPGE::Renderer
 		}
 	}
 
+
 	namespace Multithreaded
 	{
 		void SwapFrameBufferByChunk(float* Frame, const unsigned __int32 width, const unsigned __int32  y0, const unsigned __int32 y1)
@@ -930,8 +1035,44 @@ namespace TerraPGE::Renderer
 		}
 	}
 
+
 	namespace GPU
 	{
 
 	}
 }
+
+
+
+
+// TODO salvage this code for a debug routine?
+//if (false)
+//{
+	//if (Object->mesh->MeshName != "Ray")
+	//{
+		//EngineGdi->DrawFilledTriangle(PixelRound(ToDraw.Points[0].x), PixelRound(ToDraw.Points[0].y), PixelRound(ToDraw.Points[1].x), PixelRound(ToDraw.Points[1].y), PixelRound(ToDraw.Points[2].x), PixelRound(ToDraw.Points[2].y), BrushPP(RGB(ToDraw.Col.x, ToDraw.Col.y, ToDraw.Col.z)), PenPP(PS_SOLID, 1, RGB(1, 1, 1)));
+		//if (ShowNormals)
+		//{
+		//	Ray NormalRay = Ray(ToDraw.NormalPositions[0], ToDraw.NormDirections[0]);
+		//	NormalRay.GenerateMesh();
+		//	RenderMesh(Gdi, Cam, NormalRay.mesh, Scalar, RotationRads, Pos, Vec3(0, 0, 0), Vec3(1, 1, 1), 0.f, 0.f, 0.f, EngineShaders::Shader_Material);
+		//	NormalRay.mesh.UseSingleMat = true;
+		//	NormalRay = Ray(ToDraw.NormalPositions[1], ToDraw.NormDirections[0]);
+		//	NormalRay.GenerateMesh();
+		//	NormalRay.mesh.Mat.AmbientColor = Vec3(0, 0, 255);
+		//	RenderMesh(Gdi, Cam, NormalRay.mesh, Scalar, RotationRads, Pos, Vec3(0, 0, 0), Vec3(1, 1, 1), 0.f, 0.f, 0.f, EngineShaders::Shader_Material);
+		//	NormalRay = Ray(ToDraw.NormalPositions[2], ToDraw.NormDirections[0]);
+		//	NormalRay.GenerateMesh();
+		//	NormalRay.mesh.Mat.AmbientColor = Vec3(0, 0, 255);
+		//	RenderMesh(Gdi, Cam, NormalRay.mesh, Scalar, RotationRads, Pos, Vec3(0, 0, 0), Vec3(1, 1, 1), 0.f, 0.f, 0.f, EngineShaders::Shader_Material);
+		//	NormalRay = Ray(ToDraw.NormalPositions[3], ToDraw.NormDirections[0]);
+		//	NormalRay.GenerateMesh();
+		//	NormalRay.mesh.Mat.AmbientColor = Vec3(0, 0, 255);
+		//	RenderMesh(Gdi, Cam, NormalRay.mesh, Scalar, RotationRads, Pos, Vec3(0, 0, 0), Vec3(1, 1, 1), 0.f, 0.f, 0.f, EngineShaders::Shader_Material);
+		//}
+	//}
+	//else
+	//{
+		//EngineGdi->DrawFilledTriangle(PixelRound(ToDraw.Points[0].x), PixelRound(ToDraw.Points[0].y), PixelRound(ToDraw.Points[1].x), PixelRound(ToDraw.Points[1].y), PixelRound(ToDraw.Points[2].x), PixelRound(ToDraw.Points[2].y), BrushPP(RGB(ToDraw.Col.x, ToDraw.Col.y, ToDraw.Col.z)), PenPP(PS_SOLID, 1, RGB(ToDraw.Col.x, ToDraw.Col.y, ToDraw.Col.z)));
+	//}
+//}

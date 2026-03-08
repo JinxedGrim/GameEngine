@@ -308,7 +308,7 @@ namespace TerraPGE
 			if (Core::FpsEngineCounter)
 			{
 				double CpuFrameDelta = Core::GetCpuUsageInfo() - CpuFrameStart;
-				Renderer::DrawFpsCounter(Wnd, Fps, CurrMB, ElapsedTime, Core::CalculateCpuUsage(CpuFrameDelta * 1e-9, ElapsedTime, Core::CpuCores));
+				Renderer::RenderingCore::DrawFpsCounter(Wnd, Fps, CurrMB, ElapsedTime, Core::CalculateCpuUsage(CpuFrameDelta * 1e-9, ElapsedTime, Core::CpuCores));
 			}
 
 			CurrScene->DrawSceneGUI(Renderer::EngineGdi);
