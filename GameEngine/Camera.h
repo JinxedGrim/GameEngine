@@ -1,6 +1,7 @@
 #pragma once
 #include "Math.h"
 #include "GameObject.h"
+#include "RayCaster.h"
 
 //GameObject(Vec3(1.0f, 1.0f, 1.0f), DirToEuler(LightDir)
 
@@ -200,7 +201,6 @@ public:
 	}
 
 
-
 	Vec3 GetNearPLane() const
 	{
 		return this->NearPlane;
@@ -275,6 +275,7 @@ public:
 		return this->Transform.GetLocalPosition();
 	}
 
+
 	Vec3 GetWorldPosition()
 	{
 		return this->Transform.GetWorldMatrix().GetTranslation();
@@ -285,6 +286,28 @@ public:
 	{
 		this->Transform.SetLocalEulerAngles(Angles);
 		this->IsViewDirty = true;
+	}
+
+
+	Ray ScreenPointToRay(int sx, int sy, int ScreenWidth, int ScreenHeight)
+	{
+		float NdcX = (2.0f * sx / ScreenWidth) - 1.0f;
+		float NdcY = 1.0f - (2.0f * sy / ScreenHeight);
+
+		Vec4 NearClip = Vec4(NdcX, NdcY, 0.0f, 1.0f);
+		Vec4 FarClip = Vec4(NdcX, NdcY, 1.0f, 1.0f);
+
+		Vec4 ViewSpaceNearClip = NearClip * this->GetProjectionMatrix().Inversed();
+		Vec4 ViewSpaceFarClip = NearClip * this->GetProjectionMatrix().Inversed();
+		ViewSpaceNearClip.CorrectPerspective();
+		ViewSpaceFarClip.CorrectPerspective();
+
+		Vec4 WorldSpaceNearClip = ViewSpaceNearClip * this->GetViewMatrix().Inversed();
+		Vec4 WorldSpaceFarClip = ViewSpaceFarClip * this->GetViewMatrix().Inversed();
+
+		Ray Out = Ray(WorldSpaceNearClip, (WorldSpaceFarClip.xyz() - WorldSpaceNearClip.xyz()).Normalized());
+
+		return Out;
 	}
 
 
@@ -305,13 +328,6 @@ public:
 		this->Transform.SetLocalPosition(Pos);
 		this->IsViewDirty = true;
 	}
-
-
-	//Vec3 GetForward()
-	//{
-	//	Matrix world = Transform.GetWorldMatrix(); // already walked
-	//	return Transform.GetWorldForward();
-	//}
 
 
 	Vec3 GetNewVelocity()

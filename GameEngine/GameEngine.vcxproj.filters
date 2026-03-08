@@ -25,13 +25,10 @@
     <Filter Include="Header Files\Core\Libs\Graphics">
       <UniqueIdentifier>{66499fbe-8c85-40dc-8173-18d0a29ffb9c}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Header Files\Core\Engine">
-      <UniqueIdentifier>{7e220bf5-6641-488e-a76d-84875ad7cea0}</UniqueIdentifier>
-    </Filter>
     <Filter Include="Header Files\EngineAPI">
       <UniqueIdentifier>{e9a2c468-0bf7-46ca-a077-1fcf3868c944}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Header Files\EngineAPI\Math">
+    <Filter Include="Header Files\Core\Math">
       <UniqueIdentifier>{101519b7-5152-4313-b8b6-ce8742e3070f}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
@@ -44,17 +41,8 @@
     <ClInclude Include="ResourceManagement.h">
       <Filter>Header Files\EngineAPI</Filter>
     </ClInclude>
-    <ClInclude Include="Shading.h">
-      <Filter>Header Files\Core\Engine</Filter>
-    </ClInclude>
     <ClInclude Include="TerraAL.h">
       <Filter>Header Files\Core\Libs</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\..\..\Desktop\My Stuff\My Librarys\Intrinsics\ParrallelPP.h">
-      <Filter>Header Files\Core\Libs</Filter>
-    </ClInclude>
-    <ClInclude Include="EngineCore.h">
-      <Filter>Header Files\Core\Engine</Filter>
     </ClInclude>
     <ClInclude Include="..\..\..\..\Desktop\My Stuff\My Librarys\Graphics\GdiPP.hpp">
       <Filter>Header Files\Core\Libs\Graphics</Filter>
@@ -71,21 +59,6 @@
     <ClInclude Include="..\..\..\..\Desktop\My Stuff\My Librarys\Graphics\WndCreator.hpp">
       <Filter>Header Files\Core\Libs\Graphics</Filter>
     </ClInclude>
-    <ClInclude Include="Mesh.h">
-      <Filter>Header Files\Core\Engine</Filter>
-    </ClInclude>
-    <ClInclude Include="Materials.h">
-      <Filter>Header Files\Core\Engine</Filter>
-    </ClInclude>
-    <ClInclude Include="Lighting.h">
-      <Filter>Header Files\Core\Engine</Filter>
-    </ClInclude>
-    <ClInclude Include="Camera.h">
-      <Filter>Header Files\Core\Engine</Filter>
-    </ClInclude>
-    <ClInclude Include="Texture.h">
-      <Filter>Header Files\Core\Engine</Filter>
-    </ClInclude>
     <ClInclude Include="TerraPGE.h">
       <Filter>Header Files\EngineAPI</Filter>
     </ClInclude>
@@ -101,29 +74,20 @@
     <ClInclude Include="GameObject.h">
       <Filter>Header Files\EngineAPI</Filter>
     </ClInclude>
-    <ClInclude Include="Collider.h">
-      <Filter>Header Files\EngineAPI</Filter>
-    </ClInclude>
     <ClInclude Include="Rasterizer.h">
       <Filter>Header Files\EngineAPI</Filter>
-    </ClInclude>
-    <ClInclude Include="RayCaster.h">
-      <Filter>Header Files\Core\Engine</Filter>
     </ClInclude>
     <ClInclude Include="Renderable.h">
       <Filter>Header Files\EngineAPI</Filter>
     </ClInclude>
-    <ClInclude Include="ObjectTransform.h">
-      <Filter>Header Files\EngineAPI</Filter>
-    </ClInclude>
     <ClInclude Include="Math.h">
-      <Filter>Header Files\EngineAPI\Math</Filter>
+      <Filter>Header Files\Core\Math</Filter>
     </ClInclude>
     <ClInclude Include="MatrixMath.h">
-      <Filter>Header Files\EngineAPI\Math</Filter>
+      <Filter>Header Files\Core\Math</Filter>
     </ClInclude>
     <ClInclude Include="VectorMath.h">
-      <Filter>Header Files\EngineAPI\Math</Filter>
+      <Filter>Header Files\Core\Math</Filter>
     </ClInclude>
     <ClInclude Include="Skybox.h">
       <Filter>Header Files\EngineAPI</Filter>
@@ -131,24 +95,41 @@
     <ClInclude Include="EnvironmentRenderable.h">
       <Filter>Header Files\EngineAPI</Filter>
     </ClInclude>
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="TeaPot.obj">
-      <Filter>ObjectFIles</Filter>
-    </None>
-  </ItemGroup>
-  <ItemGroup>
-    <Object Include="Mountains.obj">
-      <Filter>ObjectFIles</Filter>
-    </Object>
-    <Object Include="Spyro.obj">
-      <Filter>ObjectFIles</Filter>
-    </Object>
-    <Object Include="axis.obj">
-      <Filter>ObjectFIles</Filter>
-    </Object>
-    <Object Include="AK47.obj">
-      <Filter>ObjectFIles</Filter>
-    </Object>
+    <ClInclude Include="BufferUtils.h">
+      <Filter>Header Files\Core\Math</Filter>
+    </ClInclude>
+    <ClInclude Include="Texture.h">
+      <Filter>Header Files\Core</Filter>
+    </ClInclude>
+    <ClInclude Include="Camera.h">
+      <Filter>Header Files\Core</Filter>
+    </ClInclude>
+    <ClInclude Include="EngineCore.h">
+      <Filter>Header Files\Core</Filter>
+    </ClInclude>
+    <ClInclude Include="Lighting.h">
+      <Filter>Header Files\Core</Filter>
+    </ClInclude>
+    <ClInclude Include="Materials.h">
+      <Filter>Header Files\Core</Filter>
+    </ClInclude>
+    <ClInclude Include="Mesh.h">
+      <Filter>Header Files\Core</Filter>
+    </ClInclude>
+    <ClInclude Include="Shading.h">
+      <Filter>Header Files\Core</Filter>
+    </ClInclude>
+    <ClInclude Include="RayCaster.h">
+      <Filter>Header Files\Core\Math</Filter>
+    </ClInclude>
+    <ClInclude Include="ObjectTransform.h">
+      <Filter>Header Files\Core</Filter>
+    </ClInclude>
+    <ClInclude Include="Collider.h">
+      <Filter>Header Files\Core</Filter>
+    </ClInclude>
+    <ClInclude Include="ParrallelPP.h">
+      <Filter>Header Files\Core\Libs</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

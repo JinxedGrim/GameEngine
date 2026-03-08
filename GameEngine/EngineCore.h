@@ -26,14 +26,11 @@
 #include "ParrallelPP.h"
 
 #ifdef SSE_SIMD_42_SUPPORT
-#include "Intrinsics/VectorExHelper.h"
 #endif
 
 #ifdef GPU_SUPPORT
 #include "../../../Source/repos/GlLoader/GlLoader/GlLoader.h"
 #endif
-
-#define FLOAT_LOWEST_BIAS 0.0005
 
 namespace TerraPGE::Core
 {
@@ -43,14 +40,15 @@ namespace TerraPGE::Core
 	int sx = GetSystemMetrics(SM_CXSCREEN);
 	int sy = GetSystemMetrics(SM_CYSCREEN);
 
+	//TODO make camera intrinsic
 	float FOV = 90.0f;
 	float FNEAR = 0.1f;
 	float FFAR = 100.0f;
 
 	// move all to TPGE
 	bool FpsEngineCounter = true;
-	bool DoMultiThreading = true;
-	bool SimdAcceleration = false;
+	bool DoMultiThreading = false;
+	bool SimdAcceleration = true;
 	bool GpuAcceleration = false;
 
 	int CpuCores = 0;
@@ -58,14 +56,11 @@ namespace TerraPGE::Core
 	std::vector<std::wstring> GPUDevNames = {};
 	std::wstring PrimaryGPUDevName;
 	SIZE_T MaxMemoryMB = 0;
+
 	ThreadManager ThreadPool;
-#ifdef SSE_SIMD_42_SUPPORT
 	CPUID CpuId(1);
 	SupportedInstructions SimdInfo = { 0 };
-#else
-	CPUID CpuId(1);
-	SupportedInstructions SimdInfo = { 0 };
-#endif
+	std::string CpuName;
 
 	// move to TPGE keep all and add a switch for updating keyboard input (allow user to disable all input)
 	bool UpdateMouseIn = true;
@@ -88,18 +83,26 @@ namespace TerraPGE::Core
 		std::cout << Message << std::endl;
 	}
 
+
 	void LogInfo(std::string CallerTag, std::string Message)
 	{
 		Core::Log("[I] (" + CallerTag + ") " + Message);
 	}
+	
 
-	void LogError(std::string CallerTag, std::string Message, int Level)
+	void LogWarning(std::string CallerTag, std::string Message)
 	{
 		Core::Log("[W] (" + CallerTag + ") " + Message);
 	}
 
 
-	uint64_t GetCpuUsageInfo()
+	void LogError(std::string CallerTag, std::string Message, int Level)
+	{
+		Core::Log("[E] (" + CallerTag + ") " + Message);
+	}
+
+
+	double  GetCpuUsageInfo()
 	{
 		FILETIME creation, exit, kernel, user;
 		GetProcessTimes(GetCurrentProcess(), &creation, &exit, &kernel, &user);
@@ -113,7 +116,8 @@ namespace TerraPGE::Core
 		return (k.QuadPart + u.QuadPart) * 100; // FILETIME = 100ns units
 	}
 
-	double CalculateCpuUsage(uint64_t cpuTimeDeltaNs, uint64_t wallTimeDeltaNs, int coreCount)
+
+	double CalculateCpuUsage(double  cpuTimeDeltaNs, double  wallTimeDeltaNs, int coreCount)
 	{
 		return (double)cpuTimeDeltaNs / (double)(wallTimeDeltaNs * coreCount) * 100.0;
 	}
@@ -137,6 +141,7 @@ namespace TerraPGE::Core
 		return memState.lTotalCount / 1024 / 1024;
 	}
 
+
 	std::wstring GetDevList()
 	{
 		std::wstring out = L"";
@@ -149,18 +154,17 @@ namespace TerraPGE::Core
 		return out;
 	}
 
+
 	void GetCpuInfo()
 	{
 		SYSTEM_INFO SysInf;
 
 		SimdInfo = CpuId.GetSupportedInstructions();
-		CpuId.LogCpuInfo();
-
 		GetSystemInfo(&SysInf);
 		TerraPGE::Core::CpuCores = SysInf.dwNumberOfProcessors;
-
-		std::cout << "Cores: " << TerraPGE::Core::CpuCores << std::endl;
+		TerraPGE::Core::CpuName = CpuId.GetProcessorName();
 	}
+
 
 	void UpdateSystemInfo()
 	{
@@ -218,6 +222,7 @@ namespace TerraPGE::Core
 	// Delete buffers
 	void EngineCleanup()
 	{
+		Log("EngineCleanup called");
 		// Cleanup buffers
 		delete[] DepthBuffer;
 		delete[] ShadowMap;

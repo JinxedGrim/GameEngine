@@ -111,7 +111,7 @@ class ExampleScene : public TerraPGE::Scene
 		CubeRender = DEBUG_NEW TerraPGE::Renderable(CubeMsh, this->MainCamera, Vec3(1.0f, 1.0f, 1.0f), Vec3(0.0f, 0.0f, 0.0f), Vec3(0.0f, 5.f, -4.0f), TerraPGE::EngineShaders::DefaultShader);
 		CubeRender->collider.PhysicsEnabled = false;
 		Ak47Render = DEBUG_NEW TerraPGE::Renderable(CubeMesh2, this->MainCamera, Vec3(1.0f, 1.0f, 1.0f), Vec3(0.0f, 0.0f, 0.0f), Vec3(0.0f, 6.f, 4.0f), TerraPGE::EngineShaders::DefaultShader);
-		PlaneRender = DEBUG_NEW TerraPGE::Renderable(Plane, this->MainCamera, Vec3(2.0f, 2.0f, 1.0f), Vec3(0.0f, 0.0f, 0.0f), Vec3(0.0f, 0.0f, 0.0f), TerraPGE::EngineShaders::DefaultShader);
+		PlaneRender = DEBUG_NEW TerraPGE::Renderable(Plane, this->MainCamera, Vec3(2.0f, 1.0f, 2.0f), Vec3(0.0f, 0.0f, 0.0f), Vec3(0.0f, 0.0f, 0.0f), TerraPGE::EngineShaders::DefaultShader);
 		//TerraPGE::EngineShaders::Shader_Frag_Phong         Shader_Texture_Only
 		CubeRender->mesh->MeshName = "SmileCube";
 
@@ -310,7 +310,7 @@ class ExampleScene : public TerraPGE::Scene
 				case 0:
 					break;
 				case 1:
-					TerraPGE::DoPhysics = !TerraPGE::DoPhysics;
+					TerraPGE::Core::SimdAcceleration = !TerraPGE::Core::SimdAcceleration;
 					break;
 				case 2:
 					TerraPGE::Renderer::DoLighting = !TerraPGE::Renderer::DoLighting;
@@ -327,6 +327,7 @@ class ExampleScene : public TerraPGE::Scene
 				case 0:
 					break;
 				case 1:
+					TerraPGE::DoPhysics = !TerraPGE::DoPhysics;
 					break;
 				case 2:
 					TerraPGE::Renderer::DoShadows = !TerraPGE::Renderer::DoShadows;
@@ -491,19 +492,20 @@ class ExampleScene : public TerraPGE::Scene
 	TerraPGE::Renderable* GetHoveredObj(const std::vector<TerraPGE::Renderable*>* ToRender)
 	{
 		TerraPGE::Renderable* hovered = nullptr;
+		this->MainCamera->Transform.WalkTransformChain();
+
 		for (TerraPGE::Renderable* obj : *ToRender)
 		{
-			this->MainCamera->Transform.WalkTransformChain();
-			Matrix inv = obj->Transform.World.QuickInversed();
-			Vec3 localOrigin = this->MainCamera->Transform.GetWorldPosition() * inv;
-			Vec3 localDir = ((this->MainCamera->GetLookDirection())).Normalized();
-
+			Matrix inv = obj->Transform.GetWorldMatrix();
+			Vec3 Dir = this->MainCamera->GetLookDirection();
+			Vec3 Origin = this->MainCamera->Transform.GetWorldPosition();
 
 			if (!obj) continue;
 
-			Ray camRay = Ray(localOrigin, localDir);
+			Ray camRay = Ray(Origin, Dir);
+
 			RaycastHit Out;
-			if (RaycastMesh(camRay, obj->mesh->Triangles, &Out))
+			if (RaycastMesh(camRay, obj->mesh->Triangles, &Out, &inv))
 			{
 				if (Out.hit)
 					hovered = obj;
@@ -528,7 +530,7 @@ class ExampleScene : public TerraPGE::Scene
 		//}
 
 		this->AddLight(&Dl);
-		HoveredRend = GetHoveredObj(this->GetObjects());
+		//HoveredRend = GetHoveredObj(this->GetObjects());
 	}
 
 
@@ -621,11 +623,12 @@ class ExampleScene : public TerraPGE::Scene
 			
 			static std::string EngineMenu =         "    (TAB) Engine Settings";
 			static std::string CpuStr     =         "    CPU: ";
-			static std::wstring GpuStr     =         L"    GPU: ";
-			static std::string SIMDStr    =         "    SIMD Support : ";
+			static std::wstring GpuStr     =       L"    GPU: ";
+			static std::string SIMDStr    =         "    SIMD Support: ";
 
 			static std::string MultiThreadingStr =  "    (F2)  MultiThreading: ";
-			static std::string PhysicsEngineStr =   "    (F3)  PhysicsEnabled: ";
+			static std::string SimdAccelStr =       "    (F3)  SIMD Accelleration: ";
+			static std::string PhysicsEngineStr =   "    (F4)  PhysicsEnabled: ";
 
 			static std::string RendererMenu =       "    (TAB) Renderer Settings";
 			static std::string CullingStr =         "    (F2)  Culling: ";
@@ -636,7 +639,7 @@ class ExampleScene : public TerraPGE::Scene
 			static std::string GammaCorrectionStr = "    (F7)  GammCorrection: ";
 			static std::string DbgClip =            "    (F8)  DebugClip: ";
 			static std::string DbgShadows =         "    (F9)  DebugShadows: ";
-			static std::string DepthStr =            "    Depth: ";
+			static std::string DepthStr =           "    Depth: ";
 
 			Vec3 LocalPos = MainCamera->GetLocalPosition();
 			Vec3 WorldPos = MainCamera->GetWorldPosition();
@@ -659,7 +662,8 @@ class ExampleScene : public TerraPGE::Scene
 				Gdi->DrawStringA(20, 100, SIMDStr + TerraPGE::Core::SimdInfo.GetSupportString(), RGB(255, 0, 0), TRANSPARENT);
 				Gdi->DrawStringW(20, 120, GpuStr + TerraPGE::Core::GetDevList(), RGB(255, 0, 0), TRANSPARENT);
 				Gdi->DrawStringA(20, 140, MultiThreadingStr + std::to_string(TerraPGE::Core::DoMultiThreading), RGB(255, 0, 0), TRANSPARENT);
-				Gdi->DrawStringA(20, 160, PhysicsEngineStr + std::to_string(TerraPGE::DoPhysics), RGB(255, 0, 0), TRANSPARENT);
+				Gdi->DrawStringA(20, 160, SimdAccelStr + std::to_string(TerraPGE::Core::SimdAcceleration), RGB(255, 0, 0), TRANSPARENT);
+				Gdi->DrawStringA(20, 180, PhysicsEngineStr + std::to_string(TerraPGE::DoPhysics), RGB(255, 0, 0), TRANSPARENT);
 
 			}
 			else if (DebugMenuTab == 2)
@@ -680,8 +684,8 @@ class ExampleScene : public TerraPGE::Scene
 
 		if (this->Paused)
 		{
-			static std::string PauseTitle = "Paused";
-			Gdi->DrawStringA(TerraPGE::Core::sx / 2, TerraPGE::Core::sy / 2, PauseTitle, RGB(255, 255, 255), TRANSPARENT);
+			const static std::string PauseTitle = "Paused";
+			TerraPGE::Renderer::RenderingCore::RenderFormattedText(TerraPGE::Core::sx / 2, TerraPGE::Core::sy / 2, PauseTitle, RGB(255, 255, 255), TRANSPARENT);
 		}
 
 		DrawCrosshair(Gdi);

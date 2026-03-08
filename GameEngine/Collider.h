@@ -2,6 +2,7 @@
 #include "Math.h"
 #include "ObjectTransform.h"
 #include "Mesh.h"
+#include "RayCaster.h"
 
 #define ICE_KINETIC_FRICTION 0.03
 #define STEEL_KINETIC_FRICTION 0.15
@@ -33,8 +34,8 @@ class RigidBody
 {
 public:
 	bool IsGrounded = false;
-	float mass = 5.0;   // kg
-	float restitution = 0.1f;  // bounce factor [0–1]
+	float mass = 20.0;   // kg
+	float restitution = 0.01f;  // bounce factor [0–1]
     float KineticFriction = WOOD_KINETIC_FRICTION;
     float StaticFriction = WOOD_STATIC_FRICTION;
     float Drag = 0.0f;
@@ -97,10 +98,10 @@ struct CapsuleColliderParams
 
 class Collider
 {
+    ObjectTransform* Transform = nullptr;
 public:
 	ColliderType type;
 	RigidBody body; // maybe just a pointer to the renderable (or mesh) rigidbody
-    ObjectTransform* Transform = nullptr;
 	bool PhysicsEnabled = false;
 	// TODO Breaak these up to seperate classes use polymorphism prolly
 	SphereColliderParams  _sphereParams;
@@ -108,10 +109,17 @@ public:
 	OBBColliderParams     _OBBParams;
 	CapsuleColliderParams _capsuleParams;
 
-	Collider()
+
+    Collider() = delete;
+
+
+	Collider(ObjectTransform* Transform)
 	{
 		this->PhysicsEnabled = false;
+        this->Transform = Transform;
+        this->type = ColliderType::None;
 	}
+
 
 	Collider(RigidBody body, ColliderType Type, ObjectTransform* Transform, void* Params = nullptr)
 	{
@@ -157,15 +165,31 @@ public:
 
 	bool TestCollision(const Collider* other)  const
 	{
+        if (other == nullptr)
+            return false;
+
         switch (this->type)
         {
-        case ColliderType::Sphere:   return this->TestSphere(other);
-        case ColliderType::AABB:     return this->TestAABB(other);
-        case ColliderType::OBB:      return this->TestOBB(other);
-        case ColliderType::Capsule:  return this->TestCapsule(other);
-        default: return false;
+            case ColliderType::Sphere:   return this->TestSphere(other);
+            case ColliderType::AABB:     return this->TestAABB(other);
+            case ColliderType::OBB:      return this->TestOBB(other);
+            case ColliderType::Capsule:  return this->TestCapsule(other);
+            default: return false;
         }
 	}
+
+
+    bool TestCollision(const Ray* ray, RaycastHit* OutHit)  const
+    {
+        switch (this->type)
+        {
+            case ColliderType::Sphere:   return RayIntersectsSphere(*ray, this->GetPosition() + this->_sphereParams.Offset, _sphereParams.radius, OutHit);
+            case ColliderType::AABB:     return RayIntersectsAABB(*ray, this->GetPosition() + this->_AABBParams.offset, _AABBParams.halfExtents * this->GetParentScale(), OutHit);
+            case ColliderType::OBB:      return RayIntersectsOBB(*ray, this->GetPosition() + this->_OBBParams.offset, _OBBParams.halfExtents * this->GetParentScale(), _OBBParams.orientation, OutHit);
+            case ColliderType::Capsule:  return RayIntersectsCapsule(*ray, this->GetPosition() + this->_capsuleParams.offset, _capsuleParams.axis,  _capsuleParams.radius, OutHit);
+            default: return false;
+        }
+    }
 
 
     static bool TestCollision(const Collider* A, const Collider* B) 
@@ -239,6 +263,42 @@ public:
     }
 
 
+    Vec3 GetPosition() const
+    {
+        return this->Transform->GetWorldPosition();
+    }
+
+
+    Vec3 GetWorldMatrix() const
+    {
+        return this->Transform->GetWorldPosition();
+    }
+
+
+    Vec3 GetEulerAngles() const 
+    {
+        return this->Transform->GetWorldRotation();
+    }
+
+
+    void SetEulerAngles(const Vec3& NewAngles)
+    {
+        this->Transform->SetWorldEulerAngles(NewAngles);
+    }
+
+
+    void SetPosition(const Vec3& Pos)
+    {
+        this->Transform->SetWorldPosition(Pos);
+    }
+
+
+    Vec3 GetParentScale() const 
+    {
+        return this->Transform->GetLocalScale();
+    }
+
+
     //static OBBColliderParams CalculateOBB(const std::vector<Triangle>& triangles)
     //{
     //    // 1. Compute covariance matrix
@@ -252,6 +312,7 @@ public:
     //        }
     //    mean = mean / float(count);
 
+
     //    float cov[3][3] = { 0 };
     //    for (const auto& tri : triangles)
     //        for (int i = 0; i < 3; i++)
@@ -262,17 +323,21 @@ public:
     //            cov[2][0] += p.z * p.x; cov[2][1] += p.z * p.y; cov[2][2] += p.z * p.z;
     //        }
 
+
     //    // 2. Divide by count
     //    for (int r = 0; r < 3; r++)
     //        for (int c = 0; c < 3; c++)
     //            cov[r][c] /= float(count);
 
+
     //    // 3. Eigenvectors of covariance = principal axes (for simplicity, assume you have a function)
     //    Matrix3x3 axes = Eigenvectors(cov); // TODO: implement or use library
+
 
     //    // 4. Project points onto axes to get min/max along each
     //    Vec3 minP(FLT_MAX, FLT_MAX, FLT_MAX);
     //    Vec3 maxP(-FLT_MAX, -FLT_MAX, -FLT_MAX);
+
 
     //    for (const auto& tri : triangles)
     //        for (int i = 0; i < 3; i++)
@@ -283,10 +348,12 @@ public:
     //                (tri.Points[i] - mean).xyz().Dot(axes[2])
     //            );
 
+
     //            minP.x = std::min(minP.x, pLocal.x); maxP.x = std::max(maxP.x, pLocal.x);
     //            minP.y = std::min(minP.y, pLocal.y); maxP.y = std::max(maxP.y, pLocal.y);
     //            minP.z = std::min(minP.z, pLocal.z); maxP.z = std::max(maxP.z, pLocal.z);
     //        }
+
 
     //    OBBColliderParams result;
     //    result.offset = mean + axes[0] * ((minP.x + maxP.x) * 0.5f)     
@@ -311,6 +378,7 @@ public:
     //        }
     //    mean = mean / float(count);
 
+
     //    float cov[3][3] = { 0 };
     //    for (const auto& tri : triangles)
     //        for (int i = 0; i < 3; i++)
@@ -321,13 +389,16 @@ public:
     //            cov[2][0] += p.z * p.x; cov[2][1] += p.z * p.y; cov[2][2] += p.z * p.z;
     //        }
 
+
     //    for (int r = 0; r < 3; r++)
     //        for (int c = 0; c < 3; c++)
     //            cov[r][c] /= float(count);
 
+
     //    // 2. Compute eigenvectors -> choose eigenvector with largest eigenvalue as axis
     //    Matrix3x3 axes = Eigenvectors(cov);
     //    Vec3 axis = axes[0]; // assume axes[0] corresponds to largest eigenvalue
+
 
     //    // 3. Project points onto axis to get height
     //    float minProj = FLT_MAX, maxProj = -FLT_MAX;
@@ -340,10 +411,12 @@ public:
     //            minProj = std::min(minProj, proj);
     //            maxProj = std::max(maxProj, proj);
 
+
     //            // distance to axis for radius
     //            Vec3 closestPoint = mean + axis * proj;
     //            radiusSq = std::max(radiusSq, (tri.Points[i] - closestPoint).xyz().LengthSquared());
     //        }
+
 
     //    CapsuleColliderParams result;
     //    result.axis = axis;
@@ -649,173 +722,6 @@ public:
         return distSq <= r * r;
     }
 
-
-    static inline bool RayVSphere(const Vec3& ro, const Vec3& rd, const Vec3& c, float r, float& t)
-    {
-        Vec3 oc = ro - c;
-        float b = oc.Dot(rd);
-        float cval = oc.LengthSquared() - r * r;
-        float disc = b * b - cval;
-        if (disc < 0) return false;
-
-        t = -b - sqrtf(disc);
-        return t >= 0;
-    }
-
-
-    static inline bool RayVAABB(const Vec3& ro, const Vec3& rd, const Vec3& bPos, const Vec3& e, float& t)
-    {
-        float tmin = (bPos.x - e.x - ro.x) / rd.x;
-        float tmax = (bPos.x + e.x - ro.x) / rd.x;
-        if (tmin > tmax) std::swap(tmin, tmax);
-
-        float tymin = (bPos.y - e.y - ro.y) / rd.y;
-        float tymax = (bPos.y + e.y - ro.y) / rd.y;
-        if (tymin > tymax) std::swap(tymin, tymax);
-
-        if ((tmin > tymax) || (tymin > tmax))
-            return false;
-
-        if (tymin > tmin)
-            tmin = tymin;
-        if (tymax < tmax)
-            tmax = tymax;
-
-        float tzmin = (bPos.z - e.z - ro.z) / rd.z;
-        float tzmax = (bPos.z + e.z - ro.z) / rd.z;
-        if (tzmin > tzmax) std::swap(tzmin, tzmax);
-
-        if ((tmin > tzmax) || (tzmin > tmax))
-            return false;
-
-        if (tzmin > tmin)
-            tmin = tzmin;
-        if (tzmax < tmax)
-            tmax = tzmax;
-
-        t = tmin >= 0 ? tmin : tmax; // pick first intersection in front of ray
-        return t >= 0;
-    }
-
-
-    static inline bool RayOBB(const Vec3& rayOrig, const Vec3& rayDir, const Vec3& obbPos, const Vec3& halfExt, const Matrix3x3& axes, float& tOut)
-    {
-        // Transform to OBB local space
-        Vec3 p = rayOrig - obbPos;
-        Vec3 localOrig(
-            p.Dot(axes[0]),
-            p.Dot(axes[1]),
-            p.Dot(axes[2])
-        );
-
-        Vec3 localDir(
-            rayDir.Dot(axes[0]),
-            rayDir.Dot(axes[1]),
-            rayDir.Dot(axes[2])
-        );
-
-        // Ray vs AABB test in local space
-        float tMin = 0.0f;
-        float tMax = 1e9f;
-
-        for (int i = 0; i < 3; i++)
-        {
-            float o = localOrig[i];
-            float d = localDir[i];
-            float minB = -halfExt[i];
-            float maxB = halfExt[i];
-
-            if (fabs(d) < 1e-6f)
-            {
-                if (o < minB || o > maxB) return false;
-            }
-            else
-            {
-                float t1 = (minB - o) / d;
-                float t2 = (maxB - o) / d;
-                if (t1 > t2) std::swap(t1, t2);
-
-                if (t1 > tMin) tMin = t1;
-                if (t2 < tMax) tMax = t2;
-
-                if (tMin > tMax) return false;
-            }
-        }
-
-        tOut = tMin;
-        return true;
-    }
-
-
-    static inline bool RayCapsule(const Vec3& rayOrig, const Vec3& rayDir, const Vec3& capPos, float radius, float halfH, float& tOut)
-    {
-        // Capsule segment endpoints
-        Vec3 a = CapsuleSegmentA(capPos, halfH);
-        Vec3 b = CapsuleSegmentB(capPos, halfH);
-        Vec3 ab = b - a;
-        float abLenSq = ab.Dot(ab);
-
-        // Compute the closest point between ray and the capsule axis segment
-        Vec3 ao = rayOrig - a;
-
-        float dDotAB = rayDir.Dot(ab);
-        float aoDotAB = ao.Dot(ab);
-
-        float A = abLenSq - dDotAB * dDotAB;
-        float B = abLenSq * ao.Dot(rayDir) - aoDotAB * dDotAB;
-        float C = abLenSq * ao.Dot(ao) - aoDotAB * aoDotAB - radius * radius * abLenSq;
-
-        // Quadratic discriminant
-        float disc = B * B - A * C;
-        if (disc < 0.0f) return false;
-
-        float sqrtD = sqrtf(disc);
-        float t = (-B - sqrtD) / A;
-        if (t < 0.0f) return false;
-
-        // Check if closest point lies within cylinder *segment*
-        float proj = aoDotAB + t * dDotAB;
-        if (proj < 0.0f || proj > abLenSq)
-        {
-            // Check spherical caps instead
-            float tSphere;
-
-            // Hit sphere at A
-            Vec3 ao2 = rayOrig - a;
-            float B2 = rayDir.Dot(ao2);
-            float C2 = ao2.Dot(ao2) - radius * radius;
-            float disc2 = B2 * B2 - C2;
-            if (disc2 >= 0.0f)
-            {
-                tSphere = -B2 - sqrtf(disc2);
-                if (tSphere >= 0.0f)
-                {
-                    tOut = tSphere;
-                    return true;
-                }
-            }
-
-            // Hit sphere at B
-            Vec3 bo2 = rayOrig - b;
-            float B3 = rayDir.Dot(bo2);
-            float C3 = bo2.Dot(bo2) - radius * radius;
-            float disc3 = B3 * B3 - C3;
-            if (disc3 >= 0.0f)
-            {
-                tSphere = -B3 - sqrtf(disc3);
-                if (tSphere >= 0.0f)
-                {
-                    tOut = tSphere;
-                    return true;
-                }
-            }
-
-            return false;
-        }
-
-        tOut = t;
-        return true;
-    }
 private:
 
     bool TestSphere(const Collider* o)  const
@@ -861,6 +767,8 @@ private:
     bool TestAABB(const Collider* o) const
     {
         Vec3 p1 = Transform->GetWorldPosition() + _AABBParams.offset;
+        Vec3 e1 = _AABBParams.halfExtents * this->GetParentScale();
+        Vec3 Scale = o->GetParentScale();
 
         switch (o->type)
         {
@@ -869,31 +777,36 @@ private:
                 o->Transform->GetWorldPosition() + o->_sphereParams.Offset,
                 o->_sphereParams.radius,
                 p1,
-                _AABBParams.halfExtents
+                e1
             );
 
         case ColliderType::AABB:
             return AABBvAABB(
-                p1, _AABBParams.halfExtents,
-                o->Transform->GetWorldPosition() + o->_AABBParams.offset,
-                o->_AABBParams.halfExtents
+                p1, e1,
+                this->GetPosition() + o->_AABBParams.offset,
+                o->_AABBParams.halfExtents * Scale
             );
 
         case ColliderType::OBB:
             return AABBvOBB(
-                p1, _AABBParams.halfExtents,
+                p1, _AABBParams.halfExtents * this->GetParentScale(),
                 o->Transform->GetWorldPosition() + o->_OBBParams.offset,
-                o->_OBBParams.halfExtents,
+                e1,
                 o->_OBBParams.orientation
             );
 
         case ColliderType::Capsule:
             return AABBvCapsule(
-                p1, _AABBParams.halfExtents,
+                p1, e1,
                 o->Transform->GetWorldPosition() + o->_capsuleParams.offset,
                 o->_capsuleParams.radius,
                 o->_capsuleParams.halfHeight
             );
+        default:
+            // replace TODO
+            throw(0xEE);
+            //TerraPGE::Core::LogError("[Collision]", "Invalid Collider Type!", 1);
+            break;
         }
 
         return false;

@@ -23,6 +23,14 @@
 #include "VectorMath.h"
 #include "MatrixMath.h"
 
+struct Ray
+{
+	Vec3 origin;
+	Vec3 direction;
+	Ray(const Vec3& o, const Vec3& d) : origin(o), direction(d.Normalized()) {}
+};
+
+
 Vec3 Vec3::operator * (const Matrix& m) const
 {
 	// For row-Vector, row-major, left handed storage:
@@ -91,10 +99,10 @@ Matrix Matrix::CreateScalarMatrix(const Vec3& Scalar)
 {
 	Matrix Out;
 
-	Out.fMatrix[0][0] = Scalar.x;
-	Out.fMatrix[1][1] = Scalar.y;
-	Out.fMatrix[2][2] = Scalar.z;
-	Out.fMatrix[3][3] = 1.f;
+	Out._matrix[0][0] = Scalar.x;
+	Out._matrix[1][1] = Scalar.y;
+	Out._matrix[2][2] = Scalar.z;
+	Out._matrix[3][3] = 1.f;
 
 	return Out;
 }
@@ -142,19 +150,19 @@ Matrix Matrix::CreateRotationMatrix(const Vec3& RotationDeg) // pitch yaw roll
 //void Matrix::CalcScalarMatrix(const Vec3& Scalar)
 //{
 //	this->MakeIdentity();
-//	this->fMatrix[0][0] = 1.f * Scalar.x;
-//	this->fMatrix[1][1] = 1.f * Scalar.y;
-//	this->fMatrix[2][2] = 1.f * Scalar.z;
-//	this->fMatrix[3][3] = 1.f;
+//	this->_matrix[0][0] = 1.f * Scalar.x;
+//	this->_matrix[1][1] = 1.f * Scalar.y;
+//	this->_matrix[2][2] = 1.f * Scalar.z;
+//	this->_matrix[3][3] = 1.f;
 //}
 //
 //
 //void Matrix::CalcTranslationMatrix(const Vec3& Translation)
 //{
 //	this->MakeIdentity();
-//	this->fMatrix[3][0] = Translation.x;
-//	this->fMatrix[3][1] = Translation.y;
-//	this->fMatrix[3][2] = Translation.z;
+//	this->_matrix[3][0] = Translation.x;
+//	this->_matrix[3][1] = Translation.y;
+//	this->_matrix[3][2] = Translation.z;
 //}
 //
 
@@ -179,19 +187,19 @@ Matrix Matrix::CreateRotationMatrix(const Vec3& RotationDeg) // pitch yaw roll
 
 //void __fastcall Matrix::MakeOrthoMatrix(const float& Left, const float& Right, const float& Bottom, const float& Top, const float& Near, const float& Far)
 //{
-//	this->fMatrix[0][0] = 2.0f / (Right - Left);
-//	this->fMatrix[1][1] = 2.0f / (Top - Bottom);
-//	this->fMatrix[2][2] = -2.0f / (Far - Near);
-//	this->fMatrix[3][3] = 1.0f;
+//	this->_matrix[0][0] = 2.0f / (Right - Left);
+//	this->_matrix[1][1] = 2.0f / (Top - Bottom);
+//	this->_matrix[2][2] = -2.0f / (Far - Near);
+//	this->_matrix[3][3] = 1.0f;
 //
-//	this->fMatrix[3][0] = -(Right + Left) / (Right - Left);
-//	this->fMatrix[3][1] = -(Top + Bottom) / (Top - Bottom);
-//	this->fMatrix[3][2] = -(Far + Near) / (Far - Near);
+//	this->_matrix[3][0] = -(Right + Left) / (Right - Left);
+//	this->_matrix[3][1] = -(Top + Bottom) / (Top - Bottom);
+//	this->_matrix[3][2] = -(Far + Near) / (Far - Near);
 //
 //	// Zero out the rest of the matrix
-//	this->fMatrix[0][1] = this->fMatrix[0][2] = this->fMatrix[0][3] = 0.0f;
-//	this->fMatrix[1][0] = this->fMatrix[1][2] = this->fMatrix[1][3] = 0.0f;
-//	this->fMatrix[2][0] = this->fMatrix[2][1] = this->fMatrix[2][3] = 0.0f;
+//	this->_matrix[0][1] = this->_matrix[0][2] = this->_matrix[0][3] = 0.0f;
+//	this->_matrix[1][0] = this->_matrix[1][2] = this->_matrix[1][3] = 0.0f;
+//	this->_matrix[2][0] = this->_matrix[2][1] = this->_matrix[2][3] = 0.0f;
 //}
 //
 //
@@ -277,47 +285,52 @@ Matrix Matrix::CalcOrthoMatrix(const float& Left, const float& Right, const floa
 {
 	Matrix OrthoMat;
 
-	OrthoMat.fMatrix[0][0] = 2.0f / (Right - Left);
-	OrthoMat.fMatrix[1][1] = 2.0f / (Top - Bottom);
-	OrthoMat.fMatrix[2][2] = 1.0f / (Far - Near);
-	OrthoMat.fMatrix[3][3] = 1.0f;
+	OrthoMat._matrix[0][0] = 2.0f / (Right - Left);
+	OrthoMat._matrix[1][1] = 2.0f / (Top - Bottom);
+	OrthoMat._matrix[2][2] = 1.0f / (Far - Near);
+	OrthoMat._matrix[3][3] = 1.0f;
 
-	OrthoMat.fMatrix[3][0] = -(Right + Left) / (Right - Left);
-	OrthoMat.fMatrix[3][1] = -(Top + Bottom) / (Top - Bottom);
-	OrthoMat.fMatrix[3][2] = -Near / (Far - Near);
+	OrthoMat._matrix[3][0] = -(Right + Left) / (Right - Left);
+	OrthoMat._matrix[3][1] = -(Top + Bottom) / (Top - Bottom);
+	OrthoMat._matrix[3][2] = -Near / (Far - Near);
 
 	// Zero out the rest of the matrix
-	OrthoMat.fMatrix[0][1] = OrthoMat.fMatrix[0][2] = OrthoMat.fMatrix[0][3] = 0.0f;
-	OrthoMat.fMatrix[1][0] = OrthoMat.fMatrix[1][2] = OrthoMat.fMatrix[1][3] = 0.0f;
-	OrthoMat.fMatrix[2][0] = OrthoMat.fMatrix[2][1] = OrthoMat.fMatrix[2][3] = 0.0f;
+	OrthoMat._matrix[0][1] = OrthoMat._matrix[0][2] = OrthoMat._matrix[0][3] = 0.0f;
+	OrthoMat._matrix[1][0] = OrthoMat._matrix[1][2] = OrthoMat._matrix[1][3] = 0.0f;
+	OrthoMat._matrix[2][0] = OrthoMat._matrix[2][1] = OrthoMat._matrix[2][3] = 0.0f;
 
 	return OrthoMat;
 }
 
 
-__inline Matrix Matrix::InverseSRT() const
+
+
+
+
+
+/*__inline Matrix Matrix::InverseSRT() const
 {
 	Matrix out;
 
 	// Extract scale
-	float sx = Vec3(fMatrix[0][0], fMatrix[0][1], fMatrix[0][2]).Magnitude();
-	float sy = Vec3(fMatrix[1][0], fMatrix[1][1], fMatrix[1][2]).Magnitude();
-	float sz = Vec3(fMatrix[2][0], fMatrix[2][1], fMatrix[2][2]).Magnitude();
+	float sx = Vec3(_matrix[0][0], _matrix[0][1], _matrix[0][2]).Magnitude();
+	float sy = Vec3(_matrix[1][0], _matrix[1][1], _matrix[1][2]).Magnitude();
+	float sz = Vec3(_matrix[2][0], _matrix[2][1], _matrix[2][2]).Magnitude();
 
 	// Rotation = normalize basis
-	Vec3 X = Vec3(fMatrix[0][0], fMatrix[0][1], fMatrix[0][2]) / sx;
-	Vec3 Y = Vec3(fMatrix[1][0], fMatrix[1][1], fMatrix[1][2]) / sy;
-	Vec3 Z = Vec3(fMatrix[2][0], fMatrix[2][1], fMatrix[2][2]) / sz;
+	Vec3 X = Vec3(_matrix[0][0], _matrix[0][1], _matrix[0][2]) / sx;
+	Vec3 Y = Vec3(_matrix[1][0], _matrix[1][1], _matrix[1][2]) / sy;
+	Vec3 Z = Vec3(_matrix[2][0], _matrix[2][1], _matrix[2][2]) / sz;
 
 	// Build rotation inverse (transpose)
-	out.fMatrix[0][0] = X.x; out.fMatrix[0][1] = Y.x; out.fMatrix[0][2] = Z.x;
-	out.fMatrix[1][0] = X.y; out.fMatrix[1][1] = Y.y; out.fMatrix[1][2] = Z.y;
-	out.fMatrix[2][0] = X.z; out.fMatrix[2][1] = Y.z; out.fMatrix[2][2] = Z.z;
+	out._matrix[0][0] = X.x; out._matrix[0][1] = Y.x; out._matrix[0][2] = Z.x;
+	out._matrix[1][0] = X.y; out._matrix[1][1] = Y.y; out._matrix[1][2] = Z.y;
+	out._matrix[2][0] = X.z; out._matrix[2][1] = Y.z; out._matrix[2][2] = Z.z;
 
 	// Apply inverse scale
-	out.fMatrix[0][0] /= sx;
-	out.fMatrix[1][1] /= sy;
-	out.fMatrix[2][2] /= sz;
+	out._matrix[0][0] /= sx;
+	out._matrix[1][1] /= sy;
+	out._matrix[2][2] /= sz;
 
 	// Invert translation
 	Vec3 t = this->GetTranslation();
@@ -325,17 +338,22 @@ __inline Matrix Matrix::InverseSRT() const
 
 	// Compute transformed translation
 	Vec3 newT;
-	newT.x = invT.Dot(Vec3(out.fMatrix[0][0], out.fMatrix[1][0], out.fMatrix[2][0]));
-	newT.y = invT.Dot(Vec3(out.fMatrix[0][1], out.fMatrix[1][1], out.fMatrix[2][1]));
-	newT.z = invT.Dot(Vec3(out.fMatrix[0][2], out.fMatrix[1][2], out.fMatrix[2][2]));
+	newT.x = invT.Dot(Vec3(out._matrix[0][0], out._matrix[1][0], out._matrix[2][0]));
+	newT.y = invT.Dot(Vec3(out._matrix[0][1], out._matrix[1][1], out._matrix[2][1]));
+	newT.z = invT.Dot(Vec3(out._matrix[0][2], out._matrix[1][2], out._matrix[2][2]));
 
-	out.fMatrix[3][0] = newT.x;
-	out.fMatrix[3][1] = newT.y;
-	out.fMatrix[3][2] = newT.z;
-	out.fMatrix[3][3] = 1.0f;
+	out._matrix[3][0] = newT.x;
+	out._matrix[3][1] = newT.y;
+	out._matrix[3][2] = newT.z;
+	out._matrix[3][3] = 1.0f;
 
 	return out;
 }
+*/
+
+
+
+
 
 /*
 __inline void Matrix::Decompose(Vec3& outScale, Vec3& outEuler, Vec3& outPos) const
@@ -347,9 +365,9 @@ __inline void Matrix::Decompose(Vec3& outScale, Vec3& outEuler, Vec3& outPos) co
 	Matrix M = this->GetBasis();
 
 	// 3. Extract scale from the basis vectors (since M = S*R)
-	Vec3 X(M.fMatrix[0][0], M.fMatrix[0][1], M.fMatrix[0][2]);
-	Vec3 Y(M.fMatrix[1][0], M.fMatrix[1][1], M.fMatrix[1][2]);
-	Vec3 Z(M.fMatrix[2][0], M.fMatrix[2][1], M.fMatrix[2][2]);
+	Vec3 X(M._matrix[0][0], M._matrix[0][1], M._matrix[0][2]);
+	Vec3 Y(M._matrix[1][0], M._matrix[1][1], M._matrix[1][2]);
+	Vec3 Z(M._matrix[2][0], M._matrix[2][1], M._matrix[2][2]);
 
 	outScale = Vec3(
 		X.Magnitude(),
@@ -363,9 +381,9 @@ __inline void Matrix::Decompose(Vec3& outScale, Vec3& outEuler, Vec3& outPos) co
 	if (outScale.z != 0) Z = Z / outScale.z;
 
 	Matrix R = Matrix::CreateIdentity();
-	R.fMatrix[0][0] = X.x; R.fMatrix[0][1] = X.y; R.fMatrix[0][2] = X.z;
-	R.fMatrix[1][0] = Y.x; R.fMatrix[1][1] = Y.y; R.fMatrix[1][2] = Y.z;
-	R.fMatrix[2][0] = Z.x; R.fMatrix[2][1] = Z.y; R.fMatrix[2][2] = Z.z;
+	R._matrix[0][0] = X.x; R._matrix[0][1] = X.y; R._matrix[0][2] = X.z;
+	R._matrix[1][0] = Y.x; R._matrix[1][1] = Y.y; R._matrix[1][2] = Y.z;
+	R._matrix[2][0] = Z.x; R._matrix[2][1] = Z.y; R._matrix[2][2] = Z.z;
 
 	// 5. Convert R to Euler
 	outEuler = R.ExtractEuler(); // You must implement this
@@ -413,7 +431,7 @@ public:
 			return 1.055f * powf(c, 1.0f / 2.4f) - 0.055f;
 	}
 
-	inline float SRGBToLinear_Channel(float c)
+	static inline float SRGBToLinear_Channel(float c)
 	{
 		c = std::clamp(c, 0.0f, 1.0f);
 

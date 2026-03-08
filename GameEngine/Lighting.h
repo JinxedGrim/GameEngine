@@ -2,7 +2,6 @@
 #include "Math.h"
 #include "GameObject.h"
 
-
 //TODO
 // 1. Finish other lighting types
 // 2. add getters/setters to maintain vp mat (IsVpDirty)
@@ -19,6 +18,8 @@ class LightObject : public GameObject
 {
 public:
 
+	float ShadowMapBias = 0.0000005f;
+
 	LightObject() = delete;
 
 	bool IsVpDirty = false;
@@ -32,6 +33,7 @@ public:
 //		float roll = 0.0f;
 //		return Vec3(pitch, yaw, roll);
 //	}
+
 
 	virtual Vec3 GetLightDirection()
 	{
@@ -63,6 +65,7 @@ public:
 		this->IsVpDirty = true;
 	}
 
+
 	LightObject(Vec3 Pos, Vec3 LightDir, Vec3 LightColor, float AmbientCoeff, float DiffuseCoeff, float SpecularCoeff, Mesh LightMesh, float Near = 0.1f, float Far = 150.0f) : GameObject(Vec3(1.0f, 1.0f, 1.0f), Vec3(0, 0, 0), Pos)
 	{
 		this->Color = LightColor;
@@ -78,13 +81,21 @@ public:
 		this->Render = false;
 	}
 
+
 	virtual void CalcVpMats() = 0;
+
 
 	virtual int SelectVpMat(Vec3 FragPos) = 0;
 
+
 	virtual Vec4 CalcNdc(Vec4 InterpolatedPos) = 0;
 
+
+	virtual __inline bool SampleShadowMap(float* ShadowMap, __int64 W, __int64 H, Vec3 WorldPos, float* ShadowDepth, float* ShadowMapDepth) = 0;
+
+
 	LightTypes Type = LightTypes::DirectionalLight;
+
 
 	Vec3 UpVector = Vec3(0, 1, 0);
 	Vec3 Color = Vec3(253, 251, 211);
@@ -100,20 +111,24 @@ public:
 	float SpecularCoeff = 0.5f; // How much the lights color will combine with the objects specular color
 	float DiffuseCoeff = 0.25f; // How much the light will combine with the objects diffuse mat color
 
+
 	__inline void SetAmbientCoeff(const float& NewAmb)
 	{
 		this->AmbientCoeff = NewAmb;
 	}
+
 
 	__inline void SetDiffuseCoeff(const float& NewDiff)
 	{
 		this->DiffuseCoeff = NewDiff;
 	}
 
+
 	__inline void SetSpecularCoeff(const float& NewSpec)
 	{
 		this->SpecularCoeff = NewSpec;
 	}
+
 
 	__inline void SetFar(const float& NewFar)
 	{
@@ -121,12 +136,14 @@ public:
 		this->IsVpDirty = true;
 	}
 
+
 	__inline void SetNear(const float& NewNear)
 	{
 		this->Near = NewNear;
 		this->IsVpDirty = true;
 	}
 
+	
 	float Far = 100.0f;
 	float Near = 0.1f;
 };
@@ -218,6 +235,7 @@ public:
 		this->IsVpDirty = false;
 	}
 
+
 	virtual Vec3 GetLightDirection() override
 	{
 		return this->LightDirection;
@@ -230,9 +248,47 @@ public:
 		return Matrix::CalcViewMatrix(lightPos, CenterPoint, Vec3(0, 1, 0));
 	}
 
+
 	Matrix GetProjectionMatrix()
 	{
 		return Matrix::CalcOrthoMatrix(Left, Right, Bottom, Top, Near, Far);
+	}
+
+
+	__inline bool SampleShadowMap(float* ShadowMap, __int64 W, __int64 H, Vec3 WorldPos, float* ShadowDepth, float* ShadowMapDepth) override
+	{
+		this->CalcVpMats();
+
+		// Transform interpolated world position to light clip-space
+		Vec4 LightClip = Vec4(WorldPos, 1.0f) * this->VpMatrices[0];
+
+		// Divide by W, map to shadow map
+		Vec3 ShadowUV;
+
+		float invW = 1.0f / LightClip.w;
+
+		ShadowUV.x = LightClip.x * invW;
+		ShadowUV.y = LightClip.y * invW;
+		ShadowUV.z = LightClip.z * invW;
+
+		// NDC x,y -> [-1,1] -> [0,1]
+		ShadowUV.x = ShadowUV.x * 0.5f + 0.5f;
+		ShadowUV.y = ShadowUV.y * 0.5f + 0.5f; // flip Y
+
+		if ((ShadowUV.x < 0 || ShadowUV.x > 1) || ((ShadowUV.y < 0 || ShadowUV.y > 1)))
+			return false;
+
+		int ShadowX = int(ShadowUV.x * W);
+		int ShadowY = int(ShadowUV.y * H);
+
+		// 5. Sample shadow map
+		int MapIdx = ContIdx(ShadowX, ShadowY, W);
+
+		// TODO BAD INTERP     Core::ShadowMap[MapIdx]
+		*ShadowMapDepth = ShadowMap[MapIdx];
+		*ShadowDepth = ShadowUV.z + ShadowMapBias;
+
+		return *ShadowDepth > *ShadowMapDepth;
 	}
 
 
@@ -327,6 +383,11 @@ public:
 
 		return InterpolatedPos * this->VpMatrices[idx];
 	}
+
+	__inline bool SampleShadowMap(float* ShadowMap, __int64 W, __int64 H, Vec3 WorldPos, float* ShadowDepth, float* ShadowMapDepth) override
+	{
+		return false;
+	}
 };
 
 
@@ -358,5 +419,10 @@ public:
 	__inline void CalcVpMat()
 	{
 
+	}
+
+	__inline bool SampleShadowMap(float* ShadowMap, __int64 W, __int64 H, Vec3 WorldPos, float* ShadowDepth, float* ShadowMapDepth) override
+	{
+		return false;
 	}
 };

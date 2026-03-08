@@ -107,6 +107,22 @@ class CPUID
 
 	}
 
+	static std::string GetProcessorName() 
+	{
+		char name[49] = { 0 }; // 48 chars + null terminator
+		uint32_t* ptr = reinterpret_cast<uint32_t*>(name);
+
+		for (unsigned i = 0; i < 3; ++i) {
+			CPUID cpu(0x80000002 + i);
+			ptr[i * 4 + 0] = cpu.EAX();
+			ptr[i * 4 + 1] = cpu.EBX();
+			ptr[i * 4 + 2] = cpu.ECX();
+			ptr[i * 4 + 3] = cpu.EDX();
+		}
+
+		return std::string(name);
+	}
+
 	SupportedInstructions GetSupportedInstructions()
 	{
 		SupportedInstructions Out;
@@ -146,6 +162,200 @@ class CPUID
 	const uint32_t& EDX() const { return regs[3]; }
 };
 
+namespace SIMDUtils
+{
+	// FOR SIMD FUNCTIONS CONVENTION IS AS FOLLOWS
+	// Prefixes:
+	//
+	// __mm__    -- SSE Instruction
+	// __mm256__ -- AVX Instruction
+	// __mm512__ -- AVX Instruction
+	// fm        -- FMA (fused multiply-add/subtract)
+	//
+	// Types:
+	//
+	// __m128   -- 128-bit vector of 4 floats
+	// __m128d  -- 128-bit vector of 2 doubles
+	// __m128i  -- 128-bit vector of integers
+	// __m256   -- 256-bit vector of 8 floats
+	// __m256i  -- 256-bit vector of integers
+	// __m512   -- 512-bit vector of 16 floats
+	//
+	// Operations:
+	//
+	// add      -- addition
+	// sub      -- subtraction
+	// mul      -- multiplication
+	// div      -- division
+	// sqrt     -- square root
+	// rsqrt    -- reciprocal square root (1/sqrt(x))
+	// rcp      -- reciprocal (1/x)
+	//
+	// fmadd    -- fused multiply-add: a*b + c
+	// fmsub    -- fused multiply-subtract: a*b - c
+	//
+	// and      -- bitwise AND
+	// or       -- bitwise OR
+	// xor      -- bitwise XOR
+	// andnot   -- bitwise AND NOT (a & ~b)
+	//
+	// cmp      -- compare
+	// cmpeq    -- compare equal
+	// cmpgt    -- compare greater
+	// cmplt    -- compare less
+	// cmpge    -- compare greater or equal
+	//
+	// shuffle  -- reorder vector elements
+	// permute  -- permute elements across lanes
+	// blend    -- select elements from two vectors based on mask
+	// alignr   -- align and shift bytes between two registers
+	// insert   -- insert element into vector
+	// extract  -- extract element from vector
+	// movelh   -- move low halves of two vectors together
+	// movehl   -- move high halves of two vectors together
+	//
+	// pack     -- shrink element size (with saturation if specified)
+	// unpack   -- interleave low / high halves of two vectors
+	//
+	// cvt      -- convert between types
+	// cvtt     -- convert with truncate (ignores fractional part)
+	//
+	// load     -- load vector from memory
+	// loadu    -- load unaligned vector from memory
+	// load_ps  -- load packed float
+	// load_si128 -- load 128-bit integer vector
+	// store    -- store vector to memory
+	// storeu   -- store unaligned vector
+	// stream   -- non-temporal (write directly to memory bypassing cache)
+	// maskload -- load with mask (only selected lanes)
+	// maskstore-- store with mask (only selected lanes)
+	//
+	// max/min  -- element-wise maximum/minimum
+	//
+	// Keywords:
+	//
+	// ps       -- packed single-precision float (4 in 128-bit, 8 in 256-bit, etc.)
+	// pd       -- packed double-precision float
+	// epi32    -- packed int32
+	// epi16    -- packed int16
+	// epi8     -- packed int8
+	// si128    -- integer 128-bit register
+	// ss       -- scalar single-precision float
+	// sd       -- scalar double-precision float
+
+
+
+
+
+	namespace SSE
+	{
+		static inline void LoadRGB4(const float* src, __m128& R, __m128& G, __m128& B)
+		{
+			R = _mm_setr_ps(src[0], src[3], src[6], src[9]);
+			G = _mm_setr_ps(src[1], src[4], src[7], src[10]);
+			B = _mm_setr_ps(src[2], src[5], src[8], src[11]);
+		}
+
+
+		static inline void ClampFloat4(__m128& Val, const __m128& Min, const __m128& Max)
+		{
+			Val = _mm_min_ps(Max, _mm_max_ps(Min, Val));
+		}
+
+
+		static inline void ClampRGBFloat4(__m128& R, __m128& G, __m128& B, const __m128& Min, const __m128& Max)
+		{
+			ClampFloat4(R, Min, Max);
+			ClampFloat4(G, Min, Max);
+			ClampFloat4(B, Min, Max);
+		}
+
+
+		static inline void RGB4ToByte(const __m128& InR, const __m128& InG, const __m128& InB, __m128i& OutR, __m128i& OutG, __m128i& OutB)
+		{
+			__m128 max255 = _mm_set1_ps(255.0f);
+			__m128 min0 = _mm_set1_ps(0.0f);
+
+			OutR = _mm_cvtps_epi32(InR);
+			OutG = _mm_cvtps_epi32(InG);
+			OutB = _mm_cvtps_epi32(InB);
+
+			OutR = _mm_packus_epi16(_mm_packs_epi32(OutR, _mm_setzero_si128()), _mm_setzero_si128());
+			OutG = _mm_packus_epi16(_mm_packs_epi32(OutG, _mm_setzero_si128()), _mm_setzero_si128());
+			OutB = _mm_packus_epi16(_mm_packs_epi32(OutB, _mm_setzero_si128()), _mm_setzero_si128());
+		}
+
+
+		static inline void RGBStoreBGR(const __m128i& Ri, const __m128i& Gi, const __m128i& Bi, unsigned __int8* Dst)
+		{
+			// store sequentially as B G R triplets
+			alignas(16) uint8_t rTmp[16], gTmp[16], bTmp[16];
+			_mm_storeu_si128((__m128i*)rTmp, Ri);
+			_mm_storeu_si128((__m128i*)gTmp, Gi);
+			_mm_storeu_si128((__m128i*)bTmp, Bi);
+
+			for (int i = 0; i < 4; i++)
+			{
+				Dst[i * 3 + 0] = bTmp[i];
+				Dst[i * 3 + 1] = gTmp[i];
+				Dst[i * 3 + 2] = rTmp[i];
+			}
+		}
+
+
+		static inline void GammaApproxSqrt(__m128& c)
+		{
+			const __m128 zero = _mm_set1_ps(0.0f);
+			const __m128 one = _mm_set1_ps(1.0f);
+
+			c = _mm_min_ps(one, _mm_max_ps(zero, c));
+
+			__m128 s1 = _mm_sqrt_ps(c);
+			__m128 s2 = _mm_sqrt_ps(s1);
+
+			const __m128 k1 = _mm_set1_ps(0.585122381f);
+			const __m128 k2 = _mm_set1_ps(0.783140355f);
+
+			__m128 term1 = _mm_mul_ps(s2, k1);
+			__m128 term2 = _mm_mul_ps(s1, k2);
+
+			c = _mm_add_ps(term1, term2);
+		}
+
+
+		static inline void SlowGamma(__m128& c)
+		{
+			const __m128 zero = _mm_set1_ps(0.0f);
+			const __m128 one = _mm_set1_ps(1.0f);
+			const __m128 threshold = _mm_set1_ps(0.0031308f);
+			const __m128 a = _mm_set1_ps(12.92f);
+			const __m128 b = _mm_set1_ps(1.055f);
+			const __m128 c055 = _mm_set1_ps(0.055f);
+
+			c = _mm_min_ps(one, _mm_max_ps(zero, c));
+
+			__m128 mask = _mm_cmple_ps(c, threshold);
+			__m128 linear = _mm_mul_ps(a, c);
+
+			// Non-linear portion (gamma 1/2.4)
+			float tmp[4];
+			_mm_storeu_ps(tmp, c);
+			for (int i = 0; i < 4; i++)
+				tmp[i] = 1.055f * powf(tmp[i], 1.0f / 2.4f) - 0.055f;
+			__m128 nonlinear = _mm_loadu_ps(tmp);
+
+			// Blend linear/non-linear
+			c = _mm_blendv_ps(nonlinear, linear, mask);
+		}
+
+
+		static inline void LinearToSRGB4(__m128& c)
+		{
+			GammaApproxSqrt(c);
+		}
+	}
+}
+
 class ThreadManager
 {
 	unsigned long long CoreCount;
@@ -156,8 +366,7 @@ class ThreadManager
 	std::mutex CoutStream;
 	std::condition_variable TaskConditionVar;
 	std::condition_variable QueueSzConditionVar;
-	std::atomic<size_t> TasksInProgress{ 0 };
-
+	alignas(64) std::atomic<size_t> TasksInProgress{ 0 };
 
 	void WorkerLoop()
 	{
@@ -177,10 +386,7 @@ class ThreadManager
 				}
 				else
 				{
-					QueueLock.unlock();
-					QueueSzConditionVar.notify_one();
-					QueueLock.lock();
-					this->TaskConditionVar.wait(QueueLock, [=]() mutable { return (!this->Queue.empty()) || this->JoinThreads; });
+					this->TaskConditionVar.wait(QueueLock, [this]() mutable { return (!this->Queue.empty()) || this->JoinThreads; });
 
 					if (this->JoinThreads)
 					{
@@ -196,9 +402,9 @@ class ThreadManager
 
 			if (Task)
 			{
-				TasksInProgress++;
+				TasksInProgress.fetch_add(1, std::memory_order_relaxed);
 				Task();
-				TasksInProgress--;
+				TasksInProgress.fetch_sub(1, std::memory_order_relaxed);
 				QueueSzConditionVar.notify_all(); // notify WaitUntilAllTasksFinished
 			}
 		}
@@ -210,7 +416,7 @@ class ThreadManager
 
 	ThreadManager()
 	{
-		this->CoreCount = std::thread::hardware_concurrency() - 1;
+		this->CoreCount = GetCpuCores();
 		this->ThreadMutex.lock();
 		this->ThreadPool.reserve(this->CoreCount);
 
@@ -238,20 +444,21 @@ class ThreadManager
 
 	static const int GetCpuCores()
 	{
-		return std::thread::hardware_concurrency();
+		return std::max(1u, std::thread::hardware_concurrency());
 	}
 
 	template<typename FunctionToCall, typename... Arguments>
 	void EnqueueTask(FunctionToCall&& Func, Arguments&&... Args)
 	{
-		auto BindedFunc = [=]() mutable
-		{
-			Func(std::forward<Arguments>(Args)...);
-		};
+		if (JoinThreads)
+			return;
 
-		this->QueueMutex.lock();
-		this->Queue.emplace(BindedFunc);
-		this->QueueMutex.unlock();
+		std::function<void()> task = std::bind(std::forward<FunctionToCall>(Func), std::forward<Arguments>(Args)...);
+		
+		{
+			std::lock_guard<std::mutex> lock(QueueMutex);
+			Queue.emplace(std::move(task));
+		}
 
 		this->TaskConditionVar.notify_one();
 	}

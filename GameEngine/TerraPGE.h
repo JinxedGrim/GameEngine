@@ -16,11 +16,16 @@
 // X. implement a prefab system
 // X. Fix physics ray cast for ground detection (is mesh local space needs to be world)
 // X. Bloom
+// X Add some PBR stuff (metallness, roughness)
 // X. Skybox sun sampling (color/intensity/exposure/etc)
 // X. Caclulate Vertex norms for all 3 vertices and store them
 // X. Better reosource management
 // X. Fix camera PointAt
-// X. PBR lighting
+// X. Full PBR lighting
+// X. Clear coat layers
+// X. Sub surface scattering
+// X. GGX 
+// X. IBL || IBL approxZ
 // X. Audio system 
 // X. Voice 
 // X. SpotLights
@@ -151,23 +156,21 @@ namespace TerraPGE
 
 
 		// Counters
-		MSG msg                   = { 0 };
-		double ElapsedTime        = 0.0;
-		double physicsAccumulator = 0.0;
-		CurrScene = FirstScene;
-
+		MSG msg                      = { 0 };
+		double ElapsedTime           = 0.0;
+		double physicsAccumulator    = 0.0;
+		LightObject** LightsToRender = nullptr;
+		CurrScene                    = FirstScene;
 		Renderable** RenderQueue                         = nullptr;
 		const std::vector<Renderable*>* SceneRenderQueue = nullptr;
-		LightObject** LightsToRender                     = nullptr;
 		const std::vector<LightObject*>* SceneLights     = nullptr;
-
 		std::vector<Renderable*> Roots;
-
-		SceneManager* _sceneManager = SceneManager::Create(CurrScene);
 
 		Wnd.RegisterRawInput();
 		Renderer::RenderingCore::PrepareRenderingBackend(Wnd);
 		Core::UpdateWindow(Wnd, &msg);
+		SceneManager* _sceneManager = SceneManager::Create(CurrScene);
+
 		UpdateLoadingScreen();
 		CurrScene->BeginScene(Wnd);
 		
@@ -203,9 +206,6 @@ namespace TerraPGE
 
 			Roots = CurrScene->GetRoots();
 
-			Renderable* Floor = nullptr;
-			RaycastHit FloorHit;
-
 			for (size_t idx = 0; idx < SceneLights->size(); idx++)
 			{
 				LightsToRender[idx] = SceneLights->at(idx);
@@ -230,23 +230,55 @@ namespace TerraPGE
 			// Run fixed update as many times as needed
 			while (physicsAccumulator >= PhysicsTick)
 			{
+				//TODO replace with a max constant
 				for (size_t idx = 0; idx < SceneRenderQueue->size(); idx++)
 				{
-					if(ApplyGravity)
-						for (size_t idx2 = 0; idx2 < SceneRenderQueue->size(); idx2++)
+					Renderable* Floor = nullptr;
+					RaycastHit FloorHit;
+					Collider* FloorCollider = nullptr;
+
+					if (!RenderQueue[idx]->collider.PhysicsEnabled)
+						continue;
+
+					if (ApplyGravity)
+					{
+						float minDistance = 9999.0f;
+
+						for (int idx2 = 0; idx2 < SceneRenderQueue->size(); idx2++)
 						{
-							Ray down(RenderQueue[idx]->Transform.GetWorldPosition(), Vec3(0, -1, 0));
+							if (idx == idx2)
+								continue;
+
+							Renderable* FloorCandidate = RenderQueue[idx2];
+							Matrix CandidateWorld = FloorCandidate->Transform.GetWorldMatrix();
+
+							Vec3 ObjectWorldPos = RenderQueue[idx]->Transform.GetWorldPosition();
+
+							//TODO Define somewhere / Derive from gravity derection
+							Vec3 WorldDown = Vec3(0.0f, -1.0f, 0.0f);
+
+							Ray down(ObjectWorldPos, WorldDown);
 							RaycastHit Out;
-							if (RaycastMesh(down, RenderQueue[idx]->mesh->Triangles, &Out))
+
+							//TODO Decide if i want this mesh based or collider based (collider  since physics? but mesh has better accuracy for falling)
+							//if (RaycastMesh(down, FloorCandidate->mesh->Triangles, &Out, &CandidateWorld))
+							if(FloorCandidate->collider.TestCollision(&down, &Out))
 							{
-								Floor = RenderQueue[idx];
-								FloorHit = Out;
+								if (Out.distance < minDistance)
+								{
+									Floor = FloorCandidate;
+									FloorCollider = &(FloorCandidate->collider);
+									FloorHit = Out;
+
+									minDistance = Out.distance;
+								}
 							}
 						}
+					}
 
 					if (RenderQueue[idx]->collider.PhysicsEnabled)
 					{
-						Physics::Integrate(&((RenderQueue[idx])->collider), PhysicsTick, Floor, &FloorHit);
+						Physics::Integrate(&((RenderQueue[idx])->collider), PhysicsTick, FloorCollider, &FloorHit);
 					}
 				}
 
@@ -261,8 +293,12 @@ namespace TerraPGE
 
 			CurrScene->MainCamera->Transform.WalkTransformChain();
 
-			if (!Core::DoMultiThreading)
+			if (!Core::DoMultiThreading && !Core::SimdAcceleration)
 				Renderer::RenderScene(CurrScene->MainCamera, RenderQueue, LightsToRender, SceneRenderQueue->size(), SceneLights->size(), CurrScene->SkyboxToRender);
+			else if (!Core::DoMultiThreading && Core::SimdAcceleration)
+			{
+				Renderer::SIMD::SSE::RenderScene(CurrScene->MainCamera, RenderQueue, LightsToRender, SceneRenderQueue->size(), SceneLights->size(), CurrScene->SkyboxToRender);
+			}
 			else
 				Renderer::Multithreaded::RenderScene(CurrScene->MainCamera, RenderQueue, LightsToRender, SceneRenderQueue->size(), SceneLights->size(), CurrScene->SkyboxToRender);
 
@@ -271,8 +307,8 @@ namespace TerraPGE
 
 			if (Core::FpsEngineCounter)
 			{
-				uint64_t CpuFrameDelta = Core::GetCpuUsageInfo() - CpuFrameStart;
-				Renderer::DrawFpsCounter(Wnd, Fps, CurrMB, ElapsedTime, Core::CalculateCpuUsage(CpuFrameDelta * 1e-9, ElapsedTime, Core::CpuCores));
+				double CpuFrameDelta = Core::GetCpuUsageInfo() - CpuFrameStart;
+				Renderer::RenderingCore::DrawFpsCounter(Wnd, Fps, CurrMB, ElapsedTime, Core::CalculateCpuUsage(CpuFrameDelta * 1e-9, ElapsedTime, Core::CpuCores));
 			}
 
 			CurrScene->DrawSceneGUI(Renderer::EngineGdi);

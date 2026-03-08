@@ -2,23 +2,12 @@
 #include "Math.h"
 #include "GameObject.h"
 
-
-struct Ray
-{
-	Vec3 origin;
-	Vec3 direction; // MUST be normalized
-
-	Ray(const Vec3& o, const Vec3& d) : origin(o), direction(d.Normalized()) {}
-};
-
-
 struct RaycastHit
 {
 	bool hit = false;
 	float distance = 0.0f;
 	Vec3 point;
 	Vec3 normal;
-	const Collider* hitCollider = nullptr;
 };
 
 
@@ -204,18 +193,29 @@ bool RayIntersectsCapsule(const Ray& ray, const Vec3& p0, const Vec3& p1, float 
 }
 
 
-bool RaycastMesh(const Ray& ray, const std::vector<Triangle>& triangles, RaycastHit* outHit, Matrix* ModelMatrix)
+// this overload is meant only to be used for a WorldRay && local set of triangles
+// it will first transform the ray into the objects space then it will it preform the ray cast
+bool RaycastMesh(Ray ray, const std::vector<Triangle>& triangles, RaycastHit* outHit, Matrix* ObjectWorld)
 {
 	bool foundHit = false;
 	float closest = FLT_MAX;
 
+	Matrix InverseWorld = ObjectWorld->Inversed();
+	Matrix3x3 normalMatrix = ObjectWorld->GetBasis3x3();
+
 	RaycastHit temp;
+	Vec3 worldRayOrigin = ray.origin;
+	ray.origin = ray.origin * InverseWorld;
+	ray.direction = (ray.direction * normalMatrix.Inversed()).Normalized();
+
+	std::cout << "ray.origin: " << ray.origin << " dir: " << ray.direction << std::endl;
 
 	for (const Triangle& tri : triangles)
 	{
-		Vec3 v0 = tri.Points.Points[0] * *ModelMatrix;
-		Vec3 v1 = tri.Points.Points[1] * *ModelMatrix;
-		Vec3 v2 = tri.Points.Points[2] * *ModelMatrix;
+		Vec3 v0 = tri.Points.Points[0];
+		Vec3 v1 = tri.Points.Points[1];
+		Vec3 v2 = tri.Points.Points[2];
+
 		if (RayIntersectsTriangle(ray, v0, v1, v2, &temp))
 		{
 			if (temp.distance < closest)
@@ -227,8 +227,16 @@ bool RaycastMesh(const Ray& ray, const std::vector<Triangle>& triangles, Raycast
 		}
 	}
 
+	if (!foundHit)
+		return false;
+
+	outHit->normal = (outHit->normal * normalMatrix).Normalized();
+	outHit->point = outHit->point * *ObjectWorld;
+	outHit->distance = worldRayOrigin.Distance(outHit->point);
+
 	return foundHit;
 }
+
 
 bool RaycastMesh(const Ray& ray, const std::vector<Triangle>& triangles, RaycastHit* outHit)
 {
