@@ -3,9 +3,22 @@
 #include "Rasterizer.h"
 #include "Renderable.h"
 #include "EnvironmentRenderable.h"
+#include "WndCreator.hpp"
 
 namespace TerraPGE::Renderer
 {
+	void OpenConsole()
+	{
+		AllocConsole();
+
+		FILE* fp;
+		freopen_s(&fp, "CONOUT$", "w", stdout);
+		freopen_s(&fp, "CONOUT$", "w", stderr);
+		freopen_s(&fp, "CONIN$", "r", stdin);
+
+		Core::HasOpenConsole = true;
+	}
+
 	enum class RenderingBackend
 	{
 		CPU = 0,
@@ -36,294 +49,40 @@ namespace TerraPGE::Renderer
 	static BrushPP ClearBrush = -1;
 	static const Vec3 PlaneNormal = { 0.0f, 0.0f, 1.0f };
 
-	bool DebugClip = false;
-	bool DoCull = true;
+	static int sx = GetSystemMetrics(SM_CXSCREEN);
+	static int sy = GetSystemMetrics(SM_CYSCREEN);
 
+	static bool DebugClip = false;
+	static bool DoCull = true;
+	bool LockCursor = true;
+	bool CursorShow = false;
 
-	namespace RenderingCore
-	{
-		void PrepareRenderingBackend(WndCreator& Wnd)
-		{
-			Core::UpdateSystemInfo();
-			std::stringstream msg;
-			Core::Log("[RENDERER] Initializing Rendering Backend");
-			msg << "[CPU] Name: " << TerraPGE::Core::CpuName << std::endl << "[CPU] Cores: " << Core::CpuCores << std::endl << "[CPU] " << Core::SimdInfo.GetSupportString();
-			Core::Log(msg.str());
+	static float* DepthBuffer = DEBUG_NEW float[sx * sy];
+	static float* FrameBuffer = DEBUG_NEW float[sx * sy * 3];
 
-			if (Core::SimdInfo.SSE42)
-			{
-				Core::Log("[RENDERER] Detected >= SSE 4.2 Activating SIMD Acceleration");
-				Core::SimdAcceleration = true;
-			}
-			else
-				Core::SimdAcceleration = false;
+	// move out and into ligting objects
+	static int ShadowMapHeight = 1024;
+	static int ShadowMapWidth = 1024;
+	static float* ShadowMap = DEBUG_NEW float[ShadowMapWidth * ShadowMapHeight];
 
-			msg.str("");
-			msg.clear();
-			std::wstring GpuDev = TerraPGE::Core::GetDevList();
-			std::string s(GpuDev.begin(), GpuDev.end());
-			msg << "[RENDERER] Other Devices: " << s << std::endl;
-			Core::Log(msg.str());
+	static std::string FpsStr = "Fps: ";
+	static std::wstring FpsWStr = L"Fps: ";
 
+	static constexpr const char* TPGE_TEXT_COLOR_TOKEN = "\\^c";
+	static constexpr const char* TPGE_TEXT_RESET_TOKEN = "\\^r";
+	static constexpr const char* TPGE_TEXT_SHIFT_X_TOKEN = "\\^x";
+	static constexpr const char* TPGE_TEXT_SHIFT_Y_TOKEN = "\\^y";
+	static constexpr const char* TPGE_TEXT_NEW_LINE_TOKEN = "\n";
 
-
-			switch (CurrBackend)
-			{
-				case RenderingBackend::CPU:
-				{
-					EngineGdi = new GdiPP(Wnd.Wnd, true);
-					Core::sx = Wnd.GetClientArea().Width;
-					Core::sy = Wnd.GetClientArea().Height;
-
-					msg.str("");
-					msg.clear();
-					msg << "[CPU] Created GDI object with WxH: " << Core::sx << "x" << Core::sy;
-
-					Core::Log(msg.str());
-
-					delete[] Core::DepthBuffer;
-					delete[] Core::FrameBuffer;
-
-					// Create depth buffer
-					Core::DepthBuffer = DEBUG_NEW float[(SIZE_T)(Core::sx * Core::sy)];
-					Core::FrameBuffer = DEBUG_NEW float[(SIZE_T)(Core::sx * Core::sy * 3)];
-
-					// Initial Client Region
-					EngineGdi->UpdateClientRgn();
-					Core::Log("[CPU] Rendering backend created successfully\n");
-					break;
-				}
-				default:
-					Core::LogError("[RENDERER]", "Unsupported Rendering backend!", 1);
-			}
-		}
-
-
-		void DispatchRenderingCall()
-		{
-
-		}
-
-
-		void SetClearColor(int BrushIdx)
-		{
-			ClearBrush = (HBRUSH)GetStockObject(BrushIdx);
-		}
-
-
-		// Some sort of way to force backend to implement this
-		// Probably this Renderer Becomes a class thats derivable
-		void RenderFormattedText(const int& startX, const int& startY, const std::string& str, const COLORREF& InitialColor, const int& BkMode = TRANSPARENT)
-		{
-			int lastPoint = 0;
-			std::vector<TEXT_PARAMS> SubStrs;
-
-			int CurrX = startX;
-			int CurrY = startY;
-			COLORREF CurrColor = InitialColor;
-			int CurrBkMode = BkMode;
-
-			for (int i = 0; i < str.length(); i++)
-			{
-				if (i == str.length() - 1)
-				{
-					std::string sub = str.substr(lastPoint);
-					SubStrs.push_back(TEXT_PARAMS(CurrX, CurrY, sub, CurrColor));
-					lastPoint = i;
-					i = lastPoint;
-				}
-				else if (str.at(i) == '\n')
-				{
-					SubStrs.push_back(TEXT_PARAMS(CurrX, CurrY, str.substr(lastPoint, i - lastPoint), CurrColor));
-					CurrY += 20; // TODO Dont hardcode this (ratio?) also (font, size etc)
-					CurrX = startX;
-					lastPoint = i;
-				}
-				else if (str.at(i) == '\\' && str.at(i+1) == '^')
-				{
-					switch (str.at(i+2))
-					{
-						case 'c':
-						{
-							// switch color
-							int r, g, b;
-							int consumed = 0;
-
-							if (sscanf_s(&str[i], "\\^c{%d}{%d}{%d}%n", &r, &g, &b, &consumed) == 3)
-							{
-								std::string sub = str.substr(lastPoint, i - lastPoint);
-								SubStrs.push_back(TEXT_PARAMS(CurrX, CurrY, sub, CurrColor));
-								CurrX += EngineGdi->MeasureTextWidth(sub.c_str());
-
-								i += consumed - 1;
-								lastPoint = i + 1;
-								CurrColor = RGB(r, g, b);
-							}
-							break;
-						}
-						case 'x':
-						{
-							int consumed = 0;
-							int offsetX = 0;
-
-							if (sscanf_s(&str[i], "\\^x{%d}%n", &offsetX, &consumed) == 1)
-							{
-								std::string sub = str.substr(lastPoint, i - lastPoint);
-								SubStrs.push_back(TEXT_PARAMS(CurrX, CurrY, sub, CurrColor));
-								CurrX += EngineGdi->MeasureTextWidth(sub.c_str());
-
-								i += consumed - 1;
-								lastPoint = i + 1;
-								CurrX += offsetX;
-							}
-							break;
-						}
-						case 'y':
-						{
-							int consumed = 0;
-							int offsetY = 0;
-
-							if (sscanf_s(&str[i], "\\^x{%d}%n", &offsetY, &consumed) == 1)
-							{
-								std::string sub = str.substr(lastPoint, i - lastPoint);
-								SubStrs.push_back(TEXT_PARAMS(CurrX, CurrY, sub, CurrColor));
-								CurrX += EngineGdi->MeasureTextWidth(sub.c_str());
-
-								i += consumed - 1;
-								lastPoint = i + 1;
-								CurrY += offsetY;
-							}
-							break;
-						}
-						case 'r':
-						{
-							int consumed = 3;
-							std::string sub = str.substr(lastPoint, i - lastPoint);
-							SubStrs.push_back(TEXT_PARAMS(CurrX, CurrY, sub, CurrColor));
-							CurrX += EngineGdi->MeasureTextWidth(sub.c_str());
-
-							i += consumed - 1;
-							lastPoint = i + 1;
-
-							CurrColor = InitialColor;
-							break;
-						}
-						case 'e':
-						{
-							int consumed = 0;
-							std::string effect;
-
-							if (sscanf_s(&str[i], "\\^e{%s}%n", &str, &consumed) == 1)
-							{
-								if (effect == "Rainbow")
-								{
-									std::string sub = str.substr(lastPoint, i - lastPoint);
-									SubStrs.push_back(TEXT_PARAMS(CurrX, CurrY, sub, CurrColor));
-									CurrX += EngineGdi->MeasureTextWidth(sub.c_str());
-
-									i += consumed - 1;
-									lastPoint = i + 1;
-									// TODO  Set rainbow flag
-								}
-
-								i += consumed - 1;
-								lastPoint = i + 1;
-							}
-						}
-					}
-				}
-			}
-
-			for (const TEXT_PARAMS& params : SubStrs)
-			{
-				Core::Log(params.Text);
-				EngineGdi->DrawStringA(params.X, params.Y, params.Text, params.Clr, BkMode);
-			}
-		}
-
-
-		void DrawFpsCounter(WndCreator& Wnd, const float& Fps, const SIZE_T CurrMB, double FrameTime, double CpuUsage)
-		{
-#ifdef UNICODE
-			// Draw FPS and some debug info
-			std::wstringstream ss;
-			ss << std::fixed << std::setprecision(2) << Core::FpsWStr << Fps << L" Cpu/Time: " << CpuUsage << L"/" << FrameTime << L" Memory Usage: " << CurrMB << L"/"
-				<< Core::MaxMemoryMB << L" MB " << (Core::DoMultiThreading ? L"(MultiThreaded)" : L"") << (Core::SimdAcceleration ? L" (SIMD)" : L"");
-
-			//Wnd.SetWndTitle(Str);
-			Renderer::EngineGdi->DrawStringW(20, 20, ss.str(), RGB(255, 0, 0), TRANSPARENT);
-#endif
-#ifndef UNICODE
-			std::stringstream ss;
-			ss << std::fixed << std::setprecision(2) << Core::FpsStr << Fps << " Cpu/Time: " << CpuUsage << "/" << FrameTime << " Memory Usage: " << CurrMB << "/"
-				<< Core::MaxMemoryMB << " MB " << (Core::DoMultiThreading ? "(MultiThreaded)" : "") << (Core::SimdAcceleration ? " (SIMD)" : L"");		//Wnd.SetWndTitle(Str);
-			EngineGdi.DrawStringA(20, 20, ss.str(), RGB(255, 0, 0), TRANSPARENT);
-#endif
-		}
-
-
-		void ClearScreen()
-		{
-			// clear the screen
-
-			if ((HBRUSH)ClearBrush == (HBRUSH)-1)
-			{
-				SetClearColor(BLACK_BRUSH);
-			}
-
-			std::fill(Core::DepthBuffer, Core::DepthBuffer + Core::sx * Core::sy, 1.0f);
-			std::fill(Core::ShadowMap, Core::ShadowMap + Core::ShadowMapWidth * Core::ShadowMapHeight, 1.0f);
-			std::fill(Core::FrameBuffer, Core::FrameBuffer + (Core::sx * Core::sy * 3), 0.0f);
-		}
-
-
-		void SwapFrameBuffer(bool Hdr, bool GammaCorrection)
-		{
-			for (int i = 0; i < Core::sx * Core::sy; i++)
-			{
-				int index = i * 3;
-				float* ChannelPtr = Core::FrameBuffer + index;
-
-				float Rf, Gf, Bf = 0.0f;
-				int R, G, B = 0;
-
-				Rf = ChannelPtr[0];
-				Gf = ChannelPtr[1];
-				Bf = ChannelPtr[2];
-				
-				// this is done to remove branches
-				float hdrMask = Renderer::UseHDR ? 1.0f : 0.0f;
-				Rf = Rf + hdrMask * ((Rf / (1.0f + Rf)) - Rf);
-				Gf = Gf + hdrMask * ((Gf / (1.0f + Gf)) - Gf);
-				Bf = Bf + hdrMask * ((Bf / (1.0f + Bf)) - Bf);
-
-				Rf = std::clamp<float>(Rf, 0, 1.0f);
-				Gf = std::clamp<float>(Gf, 0, 1.0f);
-				Bf = std::clamp<float>(Bf, 0, 1.0f);
-
-				// this is done to remove branches
-				float gammaMask = Renderer::DoGammaCorrection ? 1.0f : 0.0f;
-				Rf = Rf + gammaMask * (Color::LinearToSRGB_Channel(Rf) - Rf);
-				Gf = Gf + gammaMask * (Color::LinearToSRGB_Channel(Gf) - Gf);
-				Bf = Bf + gammaMask * (Color::LinearToSRGB_Channel(Bf) - Bf);
-
-				// Final transformation to RGB Space
-				R = Rf * 255.0f;
-				G = Gf * 255.0f;
-				B = Bf * 255.0f;
-
-				int y = i / Core::sx;
-				int x = i % Core::sx;
-
-				// Write to out buffer
-				EngineGdi->QuickSetPixel(x, y, RGB(R, G, B));
-			}
-		}
-	}
 
 
 	namespace RenderingUtils
 	{
+		namespace Profiler
+		{
+
+		}
+
 		__inline bool ShouldCulltriangle(const Vec3& WorldSpacePos, Vec3 FaceNormal, const Vec3& CamPos)
 		{
 			//if ((TriNormal.Dot(WorldSpaceTri.Points[0] - Cam->Pos) < 0.0f) || !TerraPGE::DoCull || !MeshToRender->BackfaceCulling) // backface culling
@@ -460,7 +219,7 @@ namespace TerraPGE::Renderer
 						}
 						case 1:
 						{
-							NewTrisToAdd = Test.ClipAgainstPlane({ 0.0f, (float)Core::sy - 1, 0.0f }, { 0.0f, -1.0f, 0.0f }, Clipped[0], Clipped[1], Renderer::DebugClip);
+							NewTrisToAdd = Test.ClipAgainstPlane({ 0.0f, (float)Renderer::sy - 1, 0.0f }, { 0.0f, -1.0f, 0.0f }, Clipped[0], Clipped[1], Renderer::DebugClip);
 							break;
 						}
 						case 2:
@@ -470,7 +229,7 @@ namespace TerraPGE::Renderer
 						}
 						case 3:
 						{
-							NewTrisToAdd = Test.ClipAgainstPlane({ (float)Core::sx - 1, 0.0f, 0.0f }, { -1.0f, 0.0f, 0.0f }, Clipped[0], Clipped[1], Renderer::DebugClip);
+							NewTrisToAdd = Test.ClipAgainstPlane({ (float)Renderer::sx - 1, 0.0f, 0.0f }, { -1.0f, 0.0f, 0.0f }, Clipped[0], Clipped[1], Renderer::DebugClip);
 							break;
 						}
 					}
@@ -533,6 +292,350 @@ namespace TerraPGE::Renderer
 	}
 
 
+
+	namespace RenderingCore
+	{
+		void PrepareRenderingBackend(WndCreator& Wnd)
+		{
+			Core::UpdateSystemInfo();
+			std::stringstream msg;
+			Core::LogInfo("[RENDERER]", "Initializing Rendering Backend");
+			msg << "[CPU] Name: " << TerraPGE::Core::CpuName << std::endl << "[CPU] Cores: " << Core::CpuCores << std::endl << "[CPU] " << Core::SimdInfo.GetSupportString();
+			Core::LogInfo("[RENDERER]", msg.str());
+
+			if (Core::SimdInfo.SSE42)
+			{
+				Core::LogInfo("[RENDERER]", "Detected >= SSE 4.2 Activating SIMD Acceleration");
+				Core::SimdAcceleration = true;
+			}
+			else
+				Core::SimdAcceleration = false;
+
+			msg.str("");
+			msg.clear();
+			std::wstring GpuDev = TerraPGE::Core::GetDevList();
+			std::string s(GpuDev.begin(), GpuDev.end());
+			msg << "[RENDERER] Other Devices: " << s << std::endl;
+			Core::LogInfo("[RENDERER]", msg.str());
+
+
+
+			switch (CurrBackend)
+			{
+				case RenderingBackend::CPU:
+				{
+					EngineGdi = new GdiPP(Wnd.Wnd, true);
+					sx = Wnd.GetClientArea().Width;
+					sy = Wnd.GetClientArea().Height;
+
+					msg.str("");
+					msg.clear();
+					msg << "[CPU] Created GDI object with WxH: " << Renderer::sx << "x" << Renderer::sy;
+
+					Core::LogInfo("[RENDERER]", msg.str());
+
+					delete[] Renderer::DepthBuffer;
+					delete[] Renderer::FrameBuffer;
+
+					// Create depth buffer
+					Renderer::DepthBuffer = DEBUG_NEW float[(SIZE_T)(Renderer::sx * Renderer::sy)];
+					Renderer::FrameBuffer = DEBUG_NEW float[(SIZE_T)(Renderer::sx * Renderer::sy * 3)];
+
+					// Initial Client Region
+					EngineGdi->UpdateClientRgn();
+					Core::LogInfo("[RENDERER]", "[CPU] Rendering backend created successfully\n");
+					break;
+				}
+				default:
+					Core::LogError("[RENDERER]", "Unsupported Rendering backend!", 1);
+			}
+		}
+
+
+		void DeleteRenderingBackend()
+		{
+			Core::LogInfo("[RENDERER]", "Destroying renderer");
+
+			delete[] DepthBuffer;
+			delete[] FrameBuffer;
+			delete[] ShadowMap;
+		}
+
+
+		void DispatchRenderingCall()
+		{
+
+		}
+
+
+		// Update screen info
+		void UpdateScreenInfo()
+		{
+			// Update GDI info
+			EngineGdi->UpdateClientRgn();
+
+			// Update screen dimenstions
+			sx = EngineGdi->ClientRect.right - EngineGdi->ClientRect.left;
+			sy = EngineGdi->ClientRect.bottom - EngineGdi->ClientRect.top;
+
+			// Update DepthBuffer
+			delete[] DepthBuffer;
+			DepthBuffer = DEBUG_NEW float[sx * sy];
+		}
+
+
+		void SetClearColor(int BrushIdx)
+		{
+			ClearBrush = (HBRUSH)GetStockObject(BrushIdx);
+		}
+
+
+		void __inline UpdateCursor(WndCreator& Wnd)
+		{
+			if (Wnd.HasFocus())
+			{
+				static POINT Tmp;
+
+				if (LockCursor)
+					SetCursorPos(sx / 2, sy / 2);
+
+				while (ShowCursor(CursorShow == false ? FALSE : TRUE) >= 0) {}
+			}
+		}
+
+
+		void UpdateWindow(WndCreator& Wnd, MSG* msg)
+		{
+			Wnd.Input.BeginFrame();
+
+			while (PeekMessageW(msg, NULL, 0, 0, PM_REMOVE))
+			{
+				// Check Msg
+				if (msg->message == WM_QUIT || msg->message == WM_CLOSE || msg->message == WM_DESTROY)
+				{
+					break;
+				}
+				else
+				{
+					TranslateMessage(msg);
+					DispatchMessageW(msg);
+				}
+			}
+
+			UpdateCursor(Wnd);
+		}
+
+
+		// Some sort of way to force backend to implement this
+		// Probably this Renderer Becomes a class thats derivable
+		void RenderFormattedText(const int& startX, const int& startY, const std::string& str, const COLORREF& InitialColor, const int& BkMode = TRANSPARENT)
+		{
+			int lastPoint = 0;
+			std::vector<TEXT_PARAMS> SubStrs;
+
+			int CurrX = startX;
+			int CurrY = startY;
+			COLORREF CurrColor = InitialColor;
+			int CurrBkMode = BkMode;
+
+			for (int i = 0; i < str.length(); i++)
+			{
+				if (i == str.length() - 1)
+				{
+					std::string sub = str.substr(lastPoint);
+					SubStrs.push_back(TEXT_PARAMS(CurrX, CurrY, sub, CurrColor));
+					lastPoint = i;
+					i = lastPoint;
+				}
+				else if (str.at(i) == '\n')
+				{
+					SubStrs.push_back(TEXT_PARAMS(CurrX, CurrY, str.substr(lastPoint, i - lastPoint), CurrColor));
+					CurrY += 20; // TODO Dont hardcode this (ratio?) also (font, size etc)
+					CurrX = startX;
+					lastPoint = i;
+				}
+				else if (str.at(i) == '\\' && str.at(i+1) == '^')
+				{
+					switch (str.at(i+2))
+					{
+						case 'c':
+						{
+							// switch color
+							int r, g, b;
+							int consumed = 0;
+
+							if (sscanf_s(&str[i], "\\^c{%d}{%d}{%d}%n", &r, &g, &b, &consumed) == 3)
+							{
+								std::string sub = str.substr(lastPoint, i - lastPoint);
+								SubStrs.push_back(TEXT_PARAMS(CurrX, CurrY, sub, CurrColor));
+								CurrX += EngineGdi->MeasureTextWidth(sub.c_str());
+
+								i += consumed - 1;
+								lastPoint = i + 1;
+								CurrColor = RGB(r, g, b);
+							}
+							break;
+						}
+						case 'x':
+						{
+							int consumed = 0;
+							int offsetX = 0;
+
+							if (sscanf_s(&str[i], "\\^x{%d}%n", &offsetX, &consumed) == 1)
+							{
+								std::string sub = str.substr(lastPoint, i - lastPoint);
+								SubStrs.push_back(TEXT_PARAMS(CurrX, CurrY, sub, CurrColor));
+								CurrX += EngineGdi->MeasureTextWidth(sub.c_str());
+
+								i += consumed - 1;
+								lastPoint = i + 1;
+								CurrX += offsetX;
+							}
+							break;
+						}
+						case 'y':
+						{
+							int consumed = 0;
+							int offsetY = 0;
+
+							if (sscanf_s(&str[i], "\\^x{%d}%n", &offsetY, &consumed) == 1)
+							{
+								std::string sub = str.substr(lastPoint, i - lastPoint);
+								SubStrs.push_back(TEXT_PARAMS(CurrX, CurrY, sub, CurrColor));
+								CurrX += EngineGdi->MeasureTextWidth(sub.c_str());
+
+								i += consumed - 1;
+								lastPoint = i + 1;
+								CurrY += offsetY;
+							}
+							break;
+						}
+						case 'r':
+						{
+							int consumed = 3;
+							std::string sub = str.substr(lastPoint, i - lastPoint);
+							SubStrs.push_back(TEXT_PARAMS(CurrX, CurrY, sub, CurrColor));
+							CurrX += EngineGdi->MeasureTextWidth(sub.c_str());
+
+							i += consumed - 1;
+							lastPoint = i + 1;
+
+							CurrColor = InitialColor;
+							break;
+						}
+						case 'e':
+						{
+							int consumed = 0;
+							std::string effect;
+
+							if (sscanf_s(&str[i], "\\^e{%s}%n", str.data(), &consumed) == 1)
+							{
+								if (effect == "Rainbow")
+								{
+									std::string sub = str.substr(lastPoint, i - lastPoint);
+									SubStrs.push_back(TEXT_PARAMS(CurrX, CurrY, sub, CurrColor));
+									CurrX += EngineGdi->MeasureTextWidth(sub.c_str());
+
+									i += consumed - 1;
+									lastPoint = i + 1;
+									// TODO  Set rainbow flag
+								}
+
+								i += consumed - 1;
+								lastPoint = i + 1;
+							}
+						}
+					}
+				}
+			}
+
+			for (const TEXT_PARAMS& params : SubStrs)
+			{
+				EngineGdi->DrawStringA(params.X, params.Y, params.Text, params.Clr, BkMode);
+			}
+		}
+
+
+		void DrawFpsCounter(WndCreator& Wnd, const float& Fps, const SIZE_T CurrMB, double FrameTime, double CpuUsage)
+		{
+#ifdef UNICODE
+			// Draw FPS and some debug info
+			std::wstringstream ss;
+			ss << std::fixed << std::setprecision(2) << Renderer::FpsWStr << Fps << L" Cpu/Time: " << CpuUsage << L"/" << FrameTime << L" Memory Usage: " << CurrMB << L"/"
+				<< Core::MaxMemoryMB << L" MB " << (Core::DoMultiThreading ? L"(MultiThreaded)" : L"") << (Core::SimdAcceleration ? L" (SIMD)" : L"");
+
+			//Wnd.SetWndTitle(Str);
+			Renderer::EngineGdi->DrawStringW(20, 20, ss.str(), RGB(255, 0, 0), TRANSPARENT);
+#endif
+#ifndef UNICODE
+			std::stringstream ss;
+			ss << std::fixed << std::setprecision(2) << Renderer::FpsStr << Fps << " Cpu/Time: " << CpuUsage << "/" << FrameTime << " Memory Usage: " << CurrMB << "/"
+				<< Core::MaxMemoryMB << " MB " << (Core::DoMultiThreading ? "(MultiThreaded)" : "") << (Core::SimdAcceleration ? " (SIMD)" : L"");		//Wnd.SetWndTitle(Str);
+			EngineGdi.DrawStringA(20, 20, ss.str(), RGB(255, 0, 0), TRANSPARENT);
+#endif
+		}
+
+
+		void ClearScreen()
+		{
+			// clear the screen
+
+			if ((HBRUSH)ClearBrush == (HBRUSH)-1)
+			{
+				SetClearColor(BLACK_BRUSH);
+			}
+
+			std::fill(Renderer::DepthBuffer, Renderer::DepthBuffer + Renderer::sx * Renderer::sy, 1.0f);
+			std::fill(Renderer::ShadowMap, Renderer::ShadowMap + Renderer::ShadowMapWidth * Renderer::ShadowMapHeight, 1.0f);
+			std::fill(Renderer::FrameBuffer, Renderer::FrameBuffer + (Renderer::sx * Renderer::sy * 3), 0.0f);
+		}
+
+
+		void SwapFrameBuffer(bool Hdr, bool GammaCorrection)
+		{
+			for (int i = 0; i < Renderer::sx * Renderer::sy; i++)
+			{
+				int index = i * 3;
+				float* ChannelPtr = Renderer::FrameBuffer + index;
+
+				float Rf, Gf, Bf = 0.0f;
+				int R, G, B = 0;
+
+				Rf = ChannelPtr[0];
+				Gf = ChannelPtr[1];
+				Bf = ChannelPtr[2];
+				
+				// this is done to remove branches
+				float hdrMask = Renderer::UseHDR ? 1.0f : 0.0f;
+				Rf = Rf + hdrMask * ((Rf / (1.0f + Rf)) - Rf);
+				Gf = Gf + hdrMask * ((Gf / (1.0f + Gf)) - Gf);
+				Bf = Bf + hdrMask * ((Bf / (1.0f + Bf)) - Bf);
+
+				Rf = std::clamp<float>(Rf, 0, 1.0f);
+				Gf = std::clamp<float>(Gf, 0, 1.0f);
+				Bf = std::clamp<float>(Bf, 0, 1.0f);
+
+				// this is done to remove branches
+				float gammaMask = Renderer::DoGammaCorrection ? 1.0f : 0.0f;
+				Rf = Rf + gammaMask * (Color::LinearToSRGB_Channel(Rf) - Rf);
+				Gf = Gf + gammaMask * (Color::LinearToSRGB_Channel(Gf) - Gf);
+				Bf = Bf + gammaMask * (Color::LinearToSRGB_Channel(Bf) - Bf);
+
+				// Final transformation to RGB Space
+				R = Rf * 255.0f;
+				G = Gf * 255.0f;
+				B = Bf * 255.0f;
+
+				int y = i / Renderer::sx;
+				int x = i % Renderer::sx;
+
+				// Write to out buffer
+				EngineGdi->QuickSetPixel(x, y, RGB(R, G, B));
+			}
+		}
+	}
+
+
 	void RenderMesh(Camera* Cam, Renderable* Object, LightObject** SceneLights, size_t LightCount)
 	{
 		std::vector<Triangle> ClipSpaceTris = RenderingUtils::VertexShader(Cam, Object);
@@ -562,8 +665,8 @@ namespace TerraPGE::Renderer
 				ToDraw.ApplyPerspectiveDivide();
 
 				// Offset to viewport space (Ndc -> Screen Space)
-				ToDraw.Scale(Vec3((float)(Core::sx * 0.5f), (float)(Core::sy * 0.5f), 1.0f));
-				ToDraw.Translate(Vec3((float)(Core::sx * 0.5f), (float)(Core::sy * 0.5f), 0.0f));
+				ToDraw.Scale(Vec3((float)(Renderer::sx * 0.5f), (float)(Renderer::sy * 0.5f), 1.0f));
+				ToDraw.Translate(Vec3((float)(Renderer::sx * 0.5f), (float)(Renderer::sy * 0.5f), 0.0f));
 
 				//SceneLights, LightCount
 				Args->EditShaderData(TPGE_SHDR_TRI, &ToDraw, 0);
@@ -578,9 +681,9 @@ namespace TerraPGE::Renderer
 
 
 				if (Core::DoMultiThreading)
-					Renderer::BaryCentricRasterizer(Core::DepthBuffer, Core::sx, Core::sy, EngineGdi, Object->Shader, Args);
+					Renderer::BaryCentricRasterizer(Renderer::FrameBuffer, Renderer::DepthBuffer, Renderer::sx, Renderer::sy, Renderer::ShadowMap, Renderer::ShadowMapWidth, Renderer::ShadowMapHeight, EngineGdi, Object->Shader, Args);
 				else
-					Renderer::BaryCentricRasterizer(Core::DepthBuffer, Core::sx, Core::sy, EngineGdi, Object->Shader, Args);
+					Renderer::BaryCentricRasterizer(Renderer::FrameBuffer, Renderer::DepthBuffer, Renderer::sx, Renderer::sy, Renderer::ShadowMap, Renderer::ShadowMapWidth, Renderer::ShadowMapHeight, EngineGdi, Object->Shader, Args);
 			}
 
 			Args->Delete();
@@ -635,7 +738,7 @@ namespace TerraPGE::Renderer
 						const Matrix VpMatrix = Light->VpMatrices[0];
 						Proj.ApplyMatrix(VpMatrix);
 
-						Renderer::BaryCentricRasterizerDepth(&Proj, Core::ShadowMap, (SIZE_T)Core::ShadowMapWidth, (SIZE_T)Core::ShadowMapHeight);
+						Renderer::BaryCentricRasterizerDepth(&Proj, Renderer::ShadowMap, (SIZE_T)Renderer::ShadowMapWidth, (SIZE_T)Renderer::ShadowMapHeight);
 					}
 					else if (Light->Type == LightTypes::PointLight)
 					{
@@ -644,7 +747,7 @@ namespace TerraPGE::Renderer
 							Matrix VpMatrix = SceneLights[0]->VpMatrices[face];
 							Proj.ApplyMatrix(VpMatrix);
 
-							Renderer::BaryCentricRasterizerDepth(&Proj, Core::ShadowMap, (SIZE_T)Core::ShadowMapWidth, (SIZE_T)Core::ShadowMapHeight);
+							Renderer::BaryCentricRasterizerDepth(&Proj, Renderer::ShadowMap, (SIZE_T)Renderer::ShadowMapWidth, (SIZE_T)Renderer::ShadowMapHeight);
 						}
 					}
 				}
@@ -669,8 +772,8 @@ namespace TerraPGE::Renderer
 		if (sky == nullptr)
 			return;
 
-		const int W = Core::sx;
-		const int H = Core::sy;
+		const int W = Renderer::sx;
+		const int H = Renderer::sy;
 
 		const Matrix& Proj = Cam->GetProjectionMatrix();
 		const Matrix3x3 CamRot = Cam->GetRotationMatrix(); // rotation only
@@ -684,7 +787,7 @@ namespace TerraPGE::Renderer
 				Color skyColor = sky->Render(x, y, W, H, Fov, CamRot);
 
 				// 5. Write color
-				Core::SetPixelFrameBuffer(x, y, skyColor.R, skyColor.G, skyColor.B);
+				Renderer::RenderingCore::SetPixelFrameBuffer(x, y, Renderer::FrameBuffer, Renderer::sx, skyColor.R, skyColor.G, skyColor.B);
 			}
 		}
 	}
@@ -694,7 +797,7 @@ namespace TerraPGE::Renderer
 	{
 		Renderer::RenderSkybox(Cam, Skybox);
 
-		Renderer::RenderShadowMaps(SceneObjects, SceneLights, ObjectCount, LightCount, Core::ShadowMap);
+		Renderer::RenderShadowMaps(SceneObjects, SceneLights, ObjectCount, LightCount, Renderer::ShadowMap);
 
 		Renderer::RenderMeshes(Cam, SceneObjects, SceneLights, ObjectCount, LightCount);
 
@@ -801,6 +904,20 @@ namespace TerraPGE::Renderer
 			}
 
 
+			void RenderSkyboxByChunk(EnvironmentRenderable* sky, const Camera* Cam, const uint64_t y0, const uint64_t y1, const uint64_t width, const uint64_t height, const float& Fov, const Matrix& Proj, const Matrix3x3& CamRot)
+			{
+				for (uint64_t y = y0; y < y1; ++y)
+				{
+					for (uint64_t x = 0; x + 3 < width; x+=3)
+					{
+						Color skyColor = sky->Render(x, y, width, height, Fov, CamRot);
+
+						Renderer::RenderingCore::SetPixelFrameBuffer(x, y, Renderer::FrameBuffer, Renderer::sx, skyColor.R, skyColor.G, skyColor.B);
+					}
+				}
+			}
+
+
 			void SwapFrameBuffer(float* Src, const int& Width, const int& Height, unsigned __int8* OutBuffer, const bool Hdr, const bool GammaCorrection)
 			{
 				const int pixelCount = Width * Height;
@@ -879,8 +996,8 @@ namespace TerraPGE::Renderer
 					G = Gf * 255.0f;
 					B = Bf * 255.0f;
 
-					int y = i / Core::sx;
-					int x = i % Core::sx;
+					int y = i / Renderer::sx;
+					int x = i % Renderer::sx;
 
 					// Write to out buffer
 					EngineGdi->QuickSetPixel(x, y, RGB(R, G, B));
@@ -892,14 +1009,14 @@ namespace TerraPGE::Renderer
 			{
 				Renderer::RenderSkybox(Cam, Skybox);
 
-				Renderer::RenderShadowMaps(SceneObjects, SceneLights, ObjectCount, LightCount, Core::ShadowMap);
+				Renderer::RenderShadowMaps(SceneObjects, SceneLights, ObjectCount, LightCount, Renderer::ShadowMap);
 
 				Renderer::RenderMeshes(Cam, SceneObjects, SceneLights, ObjectCount, LightCount);
 
 				//Renderer::RenderEnvironment();
 
 				Renderer::RenderingCore::SwapFrameBuffer(Renderer::UseHDR, Renderer::DoGammaCorrection);
-				//Renderer::SIMD::SSE::SwapFrameBuffer(Core::FrameBuffer, Core::sx, Core::sy, Renderer::EngineGdi->GetPixelBuffer(), Renderer::UseHDR, Renderer::DoGammaCorrection);
+				//Renderer::SIMD::SSE::SwapFrameBuffer(Renderer::FrameBuffer, Renderer::sx, Renderer::sy, Renderer::EngineGdi->GetPixelBuffer(), Renderer::UseHDR, Renderer::DoGammaCorrection);
 				Renderer::EngineGdi->SetNeedsPixelsRedrawn();
 			}
 		}
@@ -987,7 +1104,7 @@ namespace TerraPGE::Renderer
 				{
 					Color skyColor = sky->Render(x, y, width, height, Fov, CamRot);
 
-					Core::SetPixelFrameBuffer(x, y, skyColor.R, skyColor.G, skyColor.B);
+					Renderer::RenderingCore::SetPixelFrameBuffer(x, y, Renderer::FrameBuffer, Renderer::sx, skyColor.R, skyColor.G, skyColor.B);
 				}
 			}
 		}
@@ -1000,8 +1117,8 @@ namespace TerraPGE::Renderer
 			const Matrix& Proj = Cam->GetProjectionMatrix();
 			const Matrix3x3 CamRot = Cam->GetRotationMatrix();
 
-			const uint64_t Width = Core::sx;
-			const uint64_t Height = Core::sy;
+			const uint64_t Width = Renderer::sx;
+			const uint64_t Height = Renderer::sy;
 
 			const uint64_t ChunkSz = std::max<uint64_t>(1, Height / Core::CpuCores);
 			const float Fov = Cam->GetFov();
@@ -1025,13 +1142,13 @@ namespace TerraPGE::Renderer
 		{
 			Multithreaded::RenderSkybox(Cam, Skybox);
 
-			Renderer::RenderShadowMaps(SceneObjects, SceneLights, ObjectCount, LightCount, Core::ShadowMap);
+			Renderer::RenderShadowMaps(SceneObjects, SceneLights, ObjectCount, LightCount, Renderer::ShadowMap);
 
 			Renderer::RenderMeshes(Cam, SceneObjects, SceneLights, ObjectCount, LightCount);
 
 			//Renderer::RenderEnvironment();
 
-			Multithreaded::SwapFrameBuffer(Core::FrameBuffer, Core::sx, Core::sy, UseHDR, Renderer::DoGammaCorrection);
+			Multithreaded::SwapFrameBuffer(Renderer::FrameBuffer, Renderer::sx, Renderer::sy, UseHDR, Renderer::DoGammaCorrection);
 		}
 	}
 
@@ -1041,6 +1158,39 @@ namespace TerraPGE::Renderer
 
 	}
 }
+
+
+//class RenderingBackend
+//{
+
+//};
+
+//class CPUBackend: RenderingBackend
+//{
+
+//};
+
+
+//class Renderer
+//{
+//	Renderer(RenderingBackend* backend)
+//	{
+
+//	}
+
+//	public:
+
+//	Renderer* Create(RenderingBackend* Backend)
+//	{
+
+//	}
+
+//	void RenderScene(Camera* Cam, TerraPGE::Renderable** SceneObjects, LightObject** SceneLights, size_t ObjectCount, size_t LightCount, EnvironmentRenderable* Skybox = nullptr)
+//	{
+
+//	}
+//};
+
 
 
 

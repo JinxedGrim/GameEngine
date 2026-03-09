@@ -1,5 +1,7 @@
 #pragma once
 #include "EngineCore.h"
+#include "Shading.h"
+#include "GdiPP.hpp"
 
 // Important mathematical concepts used in this rasterizer
 // Barycentric Interpolation (alpha-beta-gamma) (Derived from edge equations)
@@ -22,6 +24,17 @@ namespace TerraPGE::Renderer
 	bool UseHDR = true;
 	bool DoGammaCorrection = true;
 	bool DoLighting = true;
+
+	namespace RenderingCore
+	{
+		__inline void SetPixelFrameBuffer(int x, int y, float* FrameBuffer, const int Width, float R, float G, float B)
+		{
+			int index = ContIdx(x, y, Width) * 3;
+			FrameBuffer[index++] = R;
+			FrameBuffer[index++] = G;
+			FrameBuffer[index] = B;
+		}
+	}
 
 
 	struct FragmentInfo
@@ -136,7 +149,7 @@ namespace TerraPGE::Renderer
 
 
 	template<typename T>
-	void __fastcall BaryCentricRasterizer(float* DepthBuffer, const int ScreenWidth, const int ScreenHeight, GdiPP* Gdi, T&& Shader, ShaderArgs* BaseArgs1)
+	void __fastcall BaryCentricRasterizer(float* FrameBuffer, float* DepthBuffer, const int ScreenWidth, const int ScreenHeight, float* ShadowMap, const int ShadowMapWidth, const int ShadowMapHeight, GdiPP* Gdi, T&& Shader, ShaderArgs* BaseArgs1)
 	{
 		ShaderArgs* BaseArgs = DEBUG_NEW ShaderArgs(BaseArgs1);
 
@@ -174,9 +187,9 @@ namespace TerraPGE::Renderer
 
 		// Triangle bounding box
 		int minX = std::max(0, (int)std::floor(std::min({ v0.x, v1.x, v2.x })));
-		int maxX = std::min(Core::sx - 1, (int)std::ceil(std::max({ v0.x, v1.x, v2.x })));
+		int maxX = std::min(ScreenWidth - 1, (int)std::ceil(std::max({ v0.x, v1.x, v2.x })));
 		int minY = std::max(0, (int)std::floor(std::min({ v0.y, v1.y, v2.y })));
-		int maxY = std::min(Core::sy - 1, (int)std::ceil(std::max({ v0.y, v1.y, v2.y })));
+		int maxY = std::min(ScreenHeight - 1, (int)std::ceil(std::max({ v0.y, v1.y, v2.y })));
 
 		// Signed area of tri in screen space
 		float triArea = (v1y_Sub_v2y) * (v0x_Sub_v2x) + (v2.x - v1.x) * (v0.y - v2.y);
@@ -190,7 +203,7 @@ namespace TerraPGE::Renderer
 		{
 			for (int x = minX; x <= maxX; x++)
 			{
-				int idx = ContIdx(x, y, Core::sx);
+				int idx = ContIdx(x, y, ScreenWidth);
 				MidPixel = (x == ScreenWidth / 2 && y == ScreenHeight / 2);
 				// Compute barycentric coordinates
 				float alpha = (v1y_Sub_v2y * ((x + 0.5f) - v2.x) + (v2x_Sub_v1x) * ((y + 0.5f) - v2.y)) / triArea;
@@ -209,7 +222,7 @@ namespace TerraPGE::Renderer
 
 				if (false)
 				{
-					TerraPGE::Core::SetPixelFrameBuffer(x, y, alpha, beta, gamma);
+					Renderer::RenderingCore::SetPixelFrameBuffer(x, y, FrameBuffer, ScreenWidth, alpha, beta, gamma);
 					continue;
 				}
 
@@ -229,7 +242,7 @@ namespace TerraPGE::Renderer
 							TestDepth = Depth;
 						}
 
-						TerraPGE::Core::SetPixelFrameBuffer(x, y, FragmentColor->R, FragmentColor->G, FragmentColor->B);
+						Renderer::RenderingCore::SetPixelFrameBuffer(x, y, FrameBuffer, ScreenWidth, FragmentColor->R, FragmentColor->G, FragmentColor->B);
 						continue;
 					}
 
@@ -245,13 +258,13 @@ namespace TerraPGE::Renderer
 					if (false)
 					{
 						Vec3 Color = RasterUtils::MapInterpedVec3ToColor(world0, world1, world2, InterpolatedWorldPos);
-						TerraPGE::Core::SetPixelFrameBuffer(x, y, Color.x, Color.y, Color.z);
+						Renderer::RenderingCore::SetPixelFrameBuffer(x, y, FrameBuffer, ScreenWidth, Color.x, Color.y, Color.z);
 						continue;
 					}
 
 					if (Renderer::DoShadows && HasLight)
 					{
-						bool isInShadow = Lights[0]->SampleShadowMap(Core::ShadowMap, Core::ShadowMapWidth, Core::ShadowMapHeight, InterpolatedWorldPos, &ShadowDepth , &ShadowMapDepth);
+						bool isInShadow = Lights[0]->SampleShadowMap(ShadowMap, ShadowMapWidth, ShadowMapHeight, InterpolatedWorldPos, &ShadowDepth , &ShadowMapDepth);
 
 						if (MidPixel && (DebugShadows || DebugShadowValue || DebugShadows))
 						{
@@ -261,14 +274,14 @@ namespace TerraPGE::Renderer
 
 						if (DebugShadowValue)
 						{
-							TerraPGE::Core::SetPixelFrameBuffer(x, y, ShadowDepth, ShadowDepth, ShadowDepth);
+							Renderer::RenderingCore::SetPixelFrameBuffer(x, y, FrameBuffer, ScreenWidth, ShadowDepth, ShadowDepth, ShadowDepth);
 							continue;
 						}
 						else if (DebugShadowMap)
 						{
 							ShadowMapDepth = std::clamp(ShadowMapDepth, 0.0f, 1.0f);
 							float ColorVal = (ShadowMapDepth);
-							TerraPGE::Core::SetPixelFrameBuffer(x, y, ColorVal, ColorVal, ColorVal);
+							Renderer::RenderingCore::SetPixelFrameBuffer(x, y, FrameBuffer, ScreenWidth, ColorVal, ColorVal, ColorVal);
 
 							if (MidPixel)
 							{
@@ -284,7 +297,7 @@ namespace TerraPGE::Renderer
 
 							if (DebugShadows)
 							{
-								TerraPGE::Core::SetPixelFrameBuffer(x, y, 255.0f, 0.0f, 0.0f);
+								Renderer::RenderingCore::SetPixelFrameBuffer(x, y, FrameBuffer, ScreenWidth, 255.0f, 0.0f, 0.0f);
 								continue;
 							}
 						}
@@ -351,7 +364,7 @@ namespace TerraPGE::Renderer
 						std::clamp<float>(FragmentColor->B, 0.0f, 1.0f);
 					}
 
-					TerraPGE::Core::SetPixelFrameBuffer(x, y, FragmentColor->R, FragmentColor->G, FragmentColor->B);
+					Renderer::RenderingCore::SetPixelFrameBuffer(x, y, FrameBuffer, ScreenWidth, FragmentColor->R, FragmentColor->G, FragmentColor->B);
 
 					//COLORREF PixelClr = RGB(PixelRoundFloor(FragmentColor->R), PixelRoundFloor(FragmentColor->G), PixelRoundFloor(FragmentColor->B));
 					//Gdi->QuickSetPixel(x, y, PixelClr);
@@ -648,7 +661,7 @@ namespace TerraPGE::Renderer
 							tex_w = (1.0f - t) * tex_sw + t * tex_ew;
 							t += tstep;
 
-							int idx = ContIdx(j, i, Core::sx);
+							int idx = ContIdx(j, i, Renderer::sx);
 
 							// Calculate the barycentric coordinates which we use for interpolation
 							Vec3 BaryCoords = CalculateBarycentricCoordinatesScreenSpace(Vec2((float)j, (float)i), Vec2((float)Tri->Points[0].x, (float)Tri->Points[0].y), Vec2((float)Tri->Points[1].x, (float)Tri->Points[1].y), Vec2((float)Tri->Points[2].x, (float)Tri->Points[2].y));
@@ -681,12 +694,12 @@ namespace TerraPGE::Renderer
 
 								ShadowNdcPos.CorrectPerspective();
 
-								ShadowNdcPos *= (Vec3((float)(Core::ShadowMapWidth * 0.5f), (float)(Core::ShadowMapHeight * 0.5f), 1.0f));
-								ShadowNdcPos += (Vec3((float)(Core::ShadowMapWidth * 0.5f), (float)(Core::ShadowMapHeight * 0.5f), 0.0f));
+								ShadowNdcPos *= (Vec3((float)(Renderer::ShadowMapWidth * 0.5f), (float)(Renderer::ShadowMapHeight * 0.5f), 1.0f));
+								ShadowNdcPos += (Vec3((float)(Renderer::ShadowMapWidth * 0.5f), (float)(Renderer::ShadowMapHeight * 0.5f), 0.0f));
 
-								MapIdx = ContIdx(PixelRoundMinMax(ShadowNdcPos.x, 0, Core::ShadowMapWidth - 1), PixelRoundMinMax(ShadowNdcPos.y, 0, Core::ShadowMapHeight - 1), Core::ShadowMapWidth);
+								MapIdx = ContIdx(PixelRoundMinMax(ShadowNdcPos.x, 0, Renderer::ShadowMapWidth - 1), PixelRoundMinMax(ShadowNdcPos.y, 0, Renderer::ShadowMapHeight - 1), Renderer::ShadowMapWidth);
 
-								ShadowValue = Core::ShadowMap[MapIdx] + ShadowMapBias;
+								ShadowValue = Renderer::ShadowMap[MapIdx] + ShadowMapBias;
 								ShadowDepth = (((FarNear / (Core::FFAR - ShadowNdcPos.z * FarSubNear) - Core::FNEAR) / FarSubNear) + 1.0f) / 2.0f;
 
 								if (ShadowDepth > ShadowValue)
@@ -712,7 +725,7 @@ namespace TerraPGE::Renderer
 									}
 									else
 									{
-										Val = Core::ShadowMap[MapIdx];
+										Val = Renderer::ShadowMap[MapIdx];
 									}
 								}
 
@@ -812,7 +825,7 @@ namespace TerraPGE::Renderer
 							tex_w = (1.0f - t) * tex_sw + t * tex_ew;
 							t += tstep;
 
-							int idx = ContIdx(j, i, Core::sx);
+							int idx = ContIdx(j, i, Renderer::sx);
 
 							// Calculate the barycentric coordinates which we use for interpolation
 							Vec3 BaryCoords = CalculateBarycentricCoordinatesScreenSpace(Vec2((float)j, (float)i), Vec2((float)Tri->Points[0].x, (float)Tri->Points[0].y), Vec2((float)Tri->Points[1].x, (float)Tri->Points[1].y), Vec2((float)Tri->Points[2].x, (float)Tri->Points[2].y));
@@ -843,12 +856,12 @@ namespace TerraPGE::Renderer
 								Vec4 ShadowNdcPos = Lights[0]->CalcNdc(InterpolatedPos);
 								ShadowNdcPos.CorrectPerspective();
 
-								ShadowNdcPos *= (Vec3((float)(Core::ShadowMapWidth * 0.5f), (float)(Core::ShadowMapHeight * 0.5f), 1.0f));
-								ShadowNdcPos += (Vec3((float)(Core::ShadowMapWidth * 0.5f), (float)(Core::ShadowMapHeight * 0.5f), 0.0f));
+								ShadowNdcPos *= (Vec3((float)(Renderer::ShadowMapWidth * 0.5f), (float)(Renderer::ShadowMapHeight * 0.5f), 1.0f));
+								ShadowNdcPos += (Vec3((float)(Renderer::ShadowMapWidth * 0.5f), (float)(Renderer::ShadowMapHeight * 0.5f), 0.0f));
 
-								MapIdx = ContIdx(PixelRoundMinMax(ShadowNdcPos.x, 0, Core::ShadowMapWidth - 1), PixelRoundMinMax(ShadowNdcPos.y, 0, Core::ShadowMapHeight - 1), Core::ShadowMapWidth);
+								MapIdx = ContIdx(PixelRoundMinMax(ShadowNdcPos.x, 0, Renderer::ShadowMapWidth - 1), PixelRoundMinMax(ShadowNdcPos.y, 0, Renderer::ShadowMapHeight - 1), Renderer::ShadowMapWidth);
 
-								ShadowValue = Core::ShadowMap[MapIdx] + ShadowMapBias;
+								ShadowValue = Renderer::ShadowMap[MapIdx] + ShadowMapBias;
 								ShadowDepth = (((FarNear / (Core::FFAR - ShadowNdcPos.z * FarSubNear) - Core::FNEAR) / FarSubNear) + 1.0f) / 2.0f;
 
 								if (ShadowDepth > ShadowValue)
@@ -874,7 +887,7 @@ namespace TerraPGE::Renderer
 									}
 									else
 									{
-										Val = Core::ShadowMap[MapIdx];
+										Val = Renderer::ShadowMap[MapIdx];
 									}
 								}
 
@@ -1071,7 +1084,7 @@ namespace TerraPGE::Renderer
 	//				tex_w = (1.0f - t) * tex_sw + t * tex_ew;
 	//				t += tstep;
 
-	//				int idx = ContIdx(j, i, Core::sx);
+	//				int idx = ContIdx(j, i, Renderer::sx);
 
 	//				FragmentInfo FragInfo = CalculateFragmentInfo(Vec2(j, i), Tri, &Vp, FarNear, FarSubNear);
 
@@ -1093,12 +1106,12 @@ namespace TerraPGE::Renderer
 	//						Vec4 ShadowNdcPos = Lights[0]->CalcNdc(FragInfo.InterpolatedPos);
 	//						ShadowNdcPos.CorrectPerspective();
 
-	//						ShadowNdcPos *= (Vec3((float)(Core::ShadowMapWidth * 0.5f), (float)(Core::ShadowMapHeight * 0.5f), 1.0f));
-	//						ShadowNdcPos += (Vec3((float)(Core::ShadowMapWidth * 0.5f), (float)(Core::ShadowMapHeight * 0.5f), 0.0f));
+	//						ShadowNdcPos *= (Vec3((float)(Renderer::ShadowMapWidth * 0.5f), (float)(Renderer::ShadowMapHeight * 0.5f), 1.0f));
+	//						ShadowNdcPos += (Vec3((float)(Renderer::ShadowMapWidth * 0.5f), (float)(Renderer::ShadowMapHeight * 0.5f), 0.0f));
 
-	//						MapIdx = ContIdx(PixelRoundMinMax(ShadowNdcPos.x, 0, Core::ShadowMapWidth - 1), PixelRoundMinMax(ShadowNdcPos.y, 0, Core::ShadowMapHeight - 1), Core::ShadowMapWidth);
+	//						MapIdx = ContIdx(PixelRoundMinMax(ShadowNdcPos.x, 0, Renderer::ShadowMapWidth - 1), PixelRoundMinMax(ShadowNdcPos.y, 0, Renderer::ShadowMapHeight - 1), Renderer::ShadowMapWidth);
 
-	//						ShadowValue = Core::ShadowMap[MapIdx] + ShadowMapBias;
+	//						ShadowValue = Renderer::ShadowMap[MapIdx] + ShadowMapBias;
 	//						ShadowDepth = (((FarNear / (Core::FFAR - ShadowNdcPos.z * FarSubNear) - Core::FNEAR) / FarSubNear) + 1.0f) / 2.0f;
 
 	//						if (ShadowDepth > ShadowValue)
@@ -1125,7 +1138,7 @@ namespace TerraPGE::Renderer
 	//						}
 	//						else
 	//						{
-	//							Val = Core::ShadowMap[MapIdx];
+	//							Val = Renderer::ShadowMap[MapIdx];
 	//						}
 	//					}
 
@@ -1220,7 +1233,7 @@ namespace TerraPGE::Renderer
 	//				tex_w = (1.0f - t) * tex_sw + t * tex_ew;
 	//				t += tstep;
 
-	//				int idx = ContIdx(j, i, Core::sx);
+	//				int idx = ContIdx(j, i, Renderer::sx);
 
 	//				FragmentInfo FragInfo = CalculateFragmentInfo(Vec2(j, i), Tri, &Vp, FarNear, FarSubNear);
 	//				
@@ -1242,12 +1255,12 @@ namespace TerraPGE::Renderer
 	//						Vec4 ShadowNdcPos = Lights[0]->CalcNdc(FragInfo.InterpolatedPos);
 	//						ShadowNdcPos.CorrectPerspective();
 
-	//						ShadowNdcPos *= (Vec3((float)(Core::ShadowMapWidth * 0.5f), (float)(Core::ShadowMapHeight * 0.5f), 1.0f));
-	//						ShadowNdcPos += (Vec3((float)(Core::ShadowMapWidth * 0.5f), (float)(Core::ShadowMapHeight * 0.5f), 0.0f));
+	//						ShadowNdcPos *= (Vec3((float)(Renderer::ShadowMapWidth * 0.5f), (float)(Renderer::ShadowMapHeight * 0.5f), 1.0f));
+	//						ShadowNdcPos += (Vec3((float)(Renderer::ShadowMapWidth * 0.5f), (float)(Renderer::ShadowMapHeight * 0.5f), 0.0f));
 
-	//						MapIdx = ContIdx(PixelRoundMinMax(ShadowNdcPos.x, 0, Core::ShadowMapWidth - 1), PixelRoundMinMax(ShadowNdcPos.y, 0, Core::ShadowMapHeight - 1), Core::ShadowMapWidth);
+	//						MapIdx = ContIdx(PixelRoundMinMax(ShadowNdcPos.x, 0, Renderer::ShadowMapWidth - 1), PixelRoundMinMax(ShadowNdcPos.y, 0, Renderer::ShadowMapHeight - 1), Renderer::ShadowMapWidth);
 
-	//						ShadowValue = Core::ShadowMap[MapIdx] + ShadowMapBias;
+	//						ShadowValue = Renderer::ShadowMap[MapIdx] + ShadowMapBias;
 	//						ShadowDepth = (((FarNear / (Core::FFAR - ShadowNdcPos.z * FarSubNear) - Core::FNEAR) / FarSubNear) + 1.0f) / 2.0f;
 
 	//						if (ShadowDepth > ShadowValue)
@@ -1274,7 +1287,7 @@ namespace TerraPGE::Renderer
 	//						}
 	//						else
 	//						{
-	//							Val = Core::ShadowMap[MapIdx];
+	//							Val = Renderer::ShadowMap[MapIdx];
 	//						}
 	//					}
 

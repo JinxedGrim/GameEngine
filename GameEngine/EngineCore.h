@@ -13,17 +13,7 @@
 #include <Windows.h>
 #include <Psapi.h>
 
-#include "GdiPP.hpp"
-#include "WndCreator.hpp"
 #include "Math.h"
-#include "Camera.h"
-#include "Texture.h"
-#include "Mesh.h"
-#include "Lighting.h"
-#include "Shading.h"
-#include "Input.h"
-
-#include "ParrallelPP.h"
 
 #ifdef SSE_SIMD_42_SUPPORT
 #endif
@@ -34,75 +24,68 @@
 
 namespace TerraPGE::Core
 {
-	std::string FpsStr = "Fps: ";
-	std::wstring FpsWStr = L"Fps: ";
-
-	int sx = GetSystemMetrics(SM_CXSCREEN);
-	int sy = GetSystemMetrics(SM_CYSCREEN);
-
-	//TODO make camera intrinsic
-	float FOV = 90.0f;
-	float FNEAR = 0.1f;
-	float FFAR = 100.0f;
-
 	// move all to TPGE
-	bool FpsEngineCounter = true;
-	bool DoMultiThreading = false;
-	bool SimdAcceleration = true;
-	bool GpuAcceleration = false;
+	static bool FpsEngineCounter = true;
+	static bool DoMultiThreading = false;
+	static bool SimdAcceleration = true;
+	static bool GpuAcceleration = false;
 
-	int CpuCores = 0;
-	int GPUDevCount = 0;
-	std::vector<std::wstring> GPUDevNames = {};
-	std::wstring PrimaryGPUDevName;
-	SIZE_T MaxMemoryMB = 0;
-
-	ThreadManager ThreadPool;
-	CPUID CpuId(1);
-	SupportedInstructions SimdInfo = { 0 };
+	static int CpuCores = 0;
+	static int GPUDevCount = 0;
+	static std::vector<std::wstring> GPUDevNames = {};
+	static std::wstring PrimaryGPUDevName;
+	static SIZE_T MaxMemoryMB = 0;
 	std::string CpuName;
 
+	static ThreadManager ThreadPool;
+	static CPUID CpuId(1);
+	static SupportedInstructions SimdInfo = { 0 };
+
+	static bool HasOpenConsole = false;
+
 	// move to TPGE keep all and add a switch for updating keyboard input (allow user to disable all input)
-	bool UpdateMouseIn = true;
-	bool LockCursor = true;
-	bool CursorShow = false;
+	static bool UpdateMouseIn = true;
 
-	// move to lighting obj
-	int ShadowMapHeight = 1024;
-	int ShadowMapWidth = 1024;
+	static constexpr const char* TPGE_LOG_ERROR_RENDERER_FATAL = "\\^c";
+	static constexpr const char* TPGE_LOG_ERROR_RENDERER_NON_FATAL = "\\^c";
 
-	// move to renderer
-	float* DepthBuffer = DEBUG_NEW float[sx * sy];
-	float* FrameBuffer = DEBUG_NEW float[sx * sy * 3];
-
-	// move out and into ligting objects
-	float* ShadowMap = DEBUG_NEW float[ShadowMapWidth * ShadowMapHeight];
-
-	void Log(std::string Message)
+	__inline void _LogCout(std::string Message)
 	{
 		std::cout << Message << std::endl;
 	}
 
+	__inline void _LogCErr(std::string Message)
+	{
+		std::cout << Message << std::endl;
+	}
 
-	void LogInfo(std::string CallerTag, std::string Message)
+	__inline void Log(std::string Message, bool IsError = false)
+	{
+		if (HasOpenConsole)
+		{
+			_LogCout(Message);
+		}
+	}
+
+	__inline void LogInfo(std::string CallerTag, std::string Message)
 	{
 		Core::Log("[I] (" + CallerTag + ") " + Message);
 	}
 	
 
-	void LogWarning(std::string CallerTag, std::string Message)
+	__inline void LogWarning(std::string CallerTag, std::string Message)
 	{
 		Core::Log("[W] (" + CallerTag + ") " + Message);
 	}
 
 
-	void LogError(std::string CallerTag, std::string Message, int Level)
+	__inline void LogError(std::string CallerTag, std::string Message, int Level)
 	{
 		Core::Log("[E] (" + CallerTag + ") " + Message);
 	}
 
 
-	double  GetCpuUsageInfo()
+	double GetCpuUsageInfo()
 	{
 		FILETIME creation, exit, kernel, user;
 		GetProcessTimes(GetCurrentProcess(), &creation, &exit, &kernel, &user);
@@ -189,96 +172,6 @@ namespace TerraPGE::Core
 				TerraPGE::Core::PrimaryGPUDevName = DispDev.DeviceString;
 		}
 
-	}
-
-
-	void OpenConsole()
-	{
-		AllocConsole();
-
-		FILE* fp;
-		freopen_s(&fp, "CONOUT$", "w", stdout);
-		freopen_s(&fp, "CONOUT$", "w", stderr);
-		freopen_s(&fp, "CONIN$", "r", stdin);
-	}
-
-
-	// Update screen info
-	void UpdateScreenInfo(GdiPP* Gdi)
-	{
-		// Update GDI info
-		Gdi->UpdateClientRgn();
-
-		// Update screen dimenstions
-		sx = Gdi->ClientRect.right - Gdi->ClientRect.left;
-		sy = Gdi->ClientRect.bottom - Gdi->ClientRect.top;
-
-		// Update DepthBuffer
-		delete[] DepthBuffer;
-		DepthBuffer = DEBUG_NEW float[sx * sy];
-	}
-
-
-	// Delete buffers
-	void EngineCleanup()
-	{
-		Log("EngineCleanup called");
-		// Cleanup buffers
-		delete[] DepthBuffer;
-		delete[] ShadowMap;
-	}
-
-
-	void UpdateInput(WndCreator& Wnd)
-	{
-		if (Wnd.HasFocus())
-		{
-			static POINT Tmp;
-
-			if (LockCursor)
-				SetCursorPos(sx / 2, sy / 2);
-
-			if (CursorShow == false)
-			{
-				while (ShowCursor(FALSE) >= 0) {}
-			}
-			else
-			{
-				while (ShowCursor(TRUE) <= 0) {}
-			}
-		}
-
-	}
-
-
-	__inline void SetPixelFrameBuffer(int x, int y, float R, float G, float B)
-	{
-		int index = ContIdx(x, y, Core::sx) * 3;
-		Core::FrameBuffer[index++] = R;
-		Core::FrameBuffer[index++] = G;
-		Core::FrameBuffer[index] = B;
-	}
-
-
-	void UpdateWindow(WndCreator& Wnd, MSG* msg)
-	{
-		Wnd.Input.BeginFrame();
-
-		while (PeekMessageW(msg, NULL, 0, 0, PM_REMOVE))
-		{
-			// Check Msg
-			if (msg->message == WM_QUIT || msg->message == WM_CLOSE || msg->message == WM_DESTROY)
-			{
-				break;
-			}
-			else
-			{
-				TranslateMessage(msg);
-				DispatchMessageW(msg);
-			}
-		}
-
-		Core::UpdateInput(Wnd);
 	}
 }
 

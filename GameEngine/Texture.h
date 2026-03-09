@@ -1,10 +1,7 @@
 #pragma once
-#include "Math.h"
+#include "EngineCore.h"
 
 #include <iostream>
-#include <string>
-#include <sstream>
-#include <fstream>
 #include <algorithm>
 
 #define _NULL_TEXTURE_VALUES 255.0f, 0.0f, 255.0f
@@ -159,7 +156,7 @@ class Image2D
 
 		if (!Out->Loaded || !Success)
 		{
-			std::cout << "Failed to load: " << FilePath << std::endl;
+			TerraPGE::Core::LogError("[IMAGE]", "Failed to load texture: " + FilePath, 0);
 			return nullptr;
 		}
 
@@ -343,7 +340,7 @@ class Texture
 
 	Texture(const std::string& Filename, WrappingMode Mode = WrappingMode::Clamp, const std::string& Prefix = "Assets\\")
 	{
-		std::cout << "Loading Texture: " << Filename << std::endl;
+		TerraPGE::Core::LogInfo("[CUBEMAP]", "Loading Texture: " + Filename);
 		this->Image = Image2D::Load(Prefix + Filename);
 
 		this->Used = (this->Image != nullptr && this->Image->IsLoaded());
@@ -482,7 +479,7 @@ class CubeMap
 
 		if (!Out->CheckFaces())
 		{
-			std::cout << "Failed to load one or more faces" << std::endl;
+			TerraPGE::Core::LogError("[CUBEMAP]", "Failed to load one or more faces", 0);
 			return nullptr;
 		}
 
@@ -493,7 +490,7 @@ class CubeMap
 
 	static CubeMap* LoadCubemapFromDirectory(const std::string CubemapDirectory, const std::string Ext = ".bmp", const std::string& Prefix = "Assets\\")
 	{
-		std::cout << "Loading Cubmap textures from dir: " << Prefix + CubemapDirectory << std::endl;
+		TerraPGE::Core::LogInfo("[CUBEMAP]", "Loading Cubmap textures from dir: " + Prefix + CubemapDirectory);
 		return LoadCubemapFromImages(Prefix + CubemapDirectory + "px" + Ext, Prefix + CubemapDirectory + "py" + Ext, Prefix + CubemapDirectory + "pz" + Ext, Prefix + CubemapDirectory + "nx" + Ext, Prefix + CubemapDirectory + "ny" + Ext, Prefix + CubemapDirectory + "nz" + Ext);
 	}
 
@@ -511,84 +508,68 @@ class CubeMap
 	}
 	
 
-	Color Sample(Vec3& ViewDirection)
+	Color Sample(const Vec3& viewDirection)
 	{
-		Vec3 Dir = ViewDirection.Normalized();
-		Vec3 Abs = Dir.GetAbs();
-		int Axis = Abs.GetBiggestComponent();
-
-		//return Color(Dir);
+		const Vec3 absDir = viewDirection.GetAbs();
 
 		float u, v;
-		int ToSample = CUBEMAP_PX;
+		int face;
 
-		switch (Axis)
+		if (absDir.x >= absDir.y && absDir.x >= absDir.z)
 		{
-		case 0: // X dominant
-			if (Dir.x > 0.0f)
+			const float inv = 1.0f / absDir.x;
+
+			if (viewDirection.x > 0.0f)
 			{
-				// +X
-				u = -Dir.z / Abs.x;
-				v = Dir.y / Abs.x;
-				ToSample = CUBEMAP_PX;
+				u = -viewDirection.z * inv;
+				v = viewDirection.y * inv;
+				face = CUBEMAP_PX;
 			}
 			else
 			{
-				// -X
-				u = Dir.z / Abs.x;
-				v = Dir.y / Abs.x;
-				ToSample = CUBEMAP_NX;
+				u = viewDirection.z * inv;
+				v = viewDirection.y * inv;
+				face = CUBEMAP_NX;
 			}
-			break;
-		case 1: // Y dominant
-			if (Dir.y > 0.0f)
+		}
+		else if (absDir.y >= absDir.z)
+		{
+			const float inv = 1.0f / absDir.y;
+
+			if (viewDirection.y > 0.0f)
 			{
-				// +Y
-				u = Dir.x / Abs.y;
-				v = -Dir.z / Abs.y;
-				ToSample = CUBEMAP_PY;
+				u = viewDirection.x * inv;
+				v = -viewDirection.z * inv;
+				face = CUBEMAP_PY;
 			}
 			else
 			{
-				// -Y
-				u = Dir.x / Abs.y;
-				v = Dir.z / Abs.y;
-				ToSample = CUBEMAP_NY;
+				u = viewDirection.x * inv;
+				v = viewDirection.z * inv;
+				face = CUBEMAP_NY;
 			}
-			break;
-		case 2: // Z dominant
-			if (Dir.z > 0.0f)
+		}
+		else
+		{
+			const float inv = 1.0f / absDir.z;
+
+			if (viewDirection.z > 0.0f)
 			{
-				// +Z
-				u = Dir.x / Abs.z;
-				v = Dir.y / Abs.z;
-				ToSample = CUBEMAP_PZ;
+				u = viewDirection.x * inv;
+				v = viewDirection.y * inv;
+				face = CUBEMAP_PZ;
 			}
 			else
 			{
-				// -Z
-				u = -Dir.x / Abs.z;
-				v = Dir.y / Abs.z;
-				ToSample = CUBEMAP_NZ;
+				u = -viewDirection.x * inv;
+				v = viewDirection.y * inv;
+				face = CUBEMAP_NZ;
 			}
-			break;
-		default:
-			throw;
 		}
 
 		u = (u + 1.0f) * 0.5f;
 		v = (v + 1.0f) * 0.5f;
 
-
-		//return Color(u, v, (255.0f/2.0f * ToSample)/255.0f);
-
-		//float Lum = this->Faces[ToSample]->GetColorAtPixel(u, v).Denormalized().CalculateLuminance();
-		//if (Lum >= 255.0f)
-		//{
-		//	return Color(Lum, 0.0f, 0.0f);
-		//}
-
-		//return Color(Lum, Lum, Lum);
-		return this->Faces[ToSample]->GetColorAtPixel(u, v).Normalized();
+		return Faces[face]->GetColorAtPixel(u, v).Normalized();
 	}
 };

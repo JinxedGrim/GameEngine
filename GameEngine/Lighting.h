@@ -284,7 +284,7 @@ public:
 		// 5. Sample shadow map
 		int MapIdx = ContIdx(ShadowX, ShadowY, W);
 
-		// TODO BAD INTERP     Core::ShadowMap[MapIdx]
+		// TODO BAD INTERP     Renderer::ShadowMap[MapIdx]
 		*ShadowMapDepth = ShadowMap[MapIdx];
 		*ShadowDepth = ShadowUV.z + ShadowMapBias;
 

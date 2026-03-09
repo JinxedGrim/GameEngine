@@ -497,7 +497,7 @@ class Mesh
 		std::string MtlLibFn = "";
 		Material* CurrMat = nullptr;
 
-		std::cout << "Loading Mesh: " << Prefix + FnPath << std::endl;
+		TerraPGE::Core::LogInfo("[MATERIAL]", "Loading Mesh: " + Prefix + FnPath);
 
 		while (!ifs.eof())
 		{
@@ -620,9 +620,7 @@ class Mesh
 			}
 		}
 
-#ifdef _DEBUG
-		std::cout << "Done" << std::endl;
-#endif
+		TerraPGE::Core::LogInfo("[Mesh]", "Finished Loading");
 
 		FnPath = FnPath.substr(FnPath.find_last_of("/\\") + 1);
 		FnPath = FnPath.substr(0, FnPath.find_last_of(".obj") - 3);

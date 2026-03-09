@@ -1,9 +1,5 @@
 #pragma once
-#include "Math.h"
-#include <vector>
-#include <fstream>
-#include <string>
-#include <sstream>
+#include "EngineCore.h"
 
 #define _NULL_MATERIAL_VALUES 255.0f, 0.0f, 255.0f
 #define NULL_MATERIAL_COLOR Color(_NULL_MATERIAL_VALUES)
@@ -82,14 +78,14 @@ public:
 		std::ifstream mtlFile(Prefix + MtlFn);
 		if (!mtlFile.is_open())
 		{
-			std::cout << "Failed to load: " << Prefix + MtlFn << std::endl;
+			TerraPGE::Core::LogError("[MATERIAL]", "Failed to load: " + Prefix + MtlFn, 0);
 			delete Mat;
 			Mat = GetNullMaterial();
 			return Mat;
 		}
 
 		std::string line;
-		std::cout << "Loading Material: " << Prefix + MtlFn << std::endl;
+		TerraPGE::Core::LogInfo("[MATERIAL]", "Loading Material: " + Prefix + MtlFn);
 		while (std::getline(mtlFile, line))
 		{
 			std::stringstream ss(line);
@@ -138,9 +134,7 @@ public:
 							ssProp >> textureFilePath;
 							if (textureFilePath != "")
 							{
-#ifdef _DEBUG
-								std::cout << "Loading Texture (ka): " << textureFilePath << std::endl;
-#endif
+								TerraPGE::Core::LogInfo("[MATERIAL]", "Loading Texture (ka): " + textureFilePath);
 								Mat->Textures.push_back(Texture::Create(textureFilePath));
 							}
 						}
@@ -151,7 +145,7 @@ public:
 							if (textureFilePath != "")
 							{
 #ifdef _DEBUG
-								std::cout << "Loading Texture (kd): " << textureFilePath << std::endl;
+								TerraPGE::Core::LogInfo("[MATERIAL]", "Loading Texture (kd): " + textureFilePath);
 #endif
 								Mat->Textures.push_back(Texture::Create(textureFilePath));
 							}

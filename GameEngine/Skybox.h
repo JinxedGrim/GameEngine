@@ -95,7 +95,10 @@ public:
 			this->Texture->SetPixel(MaxX, MaxY, MaxFace, Color(255.0f, 0.0f, 0.0f));
 		}
 
-		std::cout << "MaxLum: " << MaxLuminance << " at face: " << MaxFace << " at: (" << MaxX << ", " << MaxY << ")" << std::endl << "Calculated LightDir: " << LightDir << std::endl;
+		std::stringstream str;
+		str << "MaxLum: " << MaxLuminance << " at face: " << MaxFace << " at: (" << MaxX << ", " << MaxY << ")" << " Calculated LightDir: " << LightDir;
+
+		TerraPGE::Core::LogInfo("[SKYBOX]", str.str());
 		return LightDir;
 	}
 

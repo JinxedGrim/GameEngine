@@ -208,8 +208,6 @@ bool RaycastMesh(Ray ray, const std::vector<Triangle>& triangles, RaycastHit* ou
 	ray.origin = ray.origin * InverseWorld;
 	ray.direction = (ray.direction * normalMatrix.Inversed()).Normalized();
 
-	std::cout << "ray.origin: " << ray.origin << " dir: " << ray.direction << std::endl;
-
 	for (const Triangle& tri : triangles)
 	{
 		Vec3 v0 = tri.Points.Points[0];
