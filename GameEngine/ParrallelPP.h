@@ -55,7 +55,7 @@ class CodeTimer
 	}
 };
 
-typedef struct SupportedInstructions
+struct SupportedInstructions
 {
 	bool SSE = false;
 	bool SSE2 = false;

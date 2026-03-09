@@ -65,7 +65,9 @@ COLORREF GetBrushColor(HBRUSH brush)
     return lbr.lbColor;
 }
 
+#ifndef PixelRound
 #define PixelRound(Val) (int)std::roundf(Val)
+#endif
 
 class BrushPP
 {

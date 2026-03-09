@@ -69,17 +69,17 @@ namespace TerraPGE
 
 		const std::vector <Renderable*> GetRoots() 
 		{
-			std::vector<Renderable*> Roots;
+			std::vector<Renderable*> roots;
 
 			for (Renderable* Obj : RenderQueue)
 			{
 				if (Obj->Transform.Parent == nullptr)
 				{
-					Roots.push_back(Obj);
+					roots.push_back(Obj);
 				}
 			}
 
-			return Roots;
+			return roots;
 		}
 
 

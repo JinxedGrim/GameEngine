@@ -5,6 +5,12 @@
 #include "WndCreator.hpp"
 #include "GdiPP.hpp"
 
+//TODO
+// X. Add icons to text formatter
+// X. Add  fonts to format parser
+
+
+
 namespace TerraPGE::Renderer
 {
 	void OpenConsole()
@@ -30,16 +36,18 @@ namespace TerraPGE::Renderer
 	{
 		int X = 0;
 		int Y = 0;
+		int BkMode = 0;
 		COLORREF Clr = RGB(0, 0, 0);
 		std::string Text = "";
 
 
-		TEXT_PARAMS(const int x, const int y, const std::string text, COLORREF clr)
+		TEXT_PARAMS(const int x, const int y, const std::string text, COLORREF clr, const int BkMode)
 		{
 			this->X = x;
 			this->Y = y;
 			this->Text = text;
 			this->Clr = clr;
+			this->BkMode = BkMode;
 		}
 	};
 
@@ -70,7 +78,10 @@ namespace TerraPGE::Renderer
 	static constexpr const char* TPGE_TEXT_RESET_TOKEN = "\\^r";
 	static constexpr const char* TPGE_TEXT_SHIFT_X_TOKEN = "\\^x";
 	static constexpr const char* TPGE_TEXT_SHIFT_Y_TOKEN = "\\^y";
+	static constexpr const char* TPGE_TEXT_EFFECT_TOKEN = "\\^e";
 	static constexpr const char* TPGE_TEXT_NEW_LINE_TOKEN = "\n";
+	static constexpr const char* TPGE_TEXT_BK_TOKEN = "\\^b";
+
 
 	static int CpuCores = 0;
 	static SIZE_T MaxMemoryMB = 0;
@@ -303,7 +314,10 @@ namespace TerraPGE::Renderer
 				if (LockCursor)
 					SetCursorPos(sx / 2, sy / 2);
 
-				while (ShowCursor(CursorShow == false ? FALSE : TRUE) >= 0) {}
+				if (CursorShow)
+					while (ShowCursor(TRUE) < 0) {}
+				else
+					while (ShowCursor(FALSE) >= 0) {}
 			}
 		}
 
@@ -334,32 +348,31 @@ namespace TerraPGE::Renderer
 		// Probably this Renderer Becomes a class thats derivable
 		void RenderFormattedText(const int& startX, const int& startY, const std::string& str, const COLORREF& InitialColor, const int& BkMode = TRANSPARENT)
 		{
-			int lastPoint = 0;
+			size_t  lastPoint = 0;
 			std::vector<TEXT_PARAMS> SubStrs;
 
 			int CurrX = startX;
 			int CurrY = startY;
 			COLORREF CurrColor = InitialColor;
 			int CurrBkMode = BkMode;
+			bool RainBowMode = false;
+			static int RainbowStep = 0;
 
-			for (int i = 0; i < str.length(); i++)
+			for (size_t i = 0; i < str.length(); i++)
 			{
-				if (i == str.length() - 1)
+				if (str.at(i) == '\n')
 				{
-					std::string sub = str.substr(lastPoint);
-					SubStrs.push_back(TEXT_PARAMS(CurrX, CurrY, sub, CurrColor));
-					lastPoint = i;
-					i = lastPoint;
-				}
-				else if (str.at(i) == '\n')
-				{
-					SubStrs.push_back(TEXT_PARAMS(CurrX, CurrY, str.substr(lastPoint, i - lastPoint), CurrColor));
+					SubStrs.push_back(TEXT_PARAMS(CurrX, CurrY, str.substr(lastPoint, i - lastPoint), CurrColor, CurrBkMode));
 					CurrY += 20; // TODO Dont hardcode this (ratio?) also (font, size etc)
 					CurrX = startX;
-					lastPoint = i;
+
+					lastPoint = i + 1;
+					continue;
 				}
-				else if (str.at(i) == '\\' && str.at(i+1) == '^')
+				else if (i + 2 < str.length() && str[i] == '\\' && str[i + 1] == '^') 
 				{
+					int consumed = 0;
+
 					switch (str.at(i+2))
 					{
 						case 'c':
@@ -371,12 +384,32 @@ namespace TerraPGE::Renderer
 							if (sscanf_s(&str[i], "\\^c{%d}{%d}{%d}%n", &r, &g, &b, &consumed) == 3)
 							{
 								std::string sub = str.substr(lastPoint, i - lastPoint);
-								SubStrs.push_back(TEXT_PARAMS(CurrX, CurrY, sub, CurrColor));
+								SubStrs.push_back(TEXT_PARAMS(CurrX, CurrY, sub, CurrColor, CurrBkMode));
+								CurrX += EngineGdi->MeasureTextWidth(sub.c_str());
+								CurrColor = RGB(r, g, b);
+
+								i += consumed - 1;
+								lastPoint = i + 1;
+								RainBowMode = false;
+								continue;
+							}
+							break;
+						}
+						case 'b':
+						{
+							int bkMode;
+							int consumed = 0;
+
+							if (sscanf_s(&str[i], "\\^b{%d}%n", &bkMode, &consumed) == 1)
+							{
+								std::string sub = str.substr(lastPoint, i - lastPoint);
+								SubStrs.push_back(TEXT_PARAMS(CurrX, CurrY, sub, CurrColor, CurrBkMode));
 								CurrX += EngineGdi->MeasureTextWidth(sub.c_str());
 
 								i += consumed - 1;
 								lastPoint = i + 1;
-								CurrColor = RGB(r, g, b);
+								CurrBkMode = bkMode;
+								continue;
 							}
 							break;
 						}
@@ -388,12 +421,13 @@ namespace TerraPGE::Renderer
 							if (sscanf_s(&str[i], "\\^x{%d}%n", &offsetX, &consumed) == 1)
 							{
 								std::string sub = str.substr(lastPoint, i - lastPoint);
-								SubStrs.push_back(TEXT_PARAMS(CurrX, CurrY, sub, CurrColor));
+								SubStrs.push_back(TEXT_PARAMS(CurrX, CurrY, sub, CurrColor, CurrBkMode));
 								CurrX += EngineGdi->MeasureTextWidth(sub.c_str());
 
 								i += consumed - 1;
 								lastPoint = i + 1;
 								CurrX += offsetX;
+								continue;
 							}
 							break;
 						}
@@ -402,15 +436,16 @@ namespace TerraPGE::Renderer
 							int consumed = 0;
 							int offsetY = 0;
 
-							if (sscanf_s(&str[i], "\\^x{%d}%n", &offsetY, &consumed) == 1)
+							if (sscanf_s(&str[i], "\\^y{%d}%n", &offsetY, &consumed) == 1)
 							{
 								std::string sub = str.substr(lastPoint, i - lastPoint);
-								SubStrs.push_back(TEXT_PARAMS(CurrX, CurrY, sub, CurrColor));
+								SubStrs.push_back(TEXT_PARAMS(CurrX, CurrY, sub, CurrColor, CurrBkMode));
 								CurrX += EngineGdi->MeasureTextWidth(sub.c_str());
 
 								i += consumed - 1;
 								lastPoint = i + 1;
-								CurrY += offsetY;
+								CurrY += offsetY;							
+								continue;
 							}
 							break;
 						}
@@ -418,44 +453,64 @@ namespace TerraPGE::Renderer
 						{
 							int consumed = 3;
 							std::string sub = str.substr(lastPoint, i - lastPoint);
-							SubStrs.push_back(TEXT_PARAMS(CurrX, CurrY, sub, CurrColor));
+							SubStrs.push_back(TEXT_PARAMS(CurrX, CurrY, sub, CurrColor, CurrBkMode));
 							CurrX += EngineGdi->MeasureTextWidth(sub.c_str());
+							CurrColor = InitialColor;
+							RainBowMode = false;
+							CurrBkMode = BkMode;
 
 							i += consumed - 1;
 							lastPoint = i + 1;
-
-							CurrColor = InitialColor;
+							continue;
 							break;
 						}
 						case 'e':
 						{
-							int consumed = 0;
-							std::string effect;
-
-							if (sscanf_s(&str[i], "\\^e{%s}%n", str.data(), &consumed) == 1)
+							char effect[45] = {'\0'};
+							if (sscanf_s(&str[i], "\\^e{%[^}]}%n", effect, (unsigned)_countof(effect), &consumed) == 1)
 							{
-								if (effect == "Rainbow")
+								if (strcmp(effect, "Rainbow") == 0)
 								{
 									std::string sub = str.substr(lastPoint, i - lastPoint);
-									SubStrs.push_back(TEXT_PARAMS(CurrX, CurrY, sub, CurrColor));
+									SubStrs.push_back(TEXT_PARAMS(CurrX, CurrY, sub, CurrColor, CurrBkMode));
 									CurrX += EngineGdi->MeasureTextWidth(sub.c_str());
 
-									i += consumed - 1;
-									lastPoint = i + 1;
-									// TODO  Set rainbow flag
+									RainBowMode = true;
+									CurrColor = RGB(255, 0, 0);
 								}
 
 								i += consumed - 1;
 								lastPoint = i + 1;
+								continue;
 							}
+							break;
 						}
 					}
 				}
+				else if (RainBowMode)
+				{
+					std::string sub = str.substr(i, 1);
+
+					SubStrs.push_back(TEXT_PARAMS(CurrX, CurrY, sub, CurrColor, CurrBkMode));
+					CurrX += EngineGdi->MeasureTextWidth(sub.c_str());
+
+					Color c = Color::RainbowColor(RainbowStep++);
+					CurrColor = RGB((int)c.R, (int)c.G, (int)c.B);
+
+					lastPoint = i + 1;
+					continue;
+				}
+			}
+
+			if (lastPoint < str.length())
+			{
+				std::string sub = str.substr(lastPoint);
+				SubStrs.push_back(TEXT_PARAMS(CurrX, CurrY, sub, CurrColor, CurrBkMode));
 			}
 
 			for (const TEXT_PARAMS& params : SubStrs)
 			{
-				EngineGdi->DrawStringA(params.X, params.Y, params.Text, params.Clr, BkMode);
+				EngineGdi->DrawStringA(params.X, params.Y, params.Text, params.Clr, params.BkMode);
 			}
 		}
 
@@ -797,9 +852,9 @@ namespace TerraPGE::Renderer
 						}
 
 						// Final transformation to RGB Space
-						R = Rf * 255.0f;
-						G = Gf * 255.0f;
-						B = Bf * 255.0f;
+						R = (int)(Rf * 255.0f);
+						G = (int)(Gf * 255.0f);
+						B = (int)(Bf * 255.0f);
 
 						// Write to out buffer
 						EngineGdi->QuickSetPixel(x, y, RGB(R, G, B));
@@ -896,9 +951,9 @@ namespace TerraPGE::Renderer
 					Bf = Bf + gammaMask * (Color::LinearToSRGB_Channel(Bf) - Bf);
 
 					// Final transformation to RGB Space
-					R = Rf * 255.0f;
-					G = Gf * 255.0f;
-					B = Bf * 255.0f;
+					R = (int)(Rf * 255.0f);
+					G = (int)(Gf * 255.0f);
+					B = (int)(Bf * 255.0f);
 
 					int y = i / Renderer::sx;
 					int x = i % Renderer::sx;
@@ -965,9 +1020,9 @@ namespace TerraPGE::Renderer
 					}
 
 					// Final transformation to RGB Space
-					R = Rf * 255.0f;
-					G = Gf * 255.0f;
-					B = Bf * 255.0f;
+					R = (int)(Rf * 255.0f);
+					G = (int)(Gf * 255.0f);
+					B = (int)(Bf * 255.0f);
 
 					// Write to out buffer
 					EngineGdi->QuickSetPixel(x, y, RGB(R, G, B));

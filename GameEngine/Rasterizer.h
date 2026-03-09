@@ -19,7 +19,7 @@ namespace TerraPGE::Renderer
 	static float TestDepth = -1.0f;
 	static float TestDepthMapped = -1.0f;
 	static bool DoShadows = true;
-	static bool WireFrame = false;
+	static bool WireFrame = true;
 	static bool ShowTriLines = false; // TODO make a shader for this
 	static float TestHdrExposure = 1.0f;
 	static bool UseHDR = true;
@@ -356,6 +356,7 @@ namespace TerraPGE::Renderer
 		ShaderTypes* ShaderType = BaseArgs->FindShaderResourcePtr<ShaderTypes*>(TPGE_SHDR_TYPE);
 		size_t LightCount = BaseArgs->FindShaderResourceValue<size_t>(TPGE_SHDR_LIGHT_COUNT);
 		bool HasLight = LightCount > 0;
+		Color* FragmentColor = BaseArgs->FindShaderResourcePtr<Color*>(TPGE_SHDR_FRAG_COLOR);
 
 		bool MidPixel = false;
 
@@ -398,7 +399,7 @@ namespace TerraPGE::Renderer
 			for (int x = minX; x <= maxX; x++)
 			{
 				int idx = ContIdx(x, y, ScreenWidth);
-				MidPixel = (x == ScreenWidth / 2 && y == ScreenHeight / 2);
+				MidPixel = (x * 2 == ScreenWidth && y * 2 == ScreenHeight);
 				// Compute barycentric coordinates
 				float alpha = (v1y_Sub_v2y * ((x + 0.5f) - v2.x) + (v2x_Sub_v1x) * ((y + 0.5f) - v2.y)) / triArea;
 				float beta = (v2y_Sub_v0y * ((x + 0.5f) - v2.x) + (v0x_Sub_v2x) * ((y + 0.5f) - v2.y)) / triArea;
@@ -429,8 +430,6 @@ namespace TerraPGE::Renderer
 
 					if (DebugDepthBuffer)
 					{
-						Color* FragmentColor = BaseArgs->FindShaderResourcePtr<Color*>(TPGE_SHDR_FRAG_COLOR);
-
 						if (MidPixel)
 						{
 							TestDepth = Depth;
@@ -449,7 +448,7 @@ namespace TerraPGE::Renderer
 					InterpolatedWorldPos.z = Interp.PerspectiveCorrectInterpolate(world0.z, world1.z, world2.z, v0.w, v1.w, v2.w);
 
 
-					if (true)
+					if (false)
 					{
 						Vec3 Color = RasterUtils::MapInterpedVec3ToColor(world0, world1, world2, InterpolatedWorldPos);
 						Renderer::RenderingCore::SetPixelFrameBuffer(x, y, FrameBuffer, ScreenWidth, Color.x, Color.y, Color.z);
@@ -476,12 +475,6 @@ namespace TerraPGE::Renderer
 							ShadowMapDepth = std::clamp(ShadowMapDepth, 0.0f, 1.0f);
 							float ColorVal = (ShadowMapDepth);
 							Renderer::RenderingCore::SetPixelFrameBuffer(x, y, FrameBuffer, ScreenWidth, ColorVal, ColorVal, ColorVal);
-
-							if (MidPixel)
-							{
-								TestDepth = ShadowDepth;
-								TestDepthMapped = ShadowMapDepth;
-							}
 							continue;
 						}
 
@@ -506,8 +499,11 @@ namespace TerraPGE::Renderer
 						Vec3 BaryCoords = Vec3(alpha, beta, gamma);
 						BaseArgs->EditShaderDataValue<Vec3>(TPGE_SHDR_FRAG_BARY_COORDS, BaryCoords);
 						TerraPGE::EngineShaders::DebugShaders::Shader_WireFrame(BaseArgs);
+						Renderer::RenderingCore::SetPixelFrameBuffer(x, y, FrameBuffer, ScreenWidth, FragmentColor->R, FragmentColor->G, FragmentColor->B);
+						continue;
 					}
-					else if (*ShaderType != ShaderTypes::SHADER_FRAGMENT || ScreenSpaceTri->OverrideTextureColor || !Renderer::DoLighting)
+
+					if (*ShaderType != ShaderTypes::SHADER_FRAGMENT || ScreenSpaceTri->OverrideTextureColor || !Renderer::DoLighting)
 					{
 						// Debug dispatching
 						if (ScreenSpaceTri->OverrideTextureColor)
@@ -523,6 +519,8 @@ namespace TerraPGE::Renderer
 
 							BaseArgs->EditShaderDataValue<TextureCoords>(TPGE_SHDR_TEX_UVW, { uvw.x / uvw.z, uvw.y / uvw.z, uvw.z });
 							EngineShaders::Shader_Sample_Texture(BaseArgs);
+							Renderer::RenderingCore::SetPixelFrameBuffer(x, y, FrameBuffer, ScreenWidth, FragmentColor->R, FragmentColor->G, FragmentColor->B);
+							continue;
 						}
 						else
 						{
@@ -549,13 +547,11 @@ namespace TerraPGE::Renderer
 					}
 
 					// Set pixel in pixel buffer
-					Color* FragmentColor = BaseArgs->FindShaderResourcePtr<Color*>(TPGE_SHDR_FRAG_COLOR);
-
 					if (!UseHDR)
 					{
-						std::clamp<float>(FragmentColor->R, 0.0f, 1.0f);
-						std::clamp<float>(FragmentColor->G, 0.0f, 1.0f);
-						std::clamp<float>(FragmentColor->B, 0.0f, 1.0f);
+						FragmentColor->R = std::clamp<float>(FragmentColor->R, 0.0f, 1.0f);
+						FragmentColor->G = std::clamp<float>(FragmentColor->G, 0.0f, 1.0f);
+						FragmentColor->B = std::clamp<float>(FragmentColor->B, 0.0f, 1.0f);
 					}
 
 					Renderer::RenderingCore::SetPixelFrameBuffer(x, y, FrameBuffer, ScreenWidth, FragmentColor->R, FragmentColor->G, FragmentColor->B);

@@ -1,11 +1,5 @@
 #define _CRT_SECURE_NO_WARNINGS
-
-#ifndef UseOGL
-//#define SSE_SIMD_42_SUPPORT
 #include "ExampleScene.h"
-#else
-// gonna add a opengl version
-#endif
 
 
 int APIENTRY WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _In_ LPSTR lpCmdLine, _In_ int nShowCmd)

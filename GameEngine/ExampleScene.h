@@ -68,7 +68,7 @@ class ExampleScene : public TerraPGE::Scene
 		Dl.CastsShadows = true;
 
 		this->PointLightPos = { 0, 1, 0 };
-		sl = PointLight(this->PointLightPos, { 0, 0, 0 }, Vec3(253, 255, 255), 1.0f, 0.02f, 0.002f, 0.5f, 0.15f, 0.5f);
+		sl = PointLight(this->PointLightPos, Vec3(253, 255, 255), 1.0f, 0.02f, 0.002f, 0.5f, 0.15f, 0.5f);
 		sl.CastsShadows = true;
 		sl.Render = true;
 
@@ -234,7 +234,7 @@ class ExampleScene : public TerraPGE::Scene
 	}
 
 
-	void HandleInput(WndCreator& Wnd, GdiPP* Gdi, const float& ElapsedTime)
+	void HandleInput(WndCreator& Wnd, const float& ElapsedTime)
 	{
 		if (Wnd.Input.IsKeyDown('C'))
 		{
@@ -502,7 +502,7 @@ class ExampleScene : public TerraPGE::Scene
 
 	void RunTick(GdiPP* Gdi, WndCreator& Wnd, const float& ElapsedTime) override
 	{
-		HandleInput(Wnd, Gdi, ElapsedTime);
+		HandleInput(Wnd, ElapsedTime);
 
 		this->AddToRenderQueue(CubeRender);
 		this->AddToRenderQueue(PlaneRender);
@@ -675,6 +675,7 @@ class ExampleScene : public TerraPGE::Scene
 					DbgClip << TerraPGE::Renderer::DebugClip << TerraPGE::Renderer::TPGE_TEXT_NEW_LINE_TOKEN <<
 					DbgShadows << TerraPGE::Renderer::DebugShadowMap << TerraPGE::Renderer::TPGE_TEXT_NEW_LINE_TOKEN <<
 					DepthStr << TerraPGE::Renderer::TestDepth << TerraPGE::Renderer::TPGE_TEXT_NEW_LINE_TOKEN;
+
 				TerraPGE::Renderer::RenderingCore::RenderFormattedText(20, 40, outStr.str(), RGB(255, 0, 0));
 			}
 		}
@@ -682,7 +683,9 @@ class ExampleScene : public TerraPGE::Scene
 		if (this->Paused)
 		{
 			const static std::string PauseTitle = "Paused";
-			TerraPGE::Renderer::RenderingCore::RenderFormattedText(TerraPGE::Renderer::sx / 2, TerraPGE::Renderer::sy / 2, PauseTitle, RGB(255, 255, 255));
+			std::stringstream str;
+			str << TerraPGE::Renderer::TPGE_TEXT_EFFECT_TOKEN << "{Rainbow}{0}" << PauseTitle;
+			TerraPGE::Renderer::RenderingCore::RenderFormattedText(TerraPGE::Renderer::sx / 2, TerraPGE::Renderer::sy / 2, str.str(), RGB(255, 255, 255));
 		}
 
 		DrawCrosshair(Gdi);

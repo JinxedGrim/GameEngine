@@ -538,7 +538,7 @@ public:
 
 	void SetBasis(const Matrix3x3* Basis)
 	{
-		std::memcpy(&_matrix[0][0], (Basis->_matrix), sizeof(float) * 9);
+		std::memcpy(_matrix, Basis->_matrix, sizeof(_matrix));
 	}
 
 

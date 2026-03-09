@@ -558,7 +558,7 @@ class WndCreatorA
 
         this->Wnd = CreateWindowExA(ExFlags, ClassName.data(), WindowName.data(), WStyle, x, y, Width, Height, HwndParent, 0, hInstance, 0);
 
-        this->SetWndLong(GWLP_USERDATA, (long)this);
+        this->SetWndLong(GWLP_USERDATA, (long long)this);
 
         if (!this->Wnd)
         {
@@ -939,7 +939,7 @@ class WndCreatorA
     }
 
 
-    HWND CreateChildWindow(const DWORD ExFlags, const DWORD WStyle, const std::string_view ClassName, const std::string_view WndName, const int x, const int y, const int Width, const int Height, const int Hmenu)
+    HWND CreateChildWindow(const DWORD ExFlags, const DWORD WStyle, const std::string_view ClassName, const std::string_view WndName, const int x, const int y, const int Width, const int Height, const long long Hmenu)
     {
         HWND chwnd = CreateWindowExA(ExFlags, ClassName.data(), WndName.data(), WStyle, x, y, Width, Height, this->Wnd, (HMENU)Hmenu, (HINSTANCE)GetWindowLongPtrA(this->Wnd, GWLP_HINSTANCE), NULL);
 
@@ -1558,7 +1558,7 @@ class WndCreatorW
     }
 
     
-    HWND CreateChildWindow(const DWORD ExFlags, const DWORD WStyle, const std::wstring_view ClassName, const std::wstring_view WndName, const int x, const int y, const int Width, const int Height, const int Hmenu)
+    HWND CreateChildWindow(const DWORD ExFlags, const DWORD WStyle, const std::wstring_view ClassName, const std::wstring_view WndName, const int x, const int y, const int Width, const int Height, const long long Hmenu)
     {
         HWND chwnd = CreateWindowExW(ExFlags, ClassName.data(), WndName.data(), WStyle, x, y, Width, Height, this->Wnd, (HMENU)Hmenu, (HINSTANCE)GetWindowLongPtrW(this->Wnd, GWLP_HINSTANCE), NULL);
 

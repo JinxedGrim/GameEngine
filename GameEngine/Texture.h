@@ -451,7 +451,7 @@ class Texture
 class CubeMap
 {
 	Image2D* Faces[6];
-	int FaceSize;
+	int FaceSize = 0;
 
 	CubeMap()
 	{
