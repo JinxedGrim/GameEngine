@@ -1,7 +1,7 @@
 #pragma once
 #include "Math.h"
-#include "GameObject.h"
 #include "RayCaster.h"
+#include "Collider.h"
 
 namespace TerraPGE::Physics
 {

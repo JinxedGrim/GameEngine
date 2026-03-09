@@ -229,6 +229,7 @@ class Image2D
 
 	void Delete()
 	{
+		this->Loaded = false;
 		delete this;
 	}
 };
@@ -389,7 +390,7 @@ class Texture
 
 	Color GetPixelColor(float u, float v) const
 	{
-		if (this->Image == nullptr || this->Image->IsLoaded() == false)
+		if (!this || this->Image == nullptr || this->Image->IsLoaded() == false)
 		{
 			return NULL_TEXTURE_COLOR;
 		}
@@ -425,6 +426,7 @@ class Texture
 	void Delete()
 	{
 		this->Image->Delete();
+		this->Image = nullptr;
 
 		auto it = std::find(LoadedTextures.begin(), LoadedTextures.end(), this);
 
@@ -432,6 +434,16 @@ class Texture
 		{
 			this->LoadedTextures.erase(it);
 		}
+	}
+
+	static void DeleteAllTextures()
+	{
+		for (Texture* T : LoadedTextures)
+		{
+			T->Delete();
+		}
+
+		LoadedTextures.clear();
 	}
 };
 

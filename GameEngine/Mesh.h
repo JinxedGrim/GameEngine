@@ -414,6 +414,7 @@ class Mesh
 
 	}
 
+
 	Mesh(std::vector<Triangle> Triangles, std::string MeshName = "")
 	{
 		this->Triangles = Triangles;
@@ -425,10 +426,12 @@ class Mesh
 		this->CalculateNormals();
 	}
 
+
 	Mesh(std::string Fn)
 	{
 		this->LoadMesh(Fn);
 	}
+
 
 	Mesh(Mesh m, Material* Mat)
 	{
@@ -441,6 +444,7 @@ class Mesh
 		this->ChangeMatInfo(Mat);
 	}
 
+
 	void TranslateTriangles(Vec3 Value)
 	{
 		for (int i = 0; i < this->Triangles.size(); i++)
@@ -448,6 +452,7 @@ class Mesh
 			Triangles.at(i).Translate(Value);
 		}
 	}
+
 
 	void ScaleTriangles(Vec3 Value)
 	{
@@ -459,6 +464,7 @@ class Mesh
 		}
 	}
 
+
 	Mesh ScaledTriangles(Vec3 Value)
 	{
 		Mesh Out = *this;
@@ -469,6 +475,7 @@ class Mesh
 			Out.Triangles.at(i).Points.Points[2] * Value;
 		}
 	}
+
 
 	void ChangeMatInfo(Material* MatToApply)
 	{
@@ -482,6 +489,7 @@ class Mesh
 				Tri.HasTexture = true;
 		}
 	}
+
 
 	bool LoadMesh(std::string FnPath, std::string Prefix="Assets\\")
 	{
@@ -646,6 +654,7 @@ class Mesh
 		return true;
 	}
 
+
 	void CalculateNormals()
 	{
 		for (Triangle& Tri : this->Triangles)
@@ -662,6 +671,7 @@ class Mesh
 
 		this->NormalCount = (int)this->Normals.size();
 	}
+
 
 	// Make this obsolete
 	std::vector<Triangle> Triangles = {};

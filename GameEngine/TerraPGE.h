@@ -14,7 +14,6 @@
 // X. Fix texture interpolation in clipper 
 // X. Redesign multithreading
 // X. implement a prefab system
-// X. Fix physics ray cast for ground detection (is mesh local space needs to be world)
 // X. Bloom
 // X Add some PBR stuff (metallness, roughness)
 // X. Skybox sun sampling (color/intensity/exposure/etc)

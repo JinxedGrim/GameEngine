@@ -24,6 +24,11 @@
 
 namespace TerraPGE::Core
 {
+	CHAR cwd[MAX_PATH + 1] = "";
+	DWORD len = GetCurrentDirectoryA(MAX_PATH, cwd);
+
+	std::string CWD = cwd;
+
 	// move all to TPGE
 	static bool FpsEngineCounter = true;
 	static bool DoMultiThreading = false;

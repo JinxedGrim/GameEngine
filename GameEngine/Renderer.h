@@ -4,6 +4,7 @@
 #include "Renderable.h"
 #include "EnvironmentRenderable.h"
 #include "WndCreator.hpp"
+#include "GdiPP.hpp"
 
 namespace TerraPGE::Renderer
 {
@@ -681,9 +682,9 @@ namespace TerraPGE::Renderer
 
 
 				if (Core::DoMultiThreading)
-					Renderer::BaryCentricRasterizer(Renderer::FrameBuffer, Renderer::DepthBuffer, Renderer::sx, Renderer::sy, Renderer::ShadowMap, Renderer::ShadowMapWidth, Renderer::ShadowMapHeight, EngineGdi, Object->Shader, Args);
+					Renderer::BaryCentricRasterizer(Renderer::FrameBuffer, Renderer::DepthBuffer, Renderer::sx, Renderer::sy, Renderer::ShadowMap, Renderer::ShadowMapWidth, Renderer::ShadowMapHeight, Object->Shader, Args);
 				else
-					Renderer::BaryCentricRasterizer(Renderer::FrameBuffer, Renderer::DepthBuffer, Renderer::sx, Renderer::sy, Renderer::ShadowMap, Renderer::ShadowMapWidth, Renderer::ShadowMapHeight, EngineGdi, Object->Shader, Args);
+					Renderer::BaryCentricRasterizer(Renderer::FrameBuffer, Renderer::DepthBuffer, Renderer::sx, Renderer::sy, Renderer::ShadowMap, Renderer::ShadowMapWidth, Renderer::ShadowMapHeight, Object->Shader, Args);
 			}
 
 			Args->Delete();

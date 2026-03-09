@@ -181,6 +181,7 @@
     <ClInclude Include="Collider.h" />
     <ClInclude Include="EngineCore.h" />
     <ClInclude Include="EnvironmentRenderable.h" />
+    <ClInclude Include="ExampleScene.h" />
     <ClInclude Include="Lighting.h" />
     <ClInclude Include="Materials.h" />
     <ClInclude Include="MatrixMath.h" />

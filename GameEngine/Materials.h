@@ -236,6 +236,16 @@ public:
 		delete this;
 	}
 
+	static void DeleteAllMaterials()
+	{
+		for (Material* M : LoadedMaterials)
+		{
+			delete M;
+		}
+
+		LoadedMaterials.clear();
+	}
+
 private:
 
 	Material(const std::string& Uri)

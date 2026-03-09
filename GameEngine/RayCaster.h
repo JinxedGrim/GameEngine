@@ -1,6 +1,6 @@
 #pragma once
 #include "Math.h"
-#include "GameObject.h"
+#include "Mesh.h"
 
 struct RaycastHit
 {

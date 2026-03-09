@@ -1,7 +1,6 @@
 #pragma once
 #include "EngineCore.h"
 #include "Shading.h"
-#include "GdiPP.hpp"
 
 // Important mathematical concepts used in this rasterizer
 // Barycentric Interpolation (alpha-beta-gamma) (Derived from edge equations)
@@ -149,7 +148,7 @@ namespace TerraPGE::Renderer
 
 
 	template<typename T>
-	void __fastcall BaryCentricRasterizer(float* FrameBuffer, float* DepthBuffer, const int ScreenWidth, const int ScreenHeight, float* ShadowMap, const int ShadowMapWidth, const int ShadowMapHeight, GdiPP* Gdi, T&& Shader, ShaderArgs* BaseArgs1)
+	void __fastcall BaryCentricRasterizer(float* FrameBuffer, float* DepthBuffer, const int ScreenWidth, const int ScreenHeight, float* ShadowMap, const int ShadowMapWidth, const int ShadowMapHeight, T&& Shader, ShaderArgs* BaseArgs1)
 	{
 		ShaderArgs* BaseArgs = DEBUG_NEW ShaderArgs(BaseArgs1);
 

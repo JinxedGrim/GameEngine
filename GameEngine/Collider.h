@@ -1,7 +1,6 @@
 #pragma once
 #include "Math.h"
 #include "ObjectTransform.h"
-#include "Mesh.h"
 #include "RayCaster.h"
 
 #define ICE_KINETIC_FRICTION 0.03

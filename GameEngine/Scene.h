@@ -83,10 +83,28 @@ namespace TerraPGE
 		}
 
 
+		static void ClearAllLoadedAssets()
+		{
+			Material::DeleteAllMaterials();
+			Texture::DeleteAllTextures();
+		}
+
+
 		virtual void BeginScene(WndCreator&) = 0;
 		virtual void RunTick(GdiPP*, WndCreator&, const float&) = 0;
 		virtual void DrawSceneGUI(GdiPP* Gdi) = 0;
 		virtual void DrawLoadingScreen(GdiPP* Gdi) = 0;
-		virtual void EndScene() = 0;
+		virtual void EndScene()
+		{
+			TerraPGE::Core::LogInfo("[SCENE]", "EndScene Called");
+
+			ClearAllLoadedAssets();
+
+			if (this->SkyboxToRender)
+				delete this->SkyboxToRender;
+
+			if (this->MainCamera)
+				delete this->MainCamera;
+		}
 	};
 }
