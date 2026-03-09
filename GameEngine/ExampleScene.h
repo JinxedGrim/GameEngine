@@ -651,29 +651,31 @@ class ExampleScene : public TerraPGE::Scene
 			{
 				outStr << MenuStr << TerraPGE::Renderer::TPGE_TEXT_NEW_LINE_TOKEN <<
 					EngineMenu << TerraPGE::Renderer::TPGE_TEXT_NEW_LINE_TOKEN <<
-					CpuStr << TerraPGE::Core::CpuCores << TerraPGE::Renderer::TPGE_TEXT_NEW_LINE_TOKEN <<
+					CpuStr << TerraPGE::Renderer::CpuCores << TerraPGE::Renderer::TPGE_TEXT_NEW_LINE_TOKEN <<
+					SIMDStr << TerraPGE::Renderer::SimdInfo.GetSupportString() << TerraPGE::Renderer::TPGE_TEXT_NEW_LINE_TOKEN <<
+					TerraPGE::Renderer::TPGE_TEXT_NEW_LINE_TOKEN <<
+					MultiThreadingStr << TerraPGE::Core::DoMultiThreading << TerraPGE::Renderer::TPGE_TEXT_NEW_LINE_TOKEN <<
+					SimdAccelStr << TerraPGE::Core::SimdAcceleration << TerraPGE::Renderer::TPGE_TEXT_NEW_LINE_TOKEN <<
+					PhysicsEngineStr << TerraPGE::DoPhysics << TerraPGE::Renderer::TPGE_TEXT_NEW_LINE_TOKEN;
 
-					Gdi->DrawStringA(20, 100, SIMDStr + TerraPGE::Core::SimdInfo.GetSupportString(), RGB(255, 0, 0), TRANSPARENT);
-				Gdi->DrawStringW(20, 120, GpuStr + TerraPGE::Core::GetDevList(), RGB(255, 0, 0), TRANSPARENT);
-				Gdi->DrawStringA(20, 140, MultiThreadingStr + std::to_string(TerraPGE::Core::DoMultiThreading), RGB(255, 0, 0), TRANSPARENT);
-				Gdi->DrawStringA(20, 160, SimdAccelStr + std::to_string(TerraPGE::Core::SimdAcceleration), RGB(255, 0, 0), TRANSPARENT);
-				Gdi->DrawStringA(20, 180, PhysicsEngineStr + std::to_string(TerraPGE::DoPhysics), RGB(255, 0, 0), TRANSPARENT);
+				Gdi->DrawStringW(20, 120, GpuStr + TerraPGE::Renderer::RenderingUtils::Profiler::GetDevList(), RGB(255, 0, 0), TRANSPARENT);
 
 				TerraPGE::Renderer::RenderingCore::RenderFormattedText(20, 40, outStr.str(), RGB(255, 0, 0));
 			}
 			else if (DebugMenuTab == 2)
 			{
-				Gdi->DrawStringA(20, 40, MenuStr, RGB(255, 0, 0), TRANSPARENT);
-				Gdi->DrawStringA(20, 60, RendererMenu, RGB(255, 0, 0), TRANSPARENT);
-				Gdi->DrawStringA(20, 80, CullingStr + std::to_string(TerraPGE::Renderer::DoCull), RGB(255, 0, 0), TRANSPARENT);
-				Gdi->DrawStringA(20, 100, LightingStr + std::to_string(TerraPGE::Renderer::DoLighting), RGB(255, 0, 0), TRANSPARENT);
-				Gdi->DrawStringA(20, 120, ShadowStr + std::to_string(TerraPGE::Renderer::DoShadows), RGB(255, 0, 0), TRANSPARENT);
-				Gdi->DrawStringA(20, 140, WireframeStr + std::to_string(TerraPGE::Renderer::WireFrame), RGB(255, 0, 0), TRANSPARENT);
-				Gdi->DrawStringA(20, 160, HdrStr + std::to_string(TerraPGE::Renderer::UseHDR), RGB(255, 0, 0), TRANSPARENT);
-				Gdi->DrawStringA(20, 180, GammaCorrectionStr + std::to_string(TerraPGE::Renderer::DoGammaCorrection), RGB(255, 0, 0), TRANSPARENT);
-				Gdi->DrawStringA(20, 200, DbgClip + std::to_string(TerraPGE::Renderer::DebugClip), RGB(255, 0, 0), TRANSPARENT);
-				Gdi->DrawStringA(20, 220, DbgShadows + std::to_string(TerraPGE::Renderer::DebugShadowMap), RGB(255, 0, 0), TRANSPARENT);
-				Gdi->DrawStringA(20, 240, DepthStr + std::to_string(TerraPGE::Renderer::TestDepth) + " Mapped: " + std::to_string(TerraPGE::Renderer::TestDepthMapped), RGB(255, 0, 0), TRANSPARENT);
+				outStr << MenuStr << TerraPGE::Renderer::TPGE_TEXT_NEW_LINE_TOKEN <<
+					RendererMenu << TerraPGE::Renderer::TPGE_TEXT_NEW_LINE_TOKEN <<
+					CullingStr << TerraPGE::Renderer::DoCull << TerraPGE::Renderer::TPGE_TEXT_NEW_LINE_TOKEN <<
+					LightingStr << TerraPGE::Renderer::DoLighting << TerraPGE::Renderer::TPGE_TEXT_NEW_LINE_TOKEN <<
+					ShadowStr << TerraPGE::Renderer::DoShadows << TerraPGE::Renderer::TPGE_TEXT_NEW_LINE_TOKEN <<
+					WireframeStr << TerraPGE::Renderer::WireFrame << TerraPGE::Renderer::TPGE_TEXT_NEW_LINE_TOKEN <<
+					HdrStr << TerraPGE::Renderer::UseHDR << TerraPGE::Renderer::TPGE_TEXT_NEW_LINE_TOKEN <<
+					GammaCorrectionStr << TerraPGE::Renderer::DoGammaCorrection << TerraPGE::Renderer::TPGE_TEXT_NEW_LINE_TOKEN <<
+					DbgClip << TerraPGE::Renderer::DebugClip << TerraPGE::Renderer::TPGE_TEXT_NEW_LINE_TOKEN <<
+					DbgShadows << TerraPGE::Renderer::DebugShadowMap << TerraPGE::Renderer::TPGE_TEXT_NEW_LINE_TOKEN <<
+					DepthStr << TerraPGE::Renderer::TestDepth << TerraPGE::Renderer::TPGE_TEXT_NEW_LINE_TOKEN;
+				TerraPGE::Renderer::RenderingCore::RenderFormattedText(20, 40, outStr.str(), RGB(255, 0, 0));
 			}
 		}
 

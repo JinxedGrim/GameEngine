@@ -132,6 +132,7 @@ namespace TerraPGE
 	{
 		Renderer::RenderingCore::ClearScreen();
 		CurrScene->DrawLoadingScreen(Renderer::EngineGdi);
+		Renderer::EngineGdi->SetNeedsPixelsRedrawn();
 		Renderer::EngineGdi->DrawDoubleBufferPO();
 	}
 
@@ -174,7 +175,7 @@ namespace TerraPGE
 		CurrScene->BeginScene(Wnd);
 		
 		auto FrameStart      = std::chrono::steady_clock::now();
-		uint64_t CpuFrameStart = Core::GetCpuUsageInfo();
+		uint64_t CpuFrameStart = Renderer::RenderingUtils::Profiler::GetCpuUsageInfo();
 		auto LastPhysicsTime = std::chrono::steady_clock::now();
 		double framePhysicsDelta = 0.0;
 		auto now = std::chrono::steady_clock::now();
@@ -185,7 +186,7 @@ namespace TerraPGE
 			_CrtMemCheckpoint(&stateBefore);
 #endif
 			FrameStart = std::chrono::steady_clock::now();
-			CpuFrameStart = Core::GetCpuUsageInfo();
+			CpuFrameStart = Renderer::RenderingUtils::Profiler::GetCpuUsageInfo();
 
 			Renderer::RenderingCore::UpdateWindow(Wnd, &msg);
 			Renderer::RenderingCore::ClearScreen();
@@ -207,8 +208,6 @@ namespace TerraPGE
 			for (size_t idx = 0; idx < SceneLights->size(); idx++)
 			{
 				LightsToRender[idx] = SceneLights->at(idx);
-				LightsToRender[idx]->Transform.WalkTransformChain();
-				LightsToRender[idx]->CalcVpMats();
 			}
 
 			for (size_t idx = 0; idx < SceneRenderQueue->size(); idx++)
@@ -303,8 +302,8 @@ namespace TerraPGE
 
 			if (Core::FpsEngineCounter)
 			{
-				double CpuFrameDelta = Core::GetCpuUsageInfo() - CpuFrameStart;
-				Renderer::RenderingCore::DrawFpsCounter(Wnd, Fps, CurrMB, ElapsedTime, Core::CalculateCpuUsage(CpuFrameDelta * 1e-9, ElapsedTime, Core::CpuCores));
+				double CpuFrameDelta = Renderer::RenderingUtils::Profiler::GetCpuUsageInfo() - CpuFrameStart;
+				Renderer::RenderingCore::DrawFpsCounter(Wnd, Fps, CurrMB, ElapsedTime, Renderer::RenderingUtils::Profiler::CalculateCpuUsage(CpuFrameDelta * 1e-9, ElapsedTime, Renderer::CpuCores));
 			}
 
 			delete[] LightsToRender;
@@ -333,7 +332,7 @@ namespace TerraPGE
 				}
 
 				// Get current memory usage
-				CurrMB = Core::GetUsedMemory();
+				CurrMB = Renderer::RenderingUtils::Profiler::GetUsedMemory();
 			}
 
 #ifdef _DEBUG

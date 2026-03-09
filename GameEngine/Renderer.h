@@ -1,7 +1,6 @@
 #pragma once
 #include "ParrallelPP.h"
 #include "Rasterizer.h"
-#include "Renderable.h"
 #include "EnvironmentRenderable.h"
 #include "WndCreator.hpp"
 #include "GdiPP.hpp"
@@ -53,8 +52,6 @@ namespace TerraPGE::Renderer
 	static int sx = GetSystemMetrics(SM_CXSCREEN);
 	static int sy = GetSystemMetrics(SM_CYSCREEN);
 
-	static bool DebugClip = false;
-	static bool DoCull = true;
 	bool LockCursor = true;
 	bool CursorShow = false;
 
@@ -75,29 +72,108 @@ namespace TerraPGE::Renderer
 	static constexpr const char* TPGE_TEXT_SHIFT_Y_TOKEN = "\\^y";
 	static constexpr const char* TPGE_TEXT_NEW_LINE_TOKEN = "\n";
 
-
+	static int CpuCores = 0;
+	static SIZE_T MaxMemoryMB = 0;
+	static CPUID CpuId(1);
+	static SupportedInstructions SimdInfo = { 0 };
 
 	namespace RenderingUtils
 	{
 		namespace Profiler
 		{
+			static int GPUDevCount = 0;
+			static std::vector<std::wstring> GPUDevNames = {};
+			static std::wstring PrimaryGPUDevName;
+			std::string CpuName;
 
-		}
+			double GetCpuUsageInfo()
+			{
+				FILETIME creation, exit, kernel, user;
+				GetProcessTimes(GetCurrentProcess(), &creation, &exit, &kernel, &user);
 
-		__inline bool ShouldCulltriangle(const Vec3& WorldSpacePos, Vec3 FaceNormal, const Vec3& CamPos)
-		{
-			//if ((TriNormal.Dot(WorldSpaceTri.Points[0] - Cam->Pos) < 0.0f) || !TerraPGE::DoCull || !MeshToRender->BackfaceCulling) // backface culling
-			float facing = FaceNormal.Dot(WorldSpacePos - CamPos);
-			return facing >= 0.0f;
-		}
+				ULARGE_INTEGER k, u;
+				k.LowPart = kernel.dwLowDateTime;
+				k.HighPart = kernel.dwHighDateTime;
+				u.LowPart = user.dwLowDateTime;
+				u.HighPart = user.dwHighDateTime;
+
+				return (k.QuadPart + u.QuadPart) * 100; // FILETIME = 100ns units
+			}
 
 
-		__inline bool ShouldCulltriangle(const Vec3& ViewSpacePos, const Vec3& FaceNormal, const Matrix& ViewMatrix)
-		{
-			Vec3 viewPos = ViewSpacePos * ViewMatrix;
-			Vec3 normalVS = FaceNormal * ViewMatrix;
-			float facing = normalVS.Dot(viewPos);
-			return facing >= 0.0f;
+			double CalculateCpuUsage(double  cpuTimeDeltaNs, double  wallTimeDeltaNs, int coreCount)
+			{
+				return (double)cpuTimeDeltaNs / (double)(wallTimeDeltaNs * coreCount) * 100.0;
+			}
+
+
+			SIZE_T GetUsedMemory()
+			{
+				PROCESS_MEMORY_COUNTERS_EX  Pmc;
+
+				if (GetProcessMemoryInfo(GetCurrentProcess(), (PROCESS_MEMORY_COUNTERS*)&Pmc, sizeof(Pmc)))
+					return Pmc.PrivateUsage / 1024 / 1024;
+
+				return 0;
+			}
+
+
+			SIZE_T GetUsedHeap()
+			{
+				_CrtMemState memState = {};
+				_CrtMemCheckpoint(&memState);
+				return memState.lTotalCount / 1024 / 1024;
+			}
+
+
+			void GetCpuInfo()
+			{
+				SYSTEM_INFO SysInf;
+
+				SimdInfo = CpuId.GetSupportedInstructions();
+				GetSystemInfo(&SysInf);
+				CpuCores = SysInf.dwNumberOfProcessors;
+				CpuName = CpuId.GetProcessorName();
+			}
+
+
+			std::wstring GetDevList()
+			{
+				std::wstring out = L"";
+				for (const std::wstring& str : GPUDevNames)
+				{
+					out += str;
+					out += +L", ";
+				}
+
+				return out;
+			}
+
+
+			void UpdateSystemInfo()
+			{
+				GetCpuInfo();
+
+				MEMORYSTATUSEX MemInf;
+				DISPLAY_DEVICE DispDev;
+
+				DispDev.cb = sizeof(DispDev);
+				MemInf.dwLength = sizeof(MEMORYSTATUSEX);
+				int DevIdx = 0;
+
+				if (GlobalMemoryStatusEx(&MemInf))
+					MaxMemoryMB = (MemInf.ullTotalPhys / 1024 / 1024);
+
+				if (EnumDisplayDevices(NULL, DevIdx, &DispDev, 0))
+				{
+					GPUDevNames.push_back(DispDev.DeviceString);
+					GPUDevCount++;
+
+					if (DispDev.StateFlags & DISPLAY_DEVICE_PRIMARY_DEVICE)
+						PrimaryGPUDevName = DispDev.DeviceString;
+				}
+
+			}
 		}
 
 
@@ -107,182 +183,9 @@ namespace TerraPGE::Renderer
 			for (int i = 0; i < LightCount; i++)
 			{
 				LightObject* Light = SceneLights[i];
-
+				Light->Transform.WalkTransformChain();
 				Light->CalcVpMats();
 			}
-		}
-
-
-		__inline Triangle TransformToWorld(const Triangle& Tri, const Matrix& Model)
-		{
-			Triangle out = Tri;
-			out.ApplyMatrix(Model);
-
-			for (int i = 0; i < 3; ++i)
-				out.WorldSpaceVerts.Points[i] = out.Points.Points[i];
-
-			return out;
-		}
-
-
-		__inline Triangle ProjectToViewSpace(const Triangle* Tri, Camera* Cam)
-		{
-			// 3d Space -> Viewed Space
-			Triangle Result = *Tri;
-			Result.ApplyMatrix(Cam->GetViewMatrix());
-
-			return Result;
-		}
-
-
-		std::vector<Triangle> VertexShader(Camera* Cam, Renderable* Object)
-		{
-			std::vector<Triangle> ClipSpaceTris = {};
-			ClipSpaceTris.reserve(Object->mesh->Triangles.size());
-
-			Vec3 NormPos = Vec3(0, 0, 0);
-			Vec3 NormDir = Vec3(0, 0, 0);
-			Vec3 TriNormal;
-
-			for (const Triangle& Tri : Object->mesh->Triangles)
-			{
-				// 3D Space / World Space
-				Triangle WorldSpaceTri = RenderingUtils::TransformToWorld(Tri, Object->Transform.GetWorldMatrix());
-
-				//TODO Fix this whole damn thing calc normals at mesh gen or at vertex shade time fuck the rest
-				TriNormal = Tri.FaceNormal;
-				if (Object->mesh->Normals.size() == 0)
-				{
-					NormPos = ((Tri.Points.Points[0] + Tri.Points.Points[1] + Tri.Points.Points[2]) / 3.0f);
-					NormDir = (Tri.Points.Points[1] - Tri.Points.Points[0]).GetVec3().CrossNormalized((Tri.Points.Points[2] - Tri.Points.Points[0])).Normalized();
-					TriNormal = -(WorldSpaceTri.Points.Points[1] - WorldSpaceTri.Points.Points[0]).GetVec3().CrossNormalized((WorldSpaceTri.Points.Points[2] - WorldSpaceTri.Points.Points[0])).Normalized(); // this line and the if statement is used for culling
-
-					for (int i = 0; i < 3; i++)
-					{
-						WorldSpaceTri.VertexNormals[i] *= Object->Transform.Normal;
-					}
-
-					WorldSpaceTri.NormalPositions[0] = NormPos;
-					WorldSpaceTri.NormalPositions[1] = Tri.Points.Points[0];
-					WorldSpaceTri.NormalPositions[2] = Tri.Points.Points[1];
-					WorldSpaceTri.NormalPositions[3] = Tri.Points.Points[2];
-					WorldSpaceTri.NormDirections[0] = NormDir;
-				}
-				else
-				{
-					TriNormal *= Object->Transform.Normal;
-					for (int i = 0; i < 3; i++)
-					{
-						WorldSpaceTri.VertexNormals[i] *= Object->Transform.Normal;
-					}
-
-					NormDir = WorldSpaceTri.FaceNormal;
-					NormPos = WorldSpaceTri.NormalPositions[0];
-				}
-
-				if (!RenderingUtils::ShouldCulltriangle(WorldSpaceTri.Points.Points[0], TriNormal, Cam->GetWorldPosition()) || !DoCull) // backface culling
-				{
-					WorldSpaceTri.FaceNormal = TriNormal;
-					Triangle ViewSpaceTri = RenderingUtils::ProjectToViewSpace(&WorldSpaceTri, Cam);
-
-					ViewSpaceTri.ApplyMatrix(Cam->GetProjectionMatrix());
-
-					ClipSpaceTris.push_back(ViewSpaceTri);
-				}
-			}
-			return ClipSpaceTris;
-		}
-
-
-		std::vector<Triangle> Clipping(const Triangle* Tri)
-		{
-			Triangle Clipped[2];
-
-			std::vector<Triangle> ListTris;
-			ListTris.push_back(*Tri);
-			int NewTris = 1;
-
-			for (int p = 0; p < 4; p++)
-			{
-				int NewTrisToAdd = 0;
-				while (NewTris > 0)
-				{
-					Triangle Test = ListTris.front();
-					ListTris.erase(ListTris.begin());
-					NewTris--;
-
-					switch (p)
-					{
-						case 0:
-						{
-							NewTrisToAdd = Test.ClipAgainstPlane({ 0.0f, 0.0f, 0.0f }, { 0.0f, 1.0f, 0.0f }, Clipped[0], Clipped[1], Renderer::DebugClip);
-							break;
-						}
-						case 1:
-						{
-							NewTrisToAdd = Test.ClipAgainstPlane({ 0.0f, (float)Renderer::sy - 1, 0.0f }, { 0.0f, -1.0f, 0.0f }, Clipped[0], Clipped[1], Renderer::DebugClip);
-							break;
-						}
-						case 2:
-						{
-							NewTrisToAdd = Test.ClipAgainstPlane({ 0.0f, 0.0f, 0.0f }, { 1.0f, 0.0f, 0.0f }, Clipped[0], Clipped[1], Renderer::DebugClip);
-							break;
-						}
-						case 3:
-						{
-							NewTrisToAdd = Test.ClipAgainstPlane({ (float)Renderer::sx - 1, 0.0f, 0.0f }, { -1.0f, 0.0f, 0.0f }, Clipped[0], Clipped[1], Renderer::DebugClip);
-							break;
-						}
-					}
-
-					for (int w = 0; w < NewTrisToAdd; w++)
-					{
-						ListTris.push_back(Clipped[w]);
-					}
-				}
-				NewTris = (int)ListTris.size();
-			}
-
-			return ListTris;
-		}
-
-
-		std::vector<Triangle> ClippingClipSpace(const Triangle* Tri)
-		{
-			std::vector<Triangle> Tris;
-			Tris.push_back(*Tri);
-
-			Vec4 planes[6] = {
-				{  0,  0,  1,  0 }, // z >= 0
-				{  1,  0,  0,  1 }, // x >= -w
-				{ -1,  0,  0,  1 }, // x <=  w
-				{  0,  1,  0,  1 }, // y >= -w
-				{  0, -1,  0,  1 }, // y <=  w
-				{  0,  0, -1,  1 }  // z <=  w
-			};
-
-			for (int p = 0; p < 6; ++p)
-			{
-				std::vector<Triangle> Next;
-
-				for (const Triangle& T : Tris)
-				{
-					Triangle O1, O2;
-					int count = T.ClipAgainstPlane(planes[p], O1, O2, DebugClip);
-
-					if (count >= 1)
-						Next.push_back(O1);
-					if (count == 2)
-						Next.push_back(O2);
-				}
-
-				Tris.swap(Next);
-
-				if (Tris.empty())
-					break;
-			}
-
-			return Tris;
 		}
 
 
@@ -298,13 +201,13 @@ namespace TerraPGE::Renderer
 	{
 		void PrepareRenderingBackend(WndCreator& Wnd)
 		{
-			Core::UpdateSystemInfo();
+			Renderer::RenderingUtils::Profiler::UpdateSystemInfo();
 			std::stringstream msg;
 			Core::LogInfo("[RENDERER]", "Initializing Rendering Backend");
-			msg << "[CPU] Name: " << TerraPGE::Core::CpuName << std::endl << "[CPU] Cores: " << Core::CpuCores << std::endl << "[CPU] " << Core::SimdInfo.GetSupportString();
+			msg << "[CPU] Name: " << Renderer::RenderingUtils::Profiler::CpuName << std::endl << "[CPU] Cores: " << Renderer::CpuCores << std::endl << "[CPU] " << Renderer::SimdInfo.GetSupportString();
 			Core::LogInfo("[RENDERER]", msg.str());
 
-			if (Core::SimdInfo.SSE42)
+			if (Renderer::SimdInfo.SSE42)
 			{
 				Core::LogInfo("[RENDERER]", "Detected >= SSE 4.2 Activating SIMD Acceleration");
 				Core::SimdAcceleration = true;
@@ -314,7 +217,7 @@ namespace TerraPGE::Renderer
 
 			msg.str("");
 			msg.clear();
-			std::wstring GpuDev = TerraPGE::Core::GetDevList();
+			std::wstring GpuDev = Renderer::RenderingUtils::Profiler::GetDevList();
 			std::string s(GpuDev.begin(), GpuDev.end());
 			msg << "[RENDERER] Other Devices: " << s << std::endl;
 			Core::LogInfo("[RENDERER]", msg.str());
@@ -563,7 +466,7 @@ namespace TerraPGE::Renderer
 			// Draw FPS and some debug info
 			std::wstringstream ss;
 			ss << std::fixed << std::setprecision(2) << Renderer::FpsWStr << Fps << L" Cpu/Time: " << CpuUsage << L"/" << FrameTime << L" Memory Usage: " << CurrMB << L"/"
-				<< Core::MaxMemoryMB << L" MB " << (Core::DoMultiThreading ? L"(MultiThreaded)" : L"") << (Core::SimdAcceleration ? L" (SIMD)" : L"");
+				<< Renderer::MaxMemoryMB << L" MB " << (Core::DoMultiThreading ? L"(MultiThreaded)" : L"") << (Core::SimdAcceleration ? L" (SIMD)" : L"");
 
 			//Wnd.SetWndTitle(Str);
 			Renderer::EngineGdi->DrawStringW(20, 20, ss.str(), RGB(255, 0, 0), TRANSPARENT);
@@ -639,11 +542,11 @@ namespace TerraPGE::Renderer
 
 	void RenderMesh(Camera* Cam, Renderable* Object, LightObject** SceneLights, size_t LightCount)
 	{
-		std::vector<Triangle> ClipSpaceTris = RenderingUtils::VertexShader(Cam, Object);
+		std::vector<Triangle> ClipSpaceTris = VertexShader(Cam, Object);
 
 		for (const Triangle& ClipSpaceTri : ClipSpaceTris)
 		{
-			std::vector<Triangle> Clipped = RenderingUtils::ClippingClipSpace(&ClipSpaceTri);
+			std::vector<Triangle> Clipped = Renderer::ClippingClipSpace(&ClipSpaceTri);
 
 			// initialize shader
 			ShaderArgs* Args = DEBUG_NEW ShaderArgs();
@@ -1016,8 +919,8 @@ namespace TerraPGE::Renderer
 
 				//Renderer::RenderEnvironment();
 
-				Renderer::RenderingCore::SwapFrameBuffer(Renderer::UseHDR, Renderer::DoGammaCorrection);
-				//Renderer::SIMD::SSE::SwapFrameBuffer(Renderer::FrameBuffer, Renderer::sx, Renderer::sy, Renderer::EngineGdi->GetPixelBuffer(), Renderer::UseHDR, Renderer::DoGammaCorrection);
+				//Renderer::RenderingCore::SwapFrameBuffer(Renderer::UseHDR, Renderer::DoGammaCorrection);
+				Renderer::SIMD::SSE::SwapFrameBuffer(Renderer::FrameBuffer, Renderer::sx, Renderer::sy, Renderer::EngineGdi->GetPixelBuffer(), Renderer::UseHDR, Renderer::DoGammaCorrection);
 				Renderer::EngineGdi->SetNeedsPixelsRedrawn();
 			}
 		}
@@ -1074,7 +977,7 @@ namespace TerraPGE::Renderer
 
 		void SwapFrameBuffer(float* Frame, uint64_t Width, uint64_t Height, bool Hdr, bool GammaCorrection)
 		{
-			uint64_t ChunkSz = std::max<uint64_t>(1, Height / Core::CpuCores);
+			uint64_t ChunkSz = std::max<uint64_t>(1, Height / Renderer::CpuCores);
 
 			for (uint64_t y = 0; y < Height; y += ChunkSz)
 			{
@@ -1121,7 +1024,7 @@ namespace TerraPGE::Renderer
 			const uint64_t Width = Renderer::sx;
 			const uint64_t Height = Renderer::sy;
 
-			const uint64_t ChunkSz = std::max<uint64_t>(1, Height / Core::CpuCores);
+			const uint64_t ChunkSz = std::max<uint64_t>(1, Height / Renderer::CpuCores);
 			const float Fov = Cam->GetFov();
 
 			for (uint64_t y = 0; y < Height; y += ChunkSz)
