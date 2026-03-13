@@ -184,9 +184,9 @@ class Image2D
 	{
 		int index = (x + this->Width * y) * 3;
 
-		int b = static_cast<float>(this->PixelData[index]);
-		int g = static_cast<float>(this->PixelData[index + 1]);
-		int r = static_cast<float>(this->PixelData[index + 2]);
+		int b = static_cast<int>(this->PixelData[index]);
+		int g = static_cast<int>(this->PixelData[index + 1]);
+		int r = static_cast<int>(this->PixelData[index + 2]);
 
 		return Color(r, g, b);
 	}
@@ -453,9 +453,15 @@ class CubeMap
 	Image2D* Faces[6];
 	int FaceSize = 0;
 
-	CubeMap()
+	CubeMap(Image2D* f1, Image2D* f2, Image2D* f3, Image2D* f4, Image2D* f5, Image2D* f6)
 	{
+		this->Faces[0] = f1;
+		this->Faces[1] = f2;
+		this->Faces[2] = f3;
 
+		this->Faces[3] = f4;
+		this->Faces[4] = f5;
+		this->Faces[5] = f6;
 	}
 
 	bool CheckFaces()
@@ -480,14 +486,7 @@ class CubeMap
 
 	static CubeMap* LoadCubemapFromImages(std::string px, std::string py, std::string pz, std::string nx, std::string ny, std::string nz)
 	{
-		CubeMap* Out = new CubeMap();
-		Out->Faces[0] = Image2D::Load(px);
-		Out->Faces[1] = Image2D::Load(py);
-		Out->Faces[2] = Image2D::Load(pz);
-
-		Out->Faces[3] = Image2D::Load(nx);
-		Out->Faces[4] = Image2D::Load(ny);
-		Out->Faces[5] = Image2D::Load(nz);
+		CubeMap* Out = new CubeMap(Image2D::Load(px), Image2D::Load(py), Image2D::Load(pz), Image2D::Load(nx), Image2D::Load(ny), Image2D::Load(nz));
 
 		if (!Out->CheckFaces())
 		{
@@ -522,61 +521,39 @@ class CubeMap
 
 	Color Sample(const Vec3& viewDirection)
 	{
-		const Vec3 absDir = viewDirection.GetAbs();
+		const float ax = fabsf(viewDirection.x);
+		const float ay = fabsf(viewDirection.y);
+		const float az = fabsf(viewDirection.z);
 
 		float u, v;
 		int face;
 
-		if (absDir.x >= absDir.y && absDir.x >= absDir.z)
+		if (ax >= ay && ax >= az)
 		{
-			const float inv = 1.0f / absDir.x;
+			const float inv = 1.0f / ax;
+			const bool positive = viewDirection.x > 0.0f;
 
-			if (viewDirection.x > 0.0f)
-			{
-				u = -viewDirection.z * inv;
-				v = viewDirection.y * inv;
-				face = CUBEMAP_PX;
-			}
-			else
-			{
-				u = viewDirection.z * inv;
-				v = viewDirection.y * inv;
-				face = CUBEMAP_NX;
-			}
+			u = (positive ? -viewDirection.z : viewDirection.z) * inv;
+			v = viewDirection.y * inv;
+			face = positive ? CUBEMAP_PX : CUBEMAP_NX;
 		}
-		else if (absDir.y >= absDir.z)
+		else if (ay >= az)
 		{
-			const float inv = 1.0f / absDir.y;
+			const float inv = 1.0f / ay;
+			const bool positive = viewDirection.y > 0.0f;
 
-			if (viewDirection.y > 0.0f)
-			{
-				u = viewDirection.x * inv;
-				v = -viewDirection.z * inv;
-				face = CUBEMAP_PY;
-			}
-			else
-			{
-				u = viewDirection.x * inv;
-				v = viewDirection.z * inv;
-				face = CUBEMAP_NY;
-			}
+			u = viewDirection.x * inv;
+			v = (positive ? -viewDirection.z : viewDirection.z) * inv;
+			face = positive ? CUBEMAP_PY : CUBEMAP_NY;
 		}
 		else
 		{
-			const float inv = 1.0f / absDir.z;
+			const float inv = 1.0f / az;
+			const bool positive = viewDirection.z > 0.0f;
 
-			if (viewDirection.z > 0.0f)
-			{
-				u = viewDirection.x * inv;
-				v = viewDirection.y * inv;
-				face = CUBEMAP_PZ;
-			}
-			else
-			{
-				u = -viewDirection.x * inv;
-				v = viewDirection.y * inv;
-				face = CUBEMAP_NZ;
-			}
+			u = (positive ? viewDirection.x : -viewDirection.x) * inv;
+			v = viewDirection.y * inv;
+			face = positive ? CUBEMAP_PZ : CUBEMAP_NZ;
 		}
 
 		u = (u + 1.0f) * 0.5f;

@@ -101,6 +101,7 @@ class ExampleScene : public TerraPGE::Scene
 		AABBColliderParams params = Collider::CalculateAABB(Ak47Render->mesh->Triangles);
 		Ak47Render->AddAABBCollider(params, 1.0f, 0.2f, InitialVelocity);
 		Ak47Render->collider.body.KineticFriction = RUBBER_KINETIC_FRICTION;
+		Ak47Render->collider.body.restitution = 0.5f;
 
 		params = Collider::CalculateAABB(PlaneRender->mesh->Triangles);
 		PlaneRender->AddAABBCollider(params, 1000.0f, 0.1f, Vec3(0.0f, 0.0f, 0.0f));
@@ -156,17 +157,17 @@ class ExampleScene : public TerraPGE::Scene
 	{
 		Vec3 Euler = this->MainCamera->GetLocalViewAngles();
 
-		if (Wnd.Input.IsKeyDown(VK_SPACE))
+		if (Wnd.Input.IsKeyDown(Inputs::Space))
 		{
 			this->MainCamera->Transform.SetLocalPosition(MainCamera->Transform.GetLocalPosition() + (MainCamera->GetNewVelocity(Vec3(0, 1, 0) * MainCamera->Transform.GetWorldMatrix().GetBasis())) * ElapsedTime);
 		}
 
-		if (Wnd.Input.IsKeyDown(VK_LSHIFT))
+		if (Wnd.Input.IsKeyDown(Inputs::Shift))
 		{
 			this->MainCamera->Transform.SetLocalPosition(MainCamera->Transform.GetLocalPosition() + (MainCamera->GetNewVelocity(Vec3(0, -1, 0) * MainCamera->Transform.GetWorldMatrix().GetBasis())) * ElapsedTime);
 		}
 
-		if (Wnd.Input.IsKeyDown(VK_UP))
+		if (Wnd.Input.IsKeyDown(Inputs::UP))
 		{
 			Euler += Vec3((float)20 * ElapsedTime, 0, 0);
 
@@ -176,7 +177,7 @@ class ExampleScene : public TerraPGE::Scene
 				Euler.x = -89;
 		}
 
-		if (Wnd.Input.IsKeyDown(VK_DOWN))
+		if (Wnd.Input.IsKeyDown(Inputs::DOWN))
 		{
 			Euler += Vec3((float)-20 * ElapsedTime, 0, 0);
 
@@ -186,13 +187,13 @@ class ExampleScene : public TerraPGE::Scene
 				Euler.x = -89;
 		}
 
-		if (Wnd.Input.IsKeyDown(VK_LEFT))
+		if (Wnd.Input.IsKeyDown(Inputs::LEFT))
 		{
 			Euler += Vec3(0, (float)(float)-20 * ElapsedTime, 0);
 
 		}
 
-		if (Wnd.Input.IsKeyDown(VK_RIGHT))
+		if (Wnd.Input.IsKeyDown(Inputs::RIGHT))
 		{
 			Euler += Vec3(0, (float)(float)20 * ElapsedTime, 0);
 		}
@@ -242,7 +243,7 @@ class ExampleScene : public TerraPGE::Scene
 			//Cam->Transform.PointAt(CubeRender->Transform.GetWorldPosition(), Cam->CamUp);
 		}
 
-		if (Wnd.Input.IsKeyPressed(VK_TAB))
+		if (Wnd.Input.IsKeyPressed(Inputs::TAB))
 		{
 			this->DebugMenuTab++;
 			if (!(this->DebugMenuTab < 3))
@@ -424,7 +425,7 @@ class ExampleScene : public TerraPGE::Scene
 			MainCamera->SetAspectRatio((float)((float)TerraPGE::Renderer::sy / (float)TerraPGE::Renderer::sx));
 		}
 
-		if (Wnd.Input.IsKeyPressed(VK_ESCAPE))
+		if (Wnd.Input.IsKeyPressed(Inputs::Esc))
 		{
 			this->Paused = !Paused;
 			TerraPGE::Renderer::LockCursor = !Paused;
@@ -434,7 +435,7 @@ class ExampleScene : public TerraPGE::Scene
 			TerraPGE::DoPhysics = !Paused;
 		}
 
-		if (Wnd.Input.IsKeyPressed(VK_HOME))
+		if (Wnd.Input.IsKeyPressed(Inputs::HOME))
 		{
 			//LockCamera = !LockCamera;
 			//Matrix Proj;
@@ -514,7 +515,7 @@ class ExampleScene : public TerraPGE::Scene
 		//}
 
 		this->AddLight(&Dl);
-		//HoveredRend = GetHoveredObj(this->GetObjects());
+		HoveredRend = GetHoveredObj(this->GetObjects());
 	}
 
 
@@ -583,7 +584,7 @@ class ExampleScene : public TerraPGE::Scene
 	}
 
 
-	void DrawSceneGUI(GdiPP* Gdi)
+	void DrawSceneGUI(GdiPP* Gdi, const float& ElapsedTime) override
 	{
 		if (TerraPGE::Core::FpsEngineCounter && ShowStrs)
 		{
@@ -684,7 +685,7 @@ class ExampleScene : public TerraPGE::Scene
 		{
 			const static std::string PauseTitle = "Paused";
 			std::stringstream str;
-			str << TerraPGE::Renderer::TPGE_TEXT_EFFECT_TOKEN << "{Rainbow}{0}" << PauseTitle;
+			str  << PauseTitle;
 			TerraPGE::Renderer::RenderingCore::RenderFormattedText(TerraPGE::Renderer::sx / 2, TerraPGE::Renderer::sy / 2, str.str(), RGB(255, 255, 255));
 		}
 

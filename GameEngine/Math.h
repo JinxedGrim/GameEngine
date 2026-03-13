@@ -424,7 +424,7 @@ public:
 	static Color RainbowColor(int step)
 	{
 		float h = fmodf(step * 0.05f, 1.0f);
-		float r, g, b;
+		float r = 0.0f, g = 0.0f, b = 0.0f;
 
 		float i = floorf(h * 6.0f);
 		float f = h * 6.0f - i;
@@ -440,12 +440,12 @@ public:
 			case 5: r = 1; g = 0; b = q; break;
 		}
 
-		return Color((int)(r * 255), (int)(g * 255), (int)(b * 255));
+		return Color((r * 255.0f), (g * 255.0f), (b * 255.0f));
 	}
 
 	static __inline float LinearToSRGB_Channel(float c)
 	{
-		c = std::clamp(c, 0.0f, 1.0f);
+		//c = std::clamp(c, 0.0f, 1.0f);
 
 		if (c <= 0.0031308f)
 			return 12.92f * c;

@@ -11,6 +11,7 @@
 // Direct2D and DirectWrite are justified the same way
 
 //     TO DO 
+// X. Edge funcs on rasterizer
 // X. Fix texture interpolation in clipper 
 // X. Redesign multithreading
 // X. implement a prefab system
@@ -293,12 +294,12 @@ namespace TerraPGE
 			if (!Core::DoMultiThreading && !Core::SimdAcceleration)
 				Renderer::RenderScene(CurrScene->MainCamera, RenderQueue, LightsToRender, SceneRenderQueue->size(), SceneLights->size(), CurrScene->SkyboxToRender);
 			else if (!Core::DoMultiThreading && Core::SimdAcceleration)
-				Renderer::SIMD::SSE::RenderScene(CurrScene->MainCamera, RenderQueue, LightsToRender, SceneRenderQueue->size(), SceneLights->size(), CurrScene->SkyboxToRender);
+				Renderer::SIMD::RenderScene(CurrScene->MainCamera, RenderQueue, LightsToRender, SceneRenderQueue->size(), SceneLights->size(), CurrScene->SkyboxToRender);
 			else
 				Renderer::Multithreaded::RenderScene(CurrScene->MainCamera, RenderQueue, LightsToRender, SceneRenderQueue->size(), SceneLights->size(), CurrScene->SkyboxToRender);
 
 
-			CurrScene->DrawSceneGUI(Renderer::EngineGdi);
+			CurrScene->DrawSceneGUI(Renderer::EngineGdi,  (float)ElapsedTime);
 
 			if (Core::FpsEngineCounter)
 			{

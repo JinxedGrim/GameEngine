@@ -92,7 +92,7 @@ namespace TerraPGE
 
 		virtual void BeginScene(WndCreator&) = 0;
 		virtual void RunTick(GdiPP*, WndCreator&, const float&) = 0;
-		virtual void DrawSceneGUI(GdiPP* Gdi) = 0;
+		virtual void DrawSceneGUI(GdiPP* Gdi, const float& ElapsedTime) = 0;
 		virtual void DrawLoadingScreen(GdiPP* Gdi) = 0;
 		virtual void EndScene()
 		{

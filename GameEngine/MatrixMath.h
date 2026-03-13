@@ -167,7 +167,7 @@ public:
 
 	Matrix()
 	{
-		memset(this->_matrix, 0.0f, sizeof(this->_matrix));
+		memset(this->_matrix, 0, sizeof(this->_matrix));
 	}
 
 	
@@ -538,7 +538,7 @@ public:
 
 	void SetBasis(const Matrix3x3* Basis)
 	{
-		std::memcpy(_matrix, Basis->_matrix, sizeof(_matrix));
+		std::memcpy(_matrix, Basis->_matrix, sizeof(Basis->_matrix));
 	}
 
 

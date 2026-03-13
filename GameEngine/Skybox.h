@@ -103,18 +103,15 @@ public:
 	}
 
 	// replace with shader call TODO
-	virtual Color Render(const int x, const int y, const int width, const int height, const float& Fov, const Matrix3x3& CamRot) override
+	virtual Color Render(const int x, const int y, const float invWidth, const float invHeight,const float& Fov, const float& AspectRatio, const Matrix3x3& CamRot) override
 	{
-		float aspect = (float)width / height;
-
-		float px = (2.0f * (x + 0.5f) / width - 1.0f) * tan(Fov * 0.5f) * aspect;
-		float py = (1.0f - 2.0f * (y + 0.5f) / height) * tan(Fov * 0.5f);
+		float px = (2.0f * (x + 0.5f) * invWidth - 1.0f) * tan(Fov * 0.5f) * AspectRatio;
+		float py = (1.0f - 2.0f * (y + 0.5f) * invHeight) * tan(Fov * 0.5f);
 
 		Vec3 viewDir = Vec3(px, py, 1.0f).Normalized();
 
 		// 3. Rotate into world space (NO translation)
 		Vec3 worldDir = viewDir * CamRot;
-		worldDir = worldDir;
 
 		// 4. Sample cubemap
 		return Texture->Sample(worldDir);

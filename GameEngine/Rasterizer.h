@@ -19,7 +19,7 @@ namespace TerraPGE::Renderer
 	static float TestDepth = -1.0f;
 	static float TestDepthMapped = -1.0f;
 	static bool DoShadows = true;
-	static bool WireFrame = true;
+	static bool WireFrame = false;
 	static bool ShowTriLines = false; // TODO make a shader for this
 	static float TestHdrExposure = 1.0f;
 	static bool UseHDR = true;
@@ -30,12 +30,12 @@ namespace TerraPGE::Renderer
 
 	namespace RenderingCore
 	{
-		__inline void SetPixelFrameBuffer(int x, int y, float* FrameBuffer, const int Width, float R, float G, float B)
+		__inline void SetPixelFrameBuffer(float* Dst, const int x, const int y, const int Width, const float R, const float G, const float B)
 		{
 			int index = ContIdx(x, y, Width) * 3;
-			FrameBuffer[index++] = R;
-			FrameBuffer[index++] = G;
-			FrameBuffer[index] = B;
+			Dst[index++] = R;
+			Dst[index++] = G;
+			Dst[index] = B;
 		}
 	}
 
@@ -149,7 +149,6 @@ namespace TerraPGE::Renderer
 
 		}
 	}
-
 
 
 	__inline bool ShouldCulltriangle(const Vec3& WorldSpacePos, Vec3 FaceNormal, const Vec3& CamPos)
@@ -292,6 +291,8 @@ namespace TerraPGE::Renderer
 		Vec3 NormDir = Vec3(0, 0, 0);
 		Vec3 TriNormal;
 
+		static const float INV_3 = 1.0f / 3.0f;
+
 		for (const Triangle& Tri : Object->mesh->Triangles)
 		{
 			// 3D Space / World Space
@@ -301,7 +302,7 @@ namespace TerraPGE::Renderer
 			TriNormal = Tri.FaceNormal;
 			if (Object->mesh->Normals.size() == 0)
 			{
-				NormPos = ((Tri.Points.Points[0] + Tri.Points.Points[1] + Tri.Points.Points[2]) / 3.0f);
+				NormPos = ((Tri.Points.Points[0] + Tri.Points.Points[1] + Tri.Points.Points[2]) * INV_3);
 				NormDir = (Tri.Points.Points[1] - Tri.Points.Points[0]).GetVec3().CrossNormalized((Tri.Points.Points[2] - Tri.Points.Points[0])).Normalized();
 				TriNormal = -(WorldSpaceTri.Points.Points[1] - WorldSpaceTri.Points.Points[0]).GetVec3().CrossNormalized((WorldSpaceTri.Points.Points[2] - WorldSpaceTri.Points.Points[0])).Normalized(); // this line and the if statement is used for culling
 
@@ -386,13 +387,11 @@ namespace TerraPGE::Renderer
 		int minY = std::max(0, (int)std::floor(std::min({ v0.y, v1.y, v2.y })));
 		int maxY = std::min(ScreenHeight - 1, (int)std::ceil(std::max({ v0.y, v1.y, v2.y })));
 
-		// Signed area of tri in screen space
-		float triArea = (v1y_Sub_v2y) * (v0x_Sub_v2x)+(v2.x - v1.x) * (v0.y - v2.y);
-
 		// Hacky way to tell tri winding
+		float triArea = (v1y_Sub_v2y) * (v0x_Sub_v2x)+(v2.x - v1.x) * (v0.y - v2.y); 		// Signed area of tri in screen space
 		bool ccw = triArea > 0.0f;
-
 		if (triArea == 0.0f) return; // Degenerate triangle
+		float invArea = 1 / triArea;
 
 		for (int y = minY; y <= maxY; y++)
 		{
@@ -401,8 +400,8 @@ namespace TerraPGE::Renderer
 				int idx = ContIdx(x, y, ScreenWidth);
 				MidPixel = (x * 2 == ScreenWidth && y * 2 == ScreenHeight);
 				// Compute barycentric coordinates
-				float alpha = (v1y_Sub_v2y * ((x + 0.5f) - v2.x) + (v2x_Sub_v1x) * ((y + 0.5f) - v2.y)) / triArea;
-				float beta = (v2y_Sub_v0y * ((x + 0.5f) - v2.x) + (v0x_Sub_v2x) * ((y + 0.5f) - v2.y)) / triArea;
+				float alpha = (v1y_Sub_v2y * ((x + 0.5f) - v2.x) + (v2x_Sub_v1x) * ((y + 0.5f) - v2.y)) * invArea;
+				float beta = (v2y_Sub_v0y * ((x + 0.5f) - v2.x) + (v0x_Sub_v2x) * ((y + 0.5f) - v2.y)) * invArea;
 				float gamma = 1.0f - alpha - beta;
 
 				//				if (triArea < 0.0f)
@@ -417,7 +416,7 @@ namespace TerraPGE::Renderer
 
 				if (false)
 				{
-					Renderer::RenderingCore::SetPixelFrameBuffer(x, y, FrameBuffer, ScreenWidth, alpha, beta, gamma);
+					Renderer::RenderingCore::SetPixelFrameBuffer(FrameBuffer, x, y, ScreenWidth, alpha, beta, gamma);
 					continue;
 				}
 
@@ -435,7 +434,7 @@ namespace TerraPGE::Renderer
 							TestDepth = Depth;
 						}
 
-						Renderer::RenderingCore::SetPixelFrameBuffer(x, y, FrameBuffer, ScreenWidth, FragmentColor->R, FragmentColor->G, FragmentColor->B);
+						Renderer::RenderingCore::SetPixelFrameBuffer(FrameBuffer, x, y, ScreenWidth, FragmentColor->R, FragmentColor->G, FragmentColor->B);
 						continue;
 					}
 
@@ -451,7 +450,7 @@ namespace TerraPGE::Renderer
 					if (false)
 					{
 						Vec3 Color = RasterUtils::MapInterpedVec3ToColor(world0, world1, world2, InterpolatedWorldPos);
-						Renderer::RenderingCore::SetPixelFrameBuffer(x, y, FrameBuffer, ScreenWidth, Color.x, Color.y, Color.z);
+						Renderer::RenderingCore::SetPixelFrameBuffer(FrameBuffer, x, y, ScreenWidth, Color.x, Color.y, Color.z);
 						continue;
 					}
 
@@ -467,14 +466,14 @@ namespace TerraPGE::Renderer
 
 						if (DebugShadowValue)
 						{
-							Renderer::RenderingCore::SetPixelFrameBuffer(x, y, FrameBuffer, ScreenWidth, ShadowDepth, ShadowDepth, ShadowDepth);
+							Renderer::RenderingCore::SetPixelFrameBuffer(FrameBuffer, x, y, ScreenWidth, ShadowDepth, ShadowDepth, ShadowDepth);
 							continue;
 						}
 						else if (DebugShadowMap)
 						{
 							ShadowMapDepth = std::clamp(ShadowMapDepth, 0.0f, 1.0f);
 							float ColorVal = (ShadowMapDepth);
-							Renderer::RenderingCore::SetPixelFrameBuffer(x, y, FrameBuffer, ScreenWidth, ColorVal, ColorVal, ColorVal);
+							Renderer::RenderingCore::SetPixelFrameBuffer(FrameBuffer, x, y, ScreenWidth, ColorVal, ColorVal, ColorVal);
 							continue;
 						}
 
@@ -484,7 +483,7 @@ namespace TerraPGE::Renderer
 
 							if (DebugShadows)
 							{
-								Renderer::RenderingCore::SetPixelFrameBuffer(x, y, FrameBuffer, ScreenWidth, 255.0f, 0.0f, 0.0f);
+								Renderer::RenderingCore::SetPixelFrameBuffer(FrameBuffer, x, y, ScreenWidth, 255.0f, 0.0f, 0.0f);
 								continue;
 							}
 						}
@@ -499,7 +498,7 @@ namespace TerraPGE::Renderer
 						Vec3 BaryCoords = Vec3(alpha, beta, gamma);
 						BaseArgs->EditShaderDataValue<Vec3>(TPGE_SHDR_FRAG_BARY_COORDS, BaryCoords);
 						TerraPGE::EngineShaders::DebugShaders::Shader_WireFrame(BaseArgs);
-						Renderer::RenderingCore::SetPixelFrameBuffer(x, y, FrameBuffer, ScreenWidth, FragmentColor->R, FragmentColor->G, FragmentColor->B);
+						Renderer::RenderingCore::SetPixelFrameBuffer(FrameBuffer, x, y, ScreenWidth, FragmentColor->R, FragmentColor->G, FragmentColor->B);
 						continue;
 					}
 
@@ -519,7 +518,7 @@ namespace TerraPGE::Renderer
 
 							BaseArgs->EditShaderDataValue<TextureCoords>(TPGE_SHDR_TEX_UVW, { uvw.x / uvw.z, uvw.y / uvw.z, uvw.z });
 							EngineShaders::Shader_Sample_Texture(BaseArgs);
-							Renderer::RenderingCore::SetPixelFrameBuffer(x, y, FrameBuffer, ScreenWidth, FragmentColor->R, FragmentColor->G, FragmentColor->B);
+							Renderer::RenderingCore::SetPixelFrameBuffer(FrameBuffer, x, y, ScreenWidth, FragmentColor->R, FragmentColor->G, FragmentColor->B);
 							continue;
 						}
 						else
@@ -554,7 +553,7 @@ namespace TerraPGE::Renderer
 						FragmentColor->B = std::clamp<float>(FragmentColor->B, 0.0f, 1.0f);
 					}
 
-					Renderer::RenderingCore::SetPixelFrameBuffer(x, y, FrameBuffer, ScreenWidth, FragmentColor->R, FragmentColor->G, FragmentColor->B);
+					Renderer::RenderingCore::SetPixelFrameBuffer(FrameBuffer, x, y, ScreenWidth, FragmentColor->R, FragmentColor->G, FragmentColor->B);
 
 					//COLORREF PixelClr = RGB(PixelRoundFloor(FragmentColor->R), PixelRoundFloor(FragmentColor->G), PixelRoundFloor(FragmentColor->B));
 					//Gdi->QuickSetPixel(x, y, PixelClr);
@@ -596,16 +595,16 @@ namespace TerraPGE::Renderer
 		int maxY = std::min(BufferHeight - 1, (SIZE_T)std::ceil(std::max({ v0.y, v1.y, v2.y })));
 
 		float denom = (v1y_Sub_v2y) * (v0x_Sub_v2x)+(v2.x - v1.x) * (v0.y - v2.y);
-
 		if (denom == 0.0f) return; // Degenerate triangle
+		float invDenom = 1 / denom;
 
 		for (int y = minY; y <= maxY; y++)
 		{
 			for (int x = minX; x <= maxX; x++)
 			{
 				// Compute barycentric coordinates
-				float alpha = (v1y_Sub_v2y * ((x + 0.5f) - v2.x) + (v2x_Sub_v1x) * ((y + 0.5f) - v2.y)) / denom;
-				float beta = (v2y_Sub_v0y * ((x + 0.5f) - v2.x) + (v0x_Sub_v2x) * ((y + 0.5f) - v2.y)) / denom;
+				float alpha = (v1y_Sub_v2y * ((x + 0.5f) - v2.x) + (v2x_Sub_v1x) * ((y + 0.5f) - v2.y)) * invDenom;
+				float beta = (v2y_Sub_v0y * ((x + 0.5f) - v2.x) + (v0x_Sub_v2x) * ((y + 0.5f) - v2.y)) * invDenom;
 				float gamma = 1.0f - alpha - beta;
 
 				if (alpha < 0 || beta < 0 || gamma < 0) continue;
@@ -629,8 +628,147 @@ namespace TerraPGE::Renderer
 	}
 
 
-	namespace MultiThreaded
+	namespace Multithreaded
 	{
+		struct RasterizerTile
+		{
+			float* Dst;
+			int DstWidth;
+			int MinY;
+			int MaxY;
+			int MinX;
+			int MaxX;
+		};
 
+
+		void __inline RasterizeDepthTile(RasterizerTile Tile, const Vec4 v0, const Vec4 v1, const Vec4 v2, const float v1y_Sub_v2y, const float v2y_Sub_v0y, const float v0x_Sub_v2x, const float v2x_Sub_v1x, const float denom)
+		{
+			for (int y = Tile.MinY; y <= Tile.MaxY; y++)
+			{
+				for (int x = Tile.MinX; x <= Tile.MaxX; x++)
+				{
+					BaryCoords Interp;
+
+					// Compute barycentric coordinates
+					float alpha = (v1y_Sub_v2y * ((x + 0.5f) - v2.x) + (v2x_Sub_v1x) * ((y + 0.5f) - v2.y)) / denom;
+					float beta = (v2y_Sub_v0y * ((x + 0.5f) - v2.x) + (v0x_Sub_v2x) * ((y + 0.5f) - v2.y)) / denom;
+					float gamma = 1.0f - alpha - beta;
+
+					if (alpha < 0 || beta < 0 || gamma < 0) continue;
+
+					Interp.SetBary(alpha, beta, gamma);
+
+					// this is correct for non ortho projection TODO make a switch for this in my main renderer and here 
+					float Depth = Interp.PerspectiveCorrectInterpolate(v0.z, v1.z, v2.z, v0.w, v1.w, v2.w);
+
+					if (Depth < 0.0f)
+						continue;
+
+					int idx = ContIdx(x, y, Tile.DstWidth);
+
+					if (Depth < Tile.Dst[idx])
+					{
+						Tile.Dst[idx] = Depth;
+					}
+				}
+			}
+		}
+
+
+		void __inline RasterizeTile(RasterizerTile Tile, const Vec4 v0, const Vec4 v1, const Vec4 v2, const float v1y_Sub_v2y, const float v2y_Sub_v0y, const float v0x_Sub_v2x, const float v2x_Sub_v1x, const float invDenom)
+		{
+			for (int y = Tile.MinY; y <= Tile.MaxY; y++)
+			{
+				for (int x = Tile.MinX; x <= Tile.MaxX; x++)
+				{
+					BaryCoords Interp;
+
+					// Compute barycentric coordinates
+					float alpha = (v1y_Sub_v2y * ((x + 0.5f) - v2.x) + (v2x_Sub_v1x) * ((y + 0.5f) - v2.y)) * invDenom;
+					float beta = (v2y_Sub_v0y * ((x + 0.5f) - v2.x) + (v0x_Sub_v2x) * ((y + 0.5f) - v2.y)) * invDenom;
+					float gamma = 1.0f - alpha - beta;
+
+					if (alpha < 0 || beta < 0 || gamma < 0) continue;
+
+					Interp.SetBary(alpha, beta, gamma);
+
+					// this is correct for non ortho projection TODO make a switch for this in my main renderer and here 
+					float Depth = Interp.PerspectiveCorrectInterpolate(v0.z, v1.z, v2.z, v0.w, v1.w, v2.w);
+
+					if (Depth < 0.0f)
+						continue;
+
+					int idx = ContIdx(x, y, Tile.DstWidth);
+
+					if (Depth < Tile.Dst[idx])
+					{
+						Tile.Dst[idx] = Depth;
+					}
+				}
+			}
+		}
+
+
+		// not worth the overhead
+		void __fastcall BaryCentricRasterizerDepth(Triangle* ClipSpaceTri, float* Buffer, const SIZE_T BufferWidth, const SIZE_T BufferHeight)
+		{
+			float z0 = ClipSpaceTri->Points.Points[0].z;
+			float z1 = ClipSpaceTri->Points.Points[1].z;
+			float z2 = ClipSpaceTri->Points.Points[2].z;
+
+			ClipSpaceTri->ApplyPerspectiveDivide();
+			ClipSpaceTri->Scale(Vec3((float)((BufferWidth - 1) * 0.5f), (float)((BufferHeight - 1) * 0.5f), 1.0f));
+			ClipSpaceTri->Translate(Vec3((float)((BufferWidth - 1) * 0.5f), (float)((BufferHeight - 1) * 0.5f), 0.0f));
+
+			// Screen Space
+			Vec4 v0 = ClipSpaceTri->Points.Points[0];
+			Vec4 v1 = ClipSpaceTri->Points.Points[1];
+			Vec4 v2 = ClipSpaceTri->Points.Points[2];
+
+			const float v1y_Sub_v2y = v1.y - v2.y;
+			const float v2y_Sub_v0y = v2.y - v0.y;
+			const float v0x_Sub_v2x = v0.x - v2.x;
+			const float v2x_Sub_v1x = v2.x - v1.x;
+
+			BaryCoords Interp;
+
+			// --- 2. Compute triangle bounding box ---
+			int minX = std::max(0, (int)std::floor(std::min({ v0.x, v1.x, v2.x })));
+			int maxX = std::min(BufferWidth - 1, (SIZE_T)std::ceil(std::max({ v0.x, v1.x, v2.x })));
+			int minY = std::max(0, (int)std::floor(std::min({ v0.y, v1.y, v2.y })));
+			int maxY = std::min(BufferHeight - 1, (SIZE_T)std::ceil(std::max({ v0.y, v1.y, v2.y })));
+
+			float denom = (v1y_Sub_v2y) * (v0x_Sub_v2x)+(v2.x - v1.x) * (v0.y - v2.y);
+			if (denom == 0.0f) return; // Degenerate triangle
+
+			float invDenom = 1/denom;
+
+			const int tileSize = 32;
+
+			for (int tileY = minY; tileY <= maxY; tileY += tileSize)
+			{
+				for (int tileX = minX; tileX <= maxX; tileX += tileSize)
+				{
+					int tileMaxY = std::min(tileY + tileSize - 1, maxY);
+					int tileMaxX = std::min(tileX + tileSize - 1, maxX);
+					RasterizerTile Tile{};
+					Tile.Dst = Buffer;
+					Tile.DstWidth = BufferWidth;
+					Tile.MinX = tileX;
+					Tile.MaxX = tileMaxX;
+					Tile.MinY = tileY;
+					Tile.MaxY = tileMaxY;
+
+
+
+					Core::ThreadPool.EnqueueTask([Tile, &v2, &v1y_Sub_v2y, &v2y_Sub_v0y, &v0x_Sub_v2x, &v2x_Sub_v1x, &v0, &v1, &invDenom]()
+						{
+							RasterizeDepthTile(Tile, v0, v1, v2, v1y_Sub_v2y, v2y_Sub_v0y, v0x_Sub_v2x, v2x_Sub_v1x, invDenom);
+						});
+				}
+			}
+
+			Core::ThreadPool.WaitUntilAllTasksFinished();
+		}
 	}
 }

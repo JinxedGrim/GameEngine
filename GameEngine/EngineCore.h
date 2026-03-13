@@ -42,8 +42,8 @@ namespace TerraPGE::Core
 	// move to TPGE keep all and add a switch for updating keyboard input (allow user to disable all input)
 	static bool UpdateMouseIn = true;
 
-	static constexpr const char* TPGE_LOG_ERROR_RENDERER_FATAL = "\\^c";
-	static constexpr const char* TPGE_LOG_ERROR_RENDERER_NON_FATAL = "\\^c";
+	static constexpr int TPGE_LOG_ERROR_RENDERER_NON_FATAL = 0;
+	static constexpr int TPGE_LOG_ERROR_RENDERER_FATAL = 1;
 
 	__inline void _LogCout(std::string Message)
 	{

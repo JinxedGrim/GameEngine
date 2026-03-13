@@ -13,7 +13,7 @@ int APIENTRY WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance,
 	WndCreatorW Wnd = WndCreatorW(CS_OWNDC, L"GameEngine", L"Game Engine", LoadCursorW(NULL, IDC_ARROW), NULL, ClearBrush, (DWORD)WndExModes::BorderLessEx, (DWORD)WndModes::BorderLess | (DWORD)WndModes::ClipChildren, 0, 0, TerraPGE::Renderer::sx, TerraPGE::Renderer::sy);
 
 #ifdef _DEBUG
-	TerraPGE::Renderer::OpenConsole();
+	TerraPGE::Renderer::RenderingUtils::OpenConsole();
 #endif
 
 	ExampleScene* ExScene = new ExampleScene();
