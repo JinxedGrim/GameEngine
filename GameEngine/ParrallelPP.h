@@ -6,7 +6,6 @@
 #include <condition_variable>
 #include <mutex>
 #include <iostream>
-
 #pragma once
 #include <chrono>
 #include <smmintrin.h>
@@ -14,6 +13,7 @@
 #ifdef _WIN32
 #include <limits.h>
 #include <intrin.h>
+#include <windows.h>
 typedef unsigned __int32  uint32_t;
 
 #else
@@ -24,34 +24,25 @@ typedef unsigned __int32  uint32_t;
 
 class CodeTimer
 {
-	std::chrono::steady_clock::time_point ClockStart;
-	std::chrono::steady_clock::time_point ClockStop;
-	float Time = 0.0f;
-
-	public:
-
-	CodeTimer()
+	LARGE_INTEGER start;
+public:
+	inline void Start()
 	{
-
+		QueryPerformanceCounter(&start);
 	}
 
-	void Start()
+	inline float Stop()
 	{
-		ClockStart = std::chrono::high_resolution_clock::now();
-	}
+		LARGE_INTEGER end;
+		QueryPerformanceCounter(&end);
 
-	void Stop()
-	{
-		this->ClockStop = std::chrono::high_resolution_clock::now();
-		this->Time = std::chrono::duration<float, std::milli>(ClockStop - ClockStart).count();
-	}
+		static double invFreq = [] {
+			LARGE_INTEGER f;
+			QueryPerformanceFrequency(&f);
+			return 1000.0 / (double)f.QuadPart;
+		}();
 
-	double StopAndPrint()
-	{
-		this->ClockStop = std::chrono::high_resolution_clock::now();
-		this->Time = std::chrono::duration<float, std::milli>(ClockStop - ClockStart).count();
-		std::cout << "Took " << this->Time << " ms";
-		return Time;
+		return float((end.QuadPart - start.QuadPart) * invFreq);
 	}
 };
 

@@ -115,11 +115,14 @@ namespace TerraPGE
 	static SIZE_T CurrMB = 0;
 	static Scene* CurrScene = nullptr;
 	static int Fps = 0;
-	float Sensitivity = 0.1f;
-	Vec2 PrevMousePos;
-	double PhysicsTick = 1 / 30.0f;
-	bool DoPhysics = false;
-	bool ApplyGravity = true;
+	static float Sensitivity = 0.1f;
+	static Vec2 PrevMousePos;
+	static const double PhysicsTick = 1 / 30.0f;
+	static bool DoPhysics = false;
+	static bool ApplyGravity = true;
+	static float FrameTime = 0.0f;
+	static float PhysTime = 0.0f;
+
 
 
 
@@ -180,6 +183,7 @@ namespace TerraPGE
 		auto LastPhysicsTime = std::chrono::steady_clock::now();
 		double framePhysicsDelta = 0.0;
 		auto now = std::chrono::steady_clock::now();
+		CodeTimer Timer;
 
 		while (!Wnd.Input.IsKeyPressed(VK_RETURN))
 		{
@@ -216,6 +220,8 @@ namespace TerraPGE
 				RenderQueue[idx] = SceneRenderQueue->at(idx);
 			}
 
+
+			Timer.Start();
 			now = std::chrono::steady_clock::now();
 			framePhysicsDelta = std::chrono::duration<double>(now - LastPhysicsTime).count();
 			LastPhysicsTime = now;
@@ -288,16 +294,17 @@ namespace TerraPGE
 				Obj->Transform.WalkTransformChain();
 			}
 
-
 			CurrScene->MainCamera->Transform.WalkTransformChain();
+			PhysTime = Timer.Stop();
 
+			Timer.Start();
 			if (!Core::DoMultiThreading && !Core::SimdAcceleration)
 				Renderer::RenderScene(CurrScene->MainCamera, RenderQueue, LightsToRender, SceneRenderQueue->size(), SceneLights->size(), CurrScene->SkyboxToRender);
 			else if (!Core::DoMultiThreading && Core::SimdAcceleration)
 				Renderer::SIMD::RenderScene(CurrScene->MainCamera, RenderQueue, LightsToRender, SceneRenderQueue->size(), SceneLights->size(), CurrScene->SkyboxToRender);
 			else
 				Renderer::Multithreaded::RenderScene(CurrScene->MainCamera, RenderQueue, LightsToRender, SceneRenderQueue->size(), SceneLights->size(), CurrScene->SkyboxToRender);
-
+			FrameTime = Timer.Stop();
 
 			CurrScene->DrawSceneGUI(Renderer::EngineGdi,  (float)ElapsedTime);
 

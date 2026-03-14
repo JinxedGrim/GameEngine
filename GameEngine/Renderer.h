@@ -37,6 +37,12 @@ namespace TerraPGE::Renderer
 	static SupportedInstructions SimdInfo = { 0 };
 	static int CpuCores = 0;
 
+	static float RenderMeshDepthTime = 0.0f;
+	static float RenderMeshTime = 0.0f;
+	static float EnvironmentRendertime = 0.0f;
+	static float PresentTime = 0.0f;
+
+
 	namespace RenderingUtils
 	{
 		namespace Profiler
@@ -872,15 +878,30 @@ namespace TerraPGE::Renderer
 
 	void RenderScene(Camera* Cam, Renderable** SceneObjects, LightObject** SceneLights, size_t ObjectCount, size_t LightCount, EnvironmentRenderable* Skybox = nullptr)
 	{
+		CodeTimer Timer;
+
+		Timer.Start();
 		Renderer::RenderSkybox(Renderer::FrameBuffer, Renderer::sx, Renderer::sy, Cam, Skybox);
+		float t = Timer.Stop();
+		Renderer::EnvironmentRendertime = t;
 
+		// multithreaded version not worth it
+		Timer.Start();
 		Renderer::RenderShadowMaps(SceneObjects, SceneLights, ObjectCount, LightCount, Renderer::ShadowMap);
+		t = Timer.Stop();
+		Renderer::RenderMeshDepthTime = t;
 
+		Timer.Start();
 		Renderer::RenderMeshes(Cam, SceneObjects, SceneLights, ObjectCount, LightCount);
-
+		t = Timer.Stop();
+		Renderer::RenderMeshTime = t;
 		//Renderer::RenderEnvironment();
 
+		Timer.Start();
 		Renderer::SwapFrameBuffer(Renderer::UseHDR, Renderer::DoGammaCorrection);
+		Renderer::EngineGdi->SetNeedsPixelsRedrawn();
+		t = Timer.Stop();
+		Renderer::PresentTime = t;
 	}
 
 
@@ -1288,7 +1309,6 @@ namespace TerraPGE::Renderer
 				}
 			}
 
-
 			void RenderSkyboxByChunk(EnvironmentRenderable* sky, const Camera* Cam, const uint64_t y0, const uint64_t y1, const uint64_t width, const uint64_t height, const float& Fov, const Matrix& Proj, const Matrix3x3& CamRot)
 			{
 				const float Aspect = Cam->GetAspectRatio();
@@ -1310,31 +1330,57 @@ namespace TerraPGE::Renderer
 		{
 			if (SimdInfo.AVX2)
 			{
+				CodeTimer Timer;
+
+				Timer.Start();
 				Renderer::RenderSkybox(Renderer::FrameBuffer, Renderer::sx, Renderer::sy, Cam, Skybox);
+				float t = Timer.Stop();
+				Renderer::EnvironmentRendertime = t;
 
+				// multithreaded version not worth it
+				Timer.Start();
 				Renderer::RenderShadowMaps(SceneObjects, SceneLights, ObjectCount, LightCount, Renderer::ShadowMap);
+				t = Timer.Stop();
+				Renderer::RenderMeshDepthTime = t;
 
+				Timer.Start();
 				Renderer::RenderMeshes(Cam, SceneObjects, SceneLights, ObjectCount, LightCount);
-
+				t = Timer.Stop();
+				Renderer::RenderMeshTime = t;
 				//Renderer::RenderEnvironment();
 
-				//Renderer::RenderingCore::SwapFrameBuffer(Renderer::UseHDR, Renderer::DoGammaCorrection);
+				Timer.Start();
 				Renderer::SIMD::AVX::SwapFrameBuffer(Renderer::FrameBuffer, Renderer::sx, Renderer::sy, Renderer::EngineGdi->GetPixelBuffer(), Renderer::UseHDR, Renderer::DoGammaCorrection);
 				Renderer::EngineGdi->SetNeedsPixelsRedrawn();
+				t = Timer.Stop();
+				Renderer::PresentTime = t;
 			}
 			else
 			{
-				Renderer::RenderSkybox(Renderer::FrameBuffer,  Renderer::sx, Renderer::sy, Cam, Skybox);
+				CodeTimer Timer;
 
+				Timer.Start();
+				Renderer::RenderSkybox(Renderer::FrameBuffer, Renderer::sx, Renderer::sy, Cam, Skybox);
+				float t = Timer.Stop();
+				Renderer::EnvironmentRendertime = t;
+
+				// multithreaded version not worth it
+				Timer.Start();
 				Renderer::RenderShadowMaps(SceneObjects, SceneLights, ObjectCount, LightCount, Renderer::ShadowMap);
+				t = Timer.Stop();
+				Renderer::RenderMeshDepthTime = t;
 
+				Timer.Start();
 				Renderer::RenderMeshes(Cam, SceneObjects, SceneLights, ObjectCount, LightCount);
-
+				t = Timer.Stop();
+				Renderer::RenderMeshTime = t;
 				//Renderer::RenderEnvironment();
 
-				//Renderer::RenderingCore::SwapFrameBuffer(Renderer::UseHDR, Renderer::DoGammaCorrection);
+				Timer.Start();
 				Renderer::SIMD::SSE::SwapFrameBuffer(Renderer::FrameBuffer, Renderer::sx, Renderer::sy, Renderer::EngineGdi->GetPixelBuffer(), Renderer::UseHDR, Renderer::DoGammaCorrection);
 				Renderer::EngineGdi->SetNeedsPixelsRedrawn();
+				t = Timer.Stop();
+				Renderer::PresentTime = t;
 			}
 		}
 	}
@@ -1461,6 +1507,7 @@ namespace TerraPGE::Renderer
 		}
 
 
+		// not worth it currently (maybe one thread per shadow map would be better since its such a quick op) TODO
 		void RenderShadowMaps(Renderable** SceneObjects, LightObject** SceneLights, size_t ObjectCount, size_t LightCount, float* Buffer)
 		{
 			bool HasLight = LightCount >= 1;
@@ -1511,16 +1558,29 @@ namespace TerraPGE::Renderer
 
 		void RenderScene(Camera* Cam, Renderable** SceneObjects, LightObject** SceneLights, size_t ObjectCount, size_t LightCount, EnvironmentRenderable* Skybox = nullptr)
 		{
+			CodeTimer Timer;
+
+			Timer.Start();
 			Multithreaded::RenderSkybox(Cam, Skybox);
+			float t = Timer.Stop();
+			Renderer::EnvironmentRendertime = t;
 
 			// multithreaded version not worth it
+			Timer.Start();
 			Renderer::RenderShadowMaps(SceneObjects, SceneLights, ObjectCount, LightCount, Renderer::ShadowMap);
+			t = Timer.Stop();
+			Renderer::RenderMeshDepthTime = t;
 
+			Timer.Start();
 			Renderer::RenderMeshes(Cam, SceneObjects, SceneLights, ObjectCount, LightCount);
-
+			t = Timer.Stop();
+			Renderer::RenderMeshTime = t;
 			//Renderer::RenderEnvironment();
 
+			Timer.Start();
 			Multithreaded::SwapFrameBuffer(Renderer::FrameBuffer, Renderer::sx, Renderer::sy, UseHDR, Renderer::DoGammaCorrection);
+			t = Timer.Stop();
+			Renderer::PresentTime = t;
 		}
 	}
 

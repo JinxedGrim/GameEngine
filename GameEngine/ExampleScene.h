@@ -590,41 +590,47 @@ class ExampleScene : public TerraPGE::Scene
 		{
 			static std::string MenuStr = "(F1) Debug Menu";
 
-			static std::string CameraMenu = "    (TAB) Camera Settings";
-			static std::string FovStr = "    (F2) Fov: ";
-			static std::string AspectStr = "  Aspect: ";
-			static std::string NearStr = "  Near: ";
-			static std::string FarStr = "  Far: ";
-			static std::string CamPosXstr = "    Camera Pos: ( X: ";
-			static std::string CamPosYstr = ", Y: ";
-			static std::string CamPosZstr = ", Z: ";
-			static std::string CamPosEndstr = ")";
-			static std::string CamPosWolrd = "  World: ( X: ";
-			static std::string CamRotXstr = "    Camera Rot: ( Pitch: ";
-			static std::string CamRotYstr = ", Yaw: ";
-			static std::string CamRotZstr = ", Roll: ";
-			static std::string CamRotEndstr = ")";
-			static std::string CamWorldRotXstr = " World: ( Pitch: ";
+			static const std::string CameraMenu = "    (TAB) Camera Settings";
+			static const std::string FovStr = "    (F2) Fov: ";
+			static const std::string AspectStr = "  Aspect: ";
+			static const std::string NearStr = "  Near: ";
+			static const std::string FarStr = "  Far: ";
+			static const std::string CamPosXstr = "    Camera Pos: ( X: ";
+			static const std::string CamPosYstr = ", Y: ";
+			static const std::string CamPosZstr = ", Z: ";
+			static const std::string CamPosEndstr = ")";
+			static const std::string CamPosWolrd = "  World: ( X: ";
+			static const std::string CamRotXstr = "    Camera Rot: ( Pitch: ";
+			static const std::string CamRotYstr = ", Yaw: ";
+			static const std::string CamRotZstr = ", Roll: ";
+			static const std::string CamRotEndstr = ")";
+			static const std::string CamWorldRotXstr = " World: ( Pitch: ";
 
-			static std::string EngineMenu = "    (TAB) Engine Settings";
-			static std::string CpuStr = "    CPU: ";
-			static std::wstring GpuStr = L"    GPU: ";
-			static std::string SIMDStr = "    SIMD Support: ";
+			static const std::string EngineMenu = "    (TAB) Engine Settings";
+			static const std::string PhysTimeStr = "    PhysicsTime: ";
+			static const std::string FrameTimeStr = "    RenderTime: ";
+			static const std::string EnvTimeStr = "    Environment: ";
+			static const std::string SmTimeStr = "    ShadowMapping: ";
+			static const std::string MrTimeStr = "    Mesh Rendering: ";
+			static const std::string PrTimeStr = "    PresentationTime: ";
+			static const std::string CpuStr = "    CPU: ";
+			static const std::wstring GpuStr = L"    GPU: ";
+			static const std::string SIMDStr = "    SIMD Support: ";
 
-			static std::string MultiThreadingStr = "    (F2)  MultiThreading: ";
-			static std::string SimdAccelStr = "    (F3)  SIMD Accelleration: ";
-			static std::string PhysicsEngineStr = "    (F4)  PhysicsEnabled: ";
+			static const std::string MultiThreadingStr = "    (F2)  MultiThreading: ";
+			static const std::string SimdAccelStr = "    (F3)  SIMD Accelleration: ";
+			static const std::string PhysicsEngineStr = "    (F4)  PhysicsEnabled: ";
 
-			static std::string RendererMenu = "    (TAB) Renderer Settings";
-			static std::string CullingStr = "    (F2)  Culling: ";
-			static std::string LightingStr = "    (F3)  Lighting: ";
-			static std::string ShadowStr = "    (F4)  Shadows: ";
-			static std::string WireframeStr = "    (F5)  Wireframe: ";
-			static std::string HdrStr = "    (F6)  Hdr: ";
-			static std::string GammaCorrectionStr = "    (F7)  GammCorrection: ";
-			static std::string DbgClip = "    (F8)  DebugClip: ";
-			static std::string DbgShadows = "    (F9)  DebugShadows: ";
-			static std::string DepthStr = "    Depth: ";
+			static const std::string RendererMenu = "    (TAB) Renderer Settings";
+			static const std::string CullingStr = "    (F2)  Culling: ";
+			static const std::string LightingStr = "    (F3)  Lighting: ";
+			static const std::string ShadowStr = "    (F4)  Shadows: ";
+			static const std::string WireframeStr = "    (F5)  Wireframe: ";
+			static const std::string HdrStr = "    (F6)  Hdr: ";
+			static const std::string GammaCorrectionStr = "    (F7)  GammCorrection: ";
+			static const std::string DbgClip = "    (F8)  DebugClip: ";
+			static const std::string DbgShadows = "    (F9)  DebugShadows: ";
+			static const std::string DepthStr = "    Depth: ";
 
 			Vec3 LocalPos = MainCamera->GetLocalPosition();
 			Vec3 WorldPos = MainCamera->GetWorldPosition();
@@ -652,6 +658,14 @@ class ExampleScene : public TerraPGE::Scene
 			{
 				outStr << MenuStr << TerraPGE::Renderer::TPGE_TEXT_NEW_LINE_TOKEN <<
 					EngineMenu << TerraPGE::Renderer::TPGE_TEXT_NEW_LINE_TOKEN <<
+					
+					FrameTimeStr << TerraPGE::FrameTime << TerraPGE::Renderer::TPGE_TEXT_NEW_LINE_TOKEN << 
+					PhysTimeStr << TerraPGE::PhysTime << TerraPGE::Renderer::TPGE_TEXT_NEW_LINE_TOKEN <<
+					EnvTimeStr << TerraPGE::Renderer::EnvironmentRendertime << TerraPGE::Renderer::TPGE_TEXT_NEW_LINE_TOKEN <<
+					SmTimeStr << TerraPGE::Renderer::RenderMeshDepthTime << TerraPGE::Renderer::TPGE_TEXT_NEW_LINE_TOKEN <<
+					MrTimeStr << TerraPGE::Renderer::RenderMeshTime << TerraPGE::Renderer::TPGE_TEXT_NEW_LINE_TOKEN <<
+					PrTimeStr << TerraPGE::Renderer::PresentTime << TerraPGE::Renderer::TPGE_TEXT_NEW_LINE_TOKEN << TerraPGE::Renderer::TPGE_TEXT_NEW_LINE_TOKEN  <<
+
 					CpuStr << TerraPGE::Renderer::CpuCores << TerraPGE::Renderer::TPGE_TEXT_NEW_LINE_TOKEN <<
 					SIMDStr << TerraPGE::Renderer::SimdInfo.GetSupportString() << TerraPGE::Renderer::TPGE_TEXT_NEW_LINE_TOKEN <<
 					TerraPGE::Renderer::TPGE_TEXT_NEW_LINE_TOKEN <<
@@ -659,7 +673,7 @@ class ExampleScene : public TerraPGE::Scene
 					SimdAccelStr << TerraPGE::Core::SimdAcceleration << TerraPGE::Renderer::TPGE_TEXT_NEW_LINE_TOKEN <<
 					PhysicsEngineStr << TerraPGE::DoPhysics << TerraPGE::Renderer::TPGE_TEXT_NEW_LINE_TOKEN;
 
-				Gdi->DrawStringW(20, 120, GpuStr + TerraPGE::Renderer::RenderingUtils::Profiler::GetDevList(), RGB(255, 0, 0), TRANSPARENT);
+				Gdi->DrawStringW(20, 200, GpuStr + TerraPGE::Renderer::RenderingUtils::Profiler::GetDevList(), RGB(255, 0, 0), TRANSPARENT);
 
 				TerraPGE::Renderer::RenderingCore::RenderFormattedText(20, 40, outStr.str(), RGB(255, 0, 0));
 			}
