@@ -65,7 +65,9 @@ COLORREF GetBrushColor(HBRUSH brush)
     return lbr.lbColor;
 }
 
+#ifndef PixelRound
 #define PixelRound(Val) (int)std::roundf(Val)
+#endif
 
 class BrushPP
 {
@@ -1188,6 +1190,10 @@ public:
         bi.bmiHeader.biHeight = -this->ScreenSz.y;
 
         MemBM = CreateDIBSection(this->ScreenDC, &bi, DIB_RGB_COLORS, (void**)&PixelBuffer, NULL, 0);
+
+        if (!MemBM)
+            return false;
+
         std::string str = std::to_string(GetLastError());
         OldBM = (HBITMAP)SelectObject(MemDC, MemBM);
 

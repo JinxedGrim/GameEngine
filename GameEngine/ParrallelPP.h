@@ -6,7 +6,6 @@
 #include <condition_variable>
 #include <mutex>
 #include <iostream>
-
 #pragma once
 #include <chrono>
 #include <smmintrin.h>
@@ -14,6 +13,7 @@
 #ifdef _WIN32
 #include <limits.h>
 #include <intrin.h>
+#include <windows.h>
 typedef unsigned __int32  uint32_t;
 
 #else
@@ -24,38 +24,29 @@ typedef unsigned __int32  uint32_t;
 
 class CodeTimer
 {
-	std::chrono::steady_clock::time_point ClockStart;
-	std::chrono::steady_clock::time_point ClockStop;
-	float Time = 0.0f;
-
-	public:
-
-	CodeTimer()
+	LARGE_INTEGER start;
+public:
+	inline void Start()
 	{
-
+		QueryPerformanceCounter(&start);
 	}
 
-	void Start()
+	inline float Stop()
 	{
-		ClockStart = std::chrono::high_resolution_clock::now();
-	}
+		LARGE_INTEGER end;
+		QueryPerformanceCounter(&end);
 
-	void Stop()
-	{
-		this->ClockStop = std::chrono::high_resolution_clock::now();
-		this->Time = std::chrono::duration<float, std::milli>(ClockStop - ClockStart).count();
-	}
+		static double invFreq = [] {
+			LARGE_INTEGER f;
+			QueryPerformanceFrequency(&f);
+			return 1000.0 / (double)f.QuadPart;
+		}();
 
-	double StopAndPrint()
-	{
-		this->ClockStop = std::chrono::high_resolution_clock::now();
-		this->Time = std::chrono::duration<float, std::milli>(ClockStop - ClockStart).count();
-		std::cout << "Took " << this->Time << " ms";
-		return Time;
+		return float((end.QuadPart - start.QuadPart) * invFreq);
 	}
 };
 
-typedef struct SupportedInstructions
+struct SupportedInstructions
 {
 	bool SSE = false;
 	bool SSE2 = false;
@@ -271,7 +262,7 @@ namespace SIMDUtils
 		}
 
 
-		static inline void RGB4ToByte(const __m128& InR, const __m128& InG, const __m128& InB, __m128i& OutR, __m128i& OutG, __m128i& OutB)
+		static inline void RGB4ToByte4(const __m128& InR, const __m128& InG, const __m128& InB, __m128i& OutR, __m128i& OutG, __m128i& OutB)
 		{
 			__m128 max255 = _mm_set1_ps(255.0f);
 			__m128 min0 = _mm_set1_ps(0.0f);
@@ -286,7 +277,7 @@ namespace SIMDUtils
 		}
 
 
-		static inline void RGBStoreBGR(const __m128i& Ri, const __m128i& Gi, const __m128i& Bi, unsigned __int8* Dst)
+		static inline void RGB4StoreBGR4(const __m128i& Ri, const __m128i& Gi, const __m128i& Bi, unsigned __int8* Dst)
 		{
 			// store sequentially as B G R triplets
 			alignas(16) uint8_t rTmp[16], gTmp[16], bTmp[16];
@@ -354,6 +345,90 @@ namespace SIMDUtils
 			GammaApproxSqrt(c);
 		}
 	}
+
+	namespace AVX
+	{
+		static inline void LoadRGB8(const float* src, __m256& R, __m256& G, __m256& B)
+		{
+			R = _mm256_setr_ps(src[0], src[3], src[6], src[9],
+				src[12], src[15], src[18], src[21]);
+
+			G = _mm256_setr_ps(src[1], src[4], src[7], src[10],
+				src[13], src[16], src[19], src[22]);
+
+			B = _mm256_setr_ps(src[2], src[5], src[8], src[11],
+				src[14], src[17], src[20], src[23]);
+		}
+
+		static inline void ClampFloat8(__m256& Val, const __m256& Min, const __m256& Max)
+		{
+			Val = _mm256_min_ps(Max, _mm256_max_ps(Min, Val));
+		}
+
+
+		static inline void ClampRGBFloat8(__m256& R, __m256& G, __m256& B, const __m256& Min, const __m256& Max)
+		{
+			ClampFloat8(R, Min, Max);
+			ClampFloat8(G, Min, Max);
+			ClampFloat8(B, Min, Max);
+		}
+
+
+		static inline void RGB8ToByte8(const __m256& InR, const __m256& InG, const __m256& InB, __m256i& OutR, __m256i& OutG, __m256i& OutB)
+		{
+			__m256 max255 = _mm256_set1_ps(255.0f);
+			__m256 min0 = _mm256_set1_ps(0.0f);
+
+			OutR = _mm256_cvtps_epi32(InR);
+			OutG = _mm256_cvtps_epi32(InG);
+			OutB = _mm256_cvtps_epi32(InB);
+
+			OutR = _mm256_packus_epi16(_mm256_packs_epi32(OutR, _mm256_setzero_si256()), _mm256_setzero_si256());
+			OutG = _mm256_packus_epi16(_mm256_packs_epi32(OutG, _mm256_setzero_si256()), _mm256_setzero_si256());
+			OutB = _mm256_packus_epi16(_mm256_packs_epi32(OutB, _mm256_setzero_si256()), _mm256_setzero_si256());
+		}
+
+
+		static inline void RGB8StoreBGR8(const __m256i& Ri, const __m256i& Gi, const __m256i& Bi, unsigned __int8* Dst)
+		{
+			// store sequentially as B G R triplets
+			alignas(16) uint8_t rTmp[16], gTmp[16], bTmp[16];
+			_mm256_storeu_si256((__m256i*)rTmp, Ri);
+			_mm256_storeu_si256((__m256i*)gTmp, Gi);
+			_mm256_storeu_si256((__m256i*)bTmp, Bi);
+
+			for (int i = 0; i < 8; i++)
+			{
+				Dst[i * 3 + 0] = bTmp[i];
+				Dst[i * 3 + 1] = gTmp[i];
+				Dst[i * 3 + 2] = rTmp[i];
+			}
+		}
+
+		static inline void GammaApproxSqrt(__m256& c)
+		{
+			const __m256 zero = _mm256_set1_ps(0.0f);
+			const __m256 one = _mm256_set1_ps(1.0f);
+
+			c = _mm256_min_ps(one, _mm256_max_ps(zero, c));
+
+			__m256 s1 = _mm256_sqrt_ps(c);
+			__m256 s2 = _mm256_sqrt_ps(s1);
+
+			const __m256 k1 = _mm256_set1_ps(0.585122381f);
+			const __m256 k2 = _mm256_set1_ps(0.783140355f);
+
+			__m256 term1 = _mm256_mul_ps(s2, k1);
+			__m256 term2 = _mm256_mul_ps(s1, k2);
+
+			c = _mm256_add_ps(term1, term2);
+		}
+
+		static inline void LinearToSRGB8(__m256& c)
+		{
+			GammaApproxSqrt(c);
+		}
+	}
 }
 
 class ThreadManager
@@ -377,22 +452,19 @@ class ThreadManager
 			Task = nullptr;
 
 			{
-				std::unique_lock<std::mutex> QueueLock(this->QueueMutex);
+				std::unique_lock<std::mutex> QueueLock(QueueMutex);
 
-				if (!Queue.empty())
-				{
-					Task = std::move(this->Queue.front());
-					Queue.pop();
-				}
-				else
-				{
-					this->TaskConditionVar.wait(QueueLock, [this]() mutable { return (!this->Queue.empty()) || this->JoinThreads; });
+				TaskConditionVar.wait(QueueLock, [this] {
+					return JoinThreads || !Queue.empty();
+					});
 
-					if (this->JoinThreads)
-					{
-						return;
-					}
-				}
+				if (JoinThreads && Queue.empty())
+					return;
+
+				Task = std::move(Queue.front());
+				Queue.pop();	
+
+				TasksInProgress.fetch_add(1, std::memory_order_relaxed);
 			}
 
 			if (this->JoinThreads)
@@ -402,9 +474,13 @@ class ThreadManager
 
 			if (Task)
 			{
-				TasksInProgress.fetch_add(1, std::memory_order_relaxed);
 				Task();
-				TasksInProgress.fetch_sub(1, std::memory_order_relaxed);
+				
+				{
+					std::lock_guard<std::mutex> lock(QueueMutex);
+					TasksInProgress.fetch_sub(1, std::memory_order_relaxed);
+				}
+
 				QueueSzConditionVar.notify_all(); // notify WaitUntilAllTasksFinished
 			}
 		}
@@ -465,10 +541,11 @@ class ThreadManager
 
 	void WaitUntilAllTasksFinished()
 	{
-		std::unique_lock<std::mutex> Lock(this->QueueMutex);
+		std::unique_lock<std::mutex> Lock(QueueMutex);
+
 		QueueSzConditionVar.wait(Lock, [this]() {
-			return Queue.empty() && TasksInProgress.load() == 0;
-		});
+			return Queue.empty() && TasksInProgress.load(std::memory_order_relaxed) == 0;
+			});
 	}
 
 	~ThreadManager()

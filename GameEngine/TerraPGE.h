@@ -11,10 +11,10 @@
 // Direct2D and DirectWrite are justified the same way
 
 //     TO DO 
+// X. Edge funcs on rasterizer
 // X. Fix texture interpolation in clipper 
 // X. Redesign multithreading
 // X. implement a prefab system
-// X. Fix physics ray cast for ground detection (is mesh local space needs to be world)
 // X. Bloom
 // X Add some PBR stuff (metallness, roughness)
 // X. Skybox sun sampling (color/intensity/exposure/etc)
@@ -115,11 +115,14 @@ namespace TerraPGE
 	static SIZE_T CurrMB = 0;
 	static Scene* CurrScene = nullptr;
 	static int Fps = 0;
-	float Sensitivity = 0.1f;
-	Vec2 PrevMousePos;
-	double PhysicsTick = 1 / 30.0f;
-	bool DoPhysics = false;
-	bool ApplyGravity = true;
+	static float Sensitivity = 0.1f;
+	static Vec2 PrevMousePos;
+	static const double PhysicsTick = 1 / 30.0f;
+	static bool DoPhysics = false;
+	static bool ApplyGravity = true;
+	static float FrameTime = 0.0f;
+	static float PhysTime = 0.0f;
+
 
 
 
@@ -133,6 +136,7 @@ namespace TerraPGE
 	{
 		Renderer::RenderingCore::ClearScreen();
 		CurrScene->DrawLoadingScreen(Renderer::EngineGdi);
+		Renderer::EngineGdi->SetNeedsPixelsRedrawn();
 		Renderer::EngineGdi->DrawDoubleBufferPO();
 	}
 
@@ -168,15 +172,18 @@ namespace TerraPGE
 
 		Wnd.RegisterRawInput();
 		Renderer::RenderingCore::PrepareRenderingBackend(Wnd);
-		Core::UpdateWindow(Wnd, &msg);
+		Renderer::RenderingCore::UpdateWindow(Wnd, &msg);
 		SceneManager* _sceneManager = SceneManager::Create(CurrScene);
 
 		UpdateLoadingScreen();
 		CurrScene->BeginScene(Wnd);
 		
 		auto FrameStart      = std::chrono::steady_clock::now();
+		uint64_t CpuFrameStart = Renderer::RenderingUtils::Profiler::GetCpuUsageInfo();
 		auto LastPhysicsTime = std::chrono::steady_clock::now();
-		uint64_t CpuFrameStart = Core::GetCpuUsageInfo();
+		double framePhysicsDelta = 0.0;
+		auto now = std::chrono::steady_clock::now();
+		CodeTimer Timer;
 
 		while (!Wnd.Input.IsKeyPressed(VK_RETURN))
 		{
@@ -184,19 +191,18 @@ namespace TerraPGE
 			_CrtMemCheckpoint(&stateBefore);
 #endif
 			FrameStart = std::chrono::steady_clock::now();
-			CpuFrameStart = Core::GetCpuUsageInfo();
+			CpuFrameStart = Renderer::RenderingUtils::Profiler::GetCpuUsageInfo();
 
-			Core::UpdateWindow(Wnd, &msg);
-
+			Renderer::RenderingCore::UpdateWindow(Wnd, &msg);
 			Renderer::RenderingCore::ClearScreen();
 
 			CurrScene->ClearRenderQueue();
 			CurrScene->ClearLights();
-
 			Roots.clear();
 
 			// call draw code
 			CurrScene->RunTick(Renderer::EngineGdi, Wnd, (float)ElapsedTime);
+			Roots = CurrScene->GetRoots();
 
 			SceneRenderQueue = CurrScene->GetObjects();
 			SceneLights      = CurrScene->GetLights();
@@ -204,13 +210,9 @@ namespace TerraPGE
 			LightsToRender = DEBUG_NEW LightObject * [CurrScene->GetLights()->size()];
 			RenderQueue    = DEBUG_NEW Renderable * [CurrScene->GetObjects()->size()];
 
-			Roots = CurrScene->GetRoots();
-
 			for (size_t idx = 0; idx < SceneLights->size(); idx++)
 			{
 				LightsToRender[idx] = SceneLights->at(idx);
-				LightsToRender[idx]->Transform.WalkTransformChain();
-				LightsToRender[idx]->CalcVpMats();
 			}
 
 			for (size_t idx = 0; idx < SceneRenderQueue->size(); idx++)
@@ -218,8 +220,10 @@ namespace TerraPGE
 				RenderQueue[idx] = SceneRenderQueue->at(idx);
 			}
 
-			auto now = std::chrono::steady_clock::now();
-			double framePhysicsDelta = std::chrono::duration<double>(now - LastPhysicsTime).count();
+
+			Timer.Start();
+			now = std::chrono::steady_clock::now();
+			framePhysicsDelta = std::chrono::duration<double>(now - LastPhysicsTime).count();
 			LastPhysicsTime = now;
 
 			if (DoPhysics)
@@ -290,28 +294,29 @@ namespace TerraPGE
 				Obj->Transform.WalkTransformChain();
 			}
 
-
 			CurrScene->MainCamera->Transform.WalkTransformChain();
+			PhysTime = Timer.Stop();
 
+			Timer.Start();
 			if (!Core::DoMultiThreading && !Core::SimdAcceleration)
 				Renderer::RenderScene(CurrScene->MainCamera, RenderQueue, LightsToRender, SceneRenderQueue->size(), SceneLights->size(), CurrScene->SkyboxToRender);
 			else if (!Core::DoMultiThreading && Core::SimdAcceleration)
-			{
-				Renderer::SIMD::SSE::RenderScene(CurrScene->MainCamera, RenderQueue, LightsToRender, SceneRenderQueue->size(), SceneLights->size(), CurrScene->SkyboxToRender);
-			}
+				Renderer::SIMD::RenderScene(CurrScene->MainCamera, RenderQueue, LightsToRender, SceneRenderQueue->size(), SceneLights->size(), CurrScene->SkyboxToRender);
 			else
 				Renderer::Multithreaded::RenderScene(CurrScene->MainCamera, RenderQueue, LightsToRender, SceneRenderQueue->size(), SceneLights->size(), CurrScene->SkyboxToRender);
+			FrameTime = Timer.Stop();
+
+			CurrScene->DrawSceneGUI(Renderer::EngineGdi,  (float)ElapsedTime);
+
+			if (Core::FpsEngineCounter)
+			{
+				double CpuFrameDelta = Renderer::RenderingUtils::Profiler::GetCpuUsageInfo() - CpuFrameStart;
+				Renderer::RenderingCore::DrawFpsCounter(Wnd, Fps, CurrMB, ElapsedTime, Renderer::RenderingUtils::Profiler::CalculateCpuUsage(CpuFrameDelta * 1e-9, ElapsedTime, Renderer::CpuCores));
+			}
 
 			delete[] LightsToRender;
 			delete[] RenderQueue;
 
-			if (Core::FpsEngineCounter)
-			{
-				double CpuFrameDelta = Core::GetCpuUsageInfo() - CpuFrameStart;
-				Renderer::RenderingCore::DrawFpsCounter(Wnd, Fps, CurrMB, ElapsedTime, Core::CalculateCpuUsage(CpuFrameDelta * 1e-9, ElapsedTime, Core::CpuCores));
-			}
-
-			CurrScene->DrawSceneGUI(Renderer::EngineGdi);
 
 			// Draw to screen
 			Renderer::EngineGdi->DrawDoubleBufferPO();
@@ -335,7 +340,7 @@ namespace TerraPGE
 				}
 
 				// Get current memory usage
-				CurrMB = Core::GetUsedMemory();
+				CurrMB = Renderer::RenderingUtils::Profiler::GetUsedMemory();
 			}
 
 #ifdef _DEBUG
@@ -351,7 +356,8 @@ namespace TerraPGE
 		}
 
 		CurrScene->EndScene();
-		Wnd.Destroy();
-		Core::EngineCleanup();
+		Renderer::RenderingCore::DeleteRenderingBackend();
 	}
 }
+
+

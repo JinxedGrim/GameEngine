@@ -1,10 +1,7 @@
 #pragma once
-#include "Math.h"
+#include "EngineCore.h"
 
 #include <iostream>
-#include <string>
-#include <sstream>
-#include <fstream>
 #include <algorithm>
 
 #define _NULL_TEXTURE_VALUES 255.0f, 0.0f, 255.0f
@@ -159,7 +156,7 @@ class Image2D
 
 		if (!Out->Loaded || !Success)
 		{
-			std::cout << "Failed to load: " << FilePath << std::endl;
+			TerraPGE::Core::LogError("[IMAGE]", "Failed to load texture: " + FilePath, 0);
 			return nullptr;
 		}
 
@@ -187,9 +184,9 @@ class Image2D
 	{
 		int index = (x + this->Width * y) * 3;
 
-		int b = static_cast<float>(this->PixelData[index]);
-		int g = static_cast<float>(this->PixelData[index + 1]);
-		int r = static_cast<float>(this->PixelData[index + 2]);
+		int b = static_cast<int>(this->PixelData[index]);
+		int g = static_cast<int>(this->PixelData[index + 1]);
+		int r = static_cast<int>(this->PixelData[index + 2]);
 
 		return Color(r, g, b);
 	}
@@ -232,6 +229,7 @@ class Image2D
 
 	void Delete()
 	{
+		this->Loaded = false;
 		delete this;
 	}
 };
@@ -343,7 +341,7 @@ class Texture
 
 	Texture(const std::string& Filename, WrappingMode Mode = WrappingMode::Clamp, const std::string& Prefix = "Assets\\")
 	{
-		std::cout << "Loading Texture: " << Filename << std::endl;
+		TerraPGE::Core::LogInfo("[CUBEMAP]", "Loading Texture: " + Filename);
 		this->Image = Image2D::Load(Prefix + Filename);
 
 		this->Used = (this->Image != nullptr && this->Image->IsLoaded());
@@ -392,7 +390,7 @@ class Texture
 
 	Color GetPixelColor(float u, float v) const
 	{
-		if (this->Image == nullptr || this->Image->IsLoaded() == false)
+		if (!this || this->Image == nullptr || this->Image->IsLoaded() == false)
 		{
 			return NULL_TEXTURE_COLOR;
 		}
@@ -428,6 +426,7 @@ class Texture
 	void Delete()
 	{
 		this->Image->Delete();
+		this->Image = nullptr;
 
 		auto it = std::find(LoadedTextures.begin(), LoadedTextures.end(), this);
 
@@ -436,17 +435,33 @@ class Texture
 			this->LoadedTextures.erase(it);
 		}
 	}
+
+	static void DeleteAllTextures()
+	{
+		for (Texture* T : LoadedTextures)
+		{
+			T->Delete();
+		}
+
+		LoadedTextures.clear();
+	}
 };
 
 
 class CubeMap
 {
 	Image2D* Faces[6];
-	int FaceSize;
+	int FaceSize = 0;
 
-	CubeMap()
+	CubeMap(Image2D* f1, Image2D* f2, Image2D* f3, Image2D* f4, Image2D* f5, Image2D* f6)
 	{
+		this->Faces[0] = f1;
+		this->Faces[1] = f2;
+		this->Faces[2] = f3;
 
+		this->Faces[3] = f4;
+		this->Faces[4] = f5;
+		this->Faces[5] = f6;
 	}
 
 	bool CheckFaces()
@@ -471,18 +486,11 @@ class CubeMap
 
 	static CubeMap* LoadCubemapFromImages(std::string px, std::string py, std::string pz, std::string nx, std::string ny, std::string nz)
 	{
-		CubeMap* Out = new CubeMap();
-		Out->Faces[0] = Image2D::Load(px);
-		Out->Faces[1] = Image2D::Load(py);
-		Out->Faces[2] = Image2D::Load(pz);
-
-		Out->Faces[3] = Image2D::Load(nx);
-		Out->Faces[4] = Image2D::Load(ny);
-		Out->Faces[5] = Image2D::Load(nz);
+		CubeMap* Out = new CubeMap(Image2D::Load(px), Image2D::Load(py), Image2D::Load(pz), Image2D::Load(nx), Image2D::Load(ny), Image2D::Load(nz));
 
 		if (!Out->CheckFaces())
 		{
-			std::cout << "Failed to load one or more faces" << std::endl;
+			TerraPGE::Core::LogError("[CUBEMAP]", "Failed to load one or more faces", 0);
 			return nullptr;
 		}
 
@@ -493,7 +501,7 @@ class CubeMap
 
 	static CubeMap* LoadCubemapFromDirectory(const std::string CubemapDirectory, const std::string Ext = ".bmp", const std::string& Prefix = "Assets\\")
 	{
-		std::cout << "Loading Cubmap textures from dir: " << Prefix + CubemapDirectory << std::endl;
+		TerraPGE::Core::LogInfo("[CUBEMAP]", "Loading Cubmap textures from dir: " + Prefix + CubemapDirectory);
 		return LoadCubemapFromImages(Prefix + CubemapDirectory + "px" + Ext, Prefix + CubemapDirectory + "py" + Ext, Prefix + CubemapDirectory + "pz" + Ext, Prefix + CubemapDirectory + "nx" + Ext, Prefix + CubemapDirectory + "ny" + Ext, Prefix + CubemapDirectory + "nz" + Ext);
 	}
 
@@ -511,84 +519,46 @@ class CubeMap
 	}
 	
 
-	Color Sample(Vec3& ViewDirection)
+	Color Sample(const Vec3& viewDirection)
 	{
-		Vec3 Dir = ViewDirection.Normalized();
-		Vec3 Abs = Dir.GetAbs();
-		int Axis = Abs.GetBiggestComponent();
-
-		//return Color(Dir);
+		const float ax = fabsf(viewDirection.x);
+		const float ay = fabsf(viewDirection.y);
+		const float az = fabsf(viewDirection.z);
 
 		float u, v;
-		int ToSample = CUBEMAP_PX;
+		int face;
 
-		switch (Axis)
+		if (ax >= ay && ax >= az)
 		{
-		case 0: // X dominant
-			if (Dir.x > 0.0f)
-			{
-				// +X
-				u = -Dir.z / Abs.x;
-				v = Dir.y / Abs.x;
-				ToSample = CUBEMAP_PX;
-			}
-			else
-			{
-				// -X
-				u = Dir.z / Abs.x;
-				v = Dir.y / Abs.x;
-				ToSample = CUBEMAP_NX;
-			}
-			break;
-		case 1: // Y dominant
-			if (Dir.y > 0.0f)
-			{
-				// +Y
-				u = Dir.x / Abs.y;
-				v = -Dir.z / Abs.y;
-				ToSample = CUBEMAP_PY;
-			}
-			else
-			{
-				// -Y
-				u = Dir.x / Abs.y;
-				v = Dir.z / Abs.y;
-				ToSample = CUBEMAP_NY;
-			}
-			break;
-		case 2: // Z dominant
-			if (Dir.z > 0.0f)
-			{
-				// +Z
-				u = Dir.x / Abs.z;
-				v = Dir.y / Abs.z;
-				ToSample = CUBEMAP_PZ;
-			}
-			else
-			{
-				// -Z
-				u = -Dir.x / Abs.z;
-				v = Dir.y / Abs.z;
-				ToSample = CUBEMAP_NZ;
-			}
-			break;
-		default:
-			throw;
+			const float inv = 1.0f / ax;
+			const bool positive = viewDirection.x > 0.0f;
+
+			u = (positive ? -viewDirection.z : viewDirection.z) * inv;
+			v = viewDirection.y * inv;
+			face = positive ? CUBEMAP_PX : CUBEMAP_NX;
+		}
+		else if (ay >= az)
+		{
+			const float inv = 1.0f / ay;
+			const bool positive = viewDirection.y > 0.0f;
+
+			u = viewDirection.x * inv;
+			v = (positive ? -viewDirection.z : viewDirection.z) * inv;
+			face = positive ? CUBEMAP_PY : CUBEMAP_NY;
+		}
+		else
+		{
+			const float inv = 1.0f / az;
+			const bool positive = viewDirection.z > 0.0f;
+
+			u = (positive ? viewDirection.x : -viewDirection.x) * inv;
+			v = viewDirection.y * inv;
+			face = positive ? CUBEMAP_PZ : CUBEMAP_NZ;
 		}
 
 		u = (u + 1.0f) * 0.5f;
 		v = (v + 1.0f) * 0.5f;
 
-
-		//return Color(u, v, (255.0f/2.0f * ToSample)/255.0f);
-
-		//float Lum = this->Faces[ToSample]->GetColorAtPixel(u, v).Denormalized().CalculateLuminance();
-		//if (Lum >= 255.0f)
-		//{
-		//	return Color(Lum, 0.0f, 0.0f);
-		//}
-
-		//return Color(Lum, Lum, Lum);
-		return this->Faces[ToSample]->GetColorAtPixel(u, v).Normalized();
+		return Faces[face]->GetColorAtPixel(u, v).Normalized();
 	}
 };

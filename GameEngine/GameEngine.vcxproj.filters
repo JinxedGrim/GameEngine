@@ -62,9 +62,6 @@
     <ClInclude Include="TerraPGE.h">
       <Filter>Header Files\EngineAPI</Filter>
     </ClInclude>
-    <ClInclude Include="Physics.h">
-      <Filter>Header Files\EngineAPI</Filter>
-    </ClInclude>
     <ClInclude Include="Scene.h">
       <Filter>Header Files\EngineAPI</Filter>
     </ClInclude>
@@ -72,9 +69,6 @@
       <Filter>Header Files\EngineAPI</Filter>
     </ClInclude>
     <ClInclude Include="GameObject.h">
-      <Filter>Header Files\EngineAPI</Filter>
-    </ClInclude>
-    <ClInclude Include="Rasterizer.h">
       <Filter>Header Files\EngineAPI</Filter>
     </ClInclude>
     <ClInclude Include="Renderable.h">
@@ -130,6 +124,15 @@
     </ClInclude>
     <ClInclude Include="ParrallelPP.h">
       <Filter>Header Files\Core\Libs</Filter>
+    </ClInclude>
+    <ClInclude Include="ExampleScene.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Rasterizer.h">
+      <Filter>Header Files\Core</Filter>
+    </ClInclude>
+    <ClInclude Include="Physics.h">
+      <Filter>Header Files\Core</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

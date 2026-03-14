@@ -499,7 +499,6 @@ namespace TerraPGE
 				const size_t LightCount = Args->FindShaderResourceValue<size_t>(TPGE_SHDR_LIGHT_COUNT);
 				const Material* Mat = Tri->Material;
 				const Vec3* CamLookDir = Args->FindShaderResourcePtr<Vec3*>(TPGE_SHDR_CAMERA_LDIR);
-				const Vec3* FragPos = Args->FindShaderResourcePtr<Vec3*>(TPGE_SHDR_FRAG_POS);
 				const Vec3* FragNormal = Args->FindShaderResourcePtr<Vec3*>(TPGE_SHDR_FRAG_NORMAL);
 				const Vec3* BaryCoords = Args->FindShaderResourcePtr<Vec3*>(TPGE_SHDR_FRAG_BARY_COORDS);
 				Color* FragColor = Args->FindShaderResourcePtr<Color*>(TPGE_SHDR_FRAG_COLOR);

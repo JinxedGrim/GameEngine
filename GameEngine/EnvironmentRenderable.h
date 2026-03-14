@@ -9,5 +9,5 @@ public:
 		
 	}
 
-	virtual Color Render(const int x, const int y, const int width, const int height, const float& Fov, const Matrix3x3& CamRot) = 0;
+	virtual Color Render(const int x, const int y, const float invWidth, const float invHeight, const float& Fov, const float& AspectRatio, const Matrix3x3& CamRot) = 0;
 };

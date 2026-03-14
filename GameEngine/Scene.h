@@ -69,24 +69,42 @@ namespace TerraPGE
 
 		const std::vector <Renderable*> GetRoots() 
 		{
-			std::vector<Renderable*> Roots;
+			std::vector<Renderable*> roots;
 
 			for (Renderable* Obj : RenderQueue)
 			{
 				if (Obj->Transform.Parent == nullptr)
 				{
-					Roots.push_back(Obj);
+					roots.push_back(Obj);
 				}
 			}
 
-			return Roots;
+			return roots;
+		}
+
+
+		static void ClearAllLoadedAssets()
+		{
+			Material::DeleteAllMaterials();
+			Texture::DeleteAllTextures();
 		}
 
 
 		virtual void BeginScene(WndCreator&) = 0;
 		virtual void RunTick(GdiPP*, WndCreator&, const float&) = 0;
-		virtual void DrawSceneGUI(GdiPP* Gdi) = 0;
+		virtual void DrawSceneGUI(GdiPP* Gdi, const float& ElapsedTime) = 0;
 		virtual void DrawLoadingScreen(GdiPP* Gdi) = 0;
-		virtual void EndScene() = 0;
+		virtual void EndScene()
+		{
+			TerraPGE::Core::LogInfo("[SCENE]", "EndScene Called");
+
+			ClearAllLoadedAssets();
+
+			if (this->SkyboxToRender)
+				delete this->SkyboxToRender;
+
+			if (this->MainCamera)
+				delete this->MainCamera;
+		}
 	};
 }

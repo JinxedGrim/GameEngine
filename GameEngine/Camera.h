@@ -52,7 +52,7 @@ public:
 	Camera() = delete;
 
 
-	Camera(Vec3 Position, float AspectRatio, float Fov, float Near, float Far) : GameObject(Position)
+	Camera(Vec3 Position, float AspectRatio, float Fov = 90.0f, float Near = 0.01f, float Far = 100.0f) : GameObject(Position)
 	{
 		this->AspectRatio = AspectRatio;
 		this->Fov = Fov;

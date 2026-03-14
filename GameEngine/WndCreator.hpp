@@ -266,6 +266,82 @@ struct ScreenDimensions
 };
 
 
+enum Inputs
+{
+    A = 'A',
+    B = 'B',
+    C = 'C',
+    D = 'D',
+    E = 'E',
+    F = 'F',
+    G = 'G',
+    H = 'H',
+    I = 'I',
+    J = 'J',
+    K = 'K',
+    L = 'L',
+    M = 'M',
+    N = 'N',
+    O = 'O',
+    P = 'P',
+    Q = 'Q',
+    R = 'R',
+    S = 'S',
+    T = 'T',
+    U = 'U',
+    V = 'V',
+    W = 'W',
+    X = 'X',
+    Y = 'Y',
+    Z = 'Z',
+
+    One = '1',
+    Two = '2',
+    Three = '3',
+    Four = '4',
+    Five = '5',
+    Six = '6',
+    Seven = '7',
+    Eight = '8',
+    Nine = '9',
+
+
+    Shift = VK_SHIFT,
+    Space = VK_SPACE,
+    BackSpace = VK_BACK,
+    Esc = VK_ESCAPE,
+    Enter = VK_RETURN,
+
+    LSHIFT = VK_LSHIFT,
+    RSHIFT = VK_RSHIFT,
+
+    CTRL = VK_CONTROL,
+    LCTRL = VK_LCONTROL,
+    RCTRL = VK_RCONTROL,
+
+    UP = VK_UP,
+    DOWN = VK_DOWN,
+    LEFT = VK_LEFT,
+    RIGHT = VK_RIGHT,
+
+    TAB = VK_TAB,
+    HOME = VK_HOME,
+    INSERT = VK_INSERT,
+
+    F1 = VK_F1,
+    F2 = VK_F2,
+    F3 = VK_F3,
+    F4 = VK_F4,
+    F5 = VK_F5,
+    F6 = VK_F6,
+    F7 = VK_F7,
+    F8 = VK_F8,
+    F9 = VK_F9,
+    F10 = VK_F10,
+    F11 = VK_F11,
+    F12 = VK_F12
+};
+
 struct InputData
 {
     std::array<uint8_t, 256> KeyDown{};
@@ -380,6 +456,7 @@ public:
     bool IsKeyPressed(int key) const { return Current.KeyPressed[key]; }
     bool IsKeyReleased(int key) const { return Current.KeyReleased[key]; }
 };
+
 
 class WndIconW
 {
@@ -558,7 +635,7 @@ class WndCreatorA
 
         this->Wnd = CreateWindowExA(ExFlags, ClassName.data(), WindowName.data(), WStyle, x, y, Width, Height, HwndParent, 0, hInstance, 0);
 
-        this->SetWndLong(GWLP_USERDATA, (long)this);
+        this->SetWndLong(GWLP_USERDATA, (long long)this);
 
         if (!this->Wnd)
         {
@@ -939,7 +1016,7 @@ class WndCreatorA
     }
 
 
-    HWND CreateChildWindow(const DWORD ExFlags, const DWORD WStyle, const std::string_view ClassName, const std::string_view WndName, const int x, const int y, const int Width, const int Height, const int Hmenu)
+    HWND CreateChildWindow(const DWORD ExFlags, const DWORD WStyle, const std::string_view ClassName, const std::string_view WndName, const int x, const int y, const int Width, const int Height, const long long Hmenu)
     {
         HWND chwnd = CreateWindowExA(ExFlags, ClassName.data(), WndName.data(), WStyle, x, y, Width, Height, this->Wnd, (HMENU)Hmenu, (HINSTANCE)GetWindowLongPtrA(this->Wnd, GWLP_HINSTANCE), NULL);
 
@@ -1558,7 +1635,7 @@ class WndCreatorW
     }
 
     
-    HWND CreateChildWindow(const DWORD ExFlags, const DWORD WStyle, const std::wstring_view ClassName, const std::wstring_view WndName, const int x, const int y, const int Width, const int Height, const int Hmenu)
+    HWND CreateChildWindow(const DWORD ExFlags, const DWORD WStyle, const std::wstring_view ClassName, const std::wstring_view WndName, const int x, const int y, const int Width, const int Height, const long long Hmenu)
     {
         HWND chwnd = CreateWindowExW(ExFlags, ClassName.data(), WndName.data(), WStyle, x, y, Width, Height, this->Wnd, (HMENU)Hmenu, (HINSTANCE)GetWindowLongPtrW(this->Wnd, GWLP_HINSTANCE), NULL);
 

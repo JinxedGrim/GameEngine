@@ -1,58 +1,291 @@
 #pragma once
 #include "ParrallelPP.h"
 #include "Rasterizer.h"
-#include "Renderable.h"
 #include "EnvironmentRenderable.h"
+#include "WndCreator.hpp"
+#include "GdiPP.hpp"
+
+//TODO
+// X. Add icons to text formatter
+// X. Add  fonts to format parser
+
+
 
 namespace TerraPGE::Renderer
 {
-	enum class RenderingBackend
+	struct TEXT_PARAMS
+	{
+		int X = 0;
+		int Y = 0;
+		int BkMode = 0;
+		COLORREF Clr = RGB(0, 0, 0);
+		std::string Text = "";
+
+
+		TEXT_PARAMS(const int x, const int y, const std::string text, COLORREF clr, const int BkMode)
+		{
+			this->X = x;
+			this->Y = y;
+			this->Text = text;
+			this->Clr = clr;
+			this->BkMode = BkMode;
+		}
+	};
+
+	static SIZE_T MaxMemoryMB = 0;
+	static CPUID CpuId(1);
+	static SupportedInstructions SimdInfo = { 0 };
+	static int CpuCores = 0;
+
+	static float RenderMeshDepthTime = 0.0f;
+	static float RenderMeshTime = 0.0f;
+	static float EnvironmentRendertime = 0.0f;
+	static float PresentTime = 0.0f;
+
+
+	namespace RenderingUtils
+	{
+		namespace Profiler
+		{
+			static int GPUDevCount = 0;
+			static std::vector<std::wstring> GPUDevNames = {};
+			static std::wstring PrimaryGPUDevName;
+			std::string CpuName;
+
+			double GetCpuUsageInfo()
+			{
+				FILETIME creation, exit, kernel, user;
+				GetProcessTimes(GetCurrentProcess(), &creation, &exit, &kernel, &user);
+
+				ULARGE_INTEGER k, u;
+				k.LowPart = kernel.dwLowDateTime;
+				k.HighPart = kernel.dwHighDateTime;
+				u.LowPart = user.dwLowDateTime;
+				u.HighPart = user.dwHighDateTime;
+
+				return (k.QuadPart + u.QuadPart) * 100; // FILETIME = 100ns units
+			}
+
+
+			double CalculateCpuUsage(double  cpuTimeDeltaNs, double  wallTimeDeltaNs, int coreCount)
+			{
+				return (double)cpuTimeDeltaNs / (double)(wallTimeDeltaNs * coreCount) * 100.0;
+			}
+
+
+			SIZE_T GetUsedMemory()
+			{
+				PROCESS_MEMORY_COUNTERS_EX  Pmc;
+
+				if (GetProcessMemoryInfo(GetCurrentProcess(), (PROCESS_MEMORY_COUNTERS*)&Pmc, sizeof(Pmc)))
+					return Pmc.PrivateUsage / 1024 / 1024;
+
+				return 0;
+			}
+
+
+			SIZE_T GetUsedHeap()
+			{
+				_CrtMemState memState = {};
+				_CrtMemCheckpoint(&memState);
+				return memState.lTotalCount / 1024 / 1024;
+			}
+
+
+			void GetCpuInfo()
+			{
+				SYSTEM_INFO SysInf;
+
+				SimdInfo = CpuId.GetSupportedInstructions();
+				GetSystemInfo(&SysInf);
+				CpuCores = SysInf.dwNumberOfProcessors;
+				CpuName = CpuId.GetProcessorName();
+			}
+
+
+			std::wstring GetDevList()
+			{
+				std::wstring out = L"";
+				for (const std::wstring& str : GPUDevNames)
+				{
+					out += str;
+					out += +L", ";
+				}
+
+				return out;
+			}
+
+
+			void UpdateSystemInfo()
+			{
+				GetCpuInfo();
+
+				MEMORYSTATUSEX MemInf;
+				DISPLAY_DEVICE DispDev;
+
+				DispDev.cb = sizeof(DispDev);
+				MemInf.dwLength = sizeof(MEMORYSTATUSEX);
+				int DevIdx = 0;
+
+				if (GlobalMemoryStatusEx(&MemInf))
+					MaxMemoryMB = (MemInf.ullTotalPhys / 1024 / 1024);
+
+				if (EnumDisplayDevices(NULL, DevIdx, &DispDev, 0))
+				{
+					GPUDevNames.push_back(DispDev.DeviceString);
+					GPUDevCount++;
+
+					if (DispDev.StateFlags & DISPLAY_DEVICE_PRIMARY_DEVICE)
+						PrimaryGPUDevName = DispDev.DeviceString;
+				}
+
+			}
+		}
+
+
+		void PrepareLights(LightObject** SceneLights, size_t LightCount)
+		{
+			// already do this? TODO
+			for (int i = 0; i < LightCount; i++)
+			{
+				LightObject* Light = SceneLights[i];
+				Light->Transform.WalkTransformChain();
+				Light->CalcVpMats();
+			}
+		}
+
+
+		void BuildRenderQueue(const Renderable** Renderables, int Sz)
+		{
+			// This is where i can do filtering and checking for transparency and stuff TODO
+		}
+	
+		
+		void OpenConsole()
+		{
+			AllocConsole();
+
+			FILE* fp;
+			freopen_s(&fp, "CONOUT$", "w", stdout);
+			freopen_s(&fp, "CONOUT$", "w", stderr);
+			freopen_s(&fp, "CONIN$", "r", stdin);
+
+			Core::HasOpenConsole = true;
+		}
+	}
+
+	static bool SystemHasBeenProbed;
+
+	enum class RenderingBackendType: int
 	{
 		CPU = 0,
 		MULTITHREADED = 1,
 		GPU = 2
 	};
 
-	struct TEXT_PARAMS
+	class RenderingContext
 	{
-		int X = 0;
-		int Y = 0;
-		COLORREF Clr = RGB(0, 0, 0);
-		std::string Text = "";
+		static SIZE_T MaxMemoryMB;
+		static CPUID CpuId;
+		static SupportedInstructions SimdInfo;
+		static int CpuCores;
+		int BackendType = 0;
+		static RenderingBackendType CurrBackend;
 
-
-		TEXT_PARAMS(const int x, const int y, const std::string text, COLORREF clr)
+		RenderingContext(int type)
 		{
-			this->X = x;
-			this->Y = y;
-			this->Text = text;
-			this->Clr = clr;
+
+		}
+
+		public:
+
+		RenderingContext() = delete;
+
+		__inline void  GetSysInfo()
+		{
+			Renderer::RenderingUtils::Profiler::UpdateSystemInfo();
+		}
+
+		virtual RenderingContext CreateType(int type, bool SimdEnabled = false)
+		{
+			switch (type)
+			{
+				case (int)RenderingBackendType::CPU:
+				{
+
+				}
+				case (int)RenderingBackendType::MULTITHREADED:
+				{
+
+				}
+				case (int)RenderingBackendType::GPU:
+				{
+
+				}
+				default:
+				{
+					Core::LogError("[RENDERER]", "Unsupported Rendering backend!", 1);
+				}
+			}
+		}
+
+		virtual RenderingContext CreateBestType(bool PreferQuality)
+		{
+			if (PreferQuality)
+			{
+
+			}
+			else
+			{
+
+			}
 		}
 	};
 
-	static RenderingBackend CurrBackend = RenderingBackend::CPU;
-	static GdiPP* EngineGdi = nullptr;
-
-	static BrushPP ClearBrush = -1;
+	static constexpr const char* TPGE_TEXT_COLOR_TOKEN = "\\^c";
+	static constexpr const char* TPGE_TEXT_RESET_TOKEN = "\\^r";
+	static constexpr const char* TPGE_TEXT_SHIFT_X_TOKEN = "\\^x";
+	static constexpr const char* TPGE_TEXT_SHIFT_Y_TOKEN = "\\^y";
+	static constexpr const char* TPGE_TEXT_EFFECT_TOKEN = "\\^e";
+	static constexpr const char* TPGE_TEXT_NEW_LINE_TOKEN = "\n";
+	static constexpr const char* TPGE_TEXT_BK_TOKEN = "\\^b";
+	static const std::string FpsStr = "Fps: ";
+	static const std::wstring FpsWStr = L"Fps: ";
 	static const Vec3 PlaneNormal = { 0.0f, 0.0f, 1.0f };
 
-	bool DebugClip = false;
-	bool DoCull = true;
+	static RenderingBackendType CurrBackend = RenderingBackendType::CPU;
+	static GdiPP* EngineGdi = nullptr;
+	static BrushPP ClearBrush = -1;
 
+	static bool LockCursor = true;
+	static bool CursorShow = false;
+
+	static int sx = GetSystemMetrics(SM_CXSCREEN);
+	static int sy = GetSystemMetrics(SM_CYSCREEN);
+	static int ox = GetSystemMetrics(SM_CXSCREEN);
+	static int oy = GetSystemMetrics(SM_CYSCREEN);
+
+	static float* DepthBuffer = DEBUG_NEW float[sx * sy];
+	static float* FrameBuffer = DEBUG_NEW float[sx * sy * 3];
+
+	// move out and into ligting objects
+	static int ShadowMapHeight = 1024;
+	static int ShadowMapWidth = 1024;
+	static float* ShadowMap = DEBUG_NEW float[ShadowMapWidth * ShadowMapHeight];
 
 	namespace RenderingCore
 	{
 		void PrepareRenderingBackend(WndCreator& Wnd)
 		{
-			Core::UpdateSystemInfo();
+			Renderer::RenderingUtils::Profiler::UpdateSystemInfo();
 			std::stringstream msg;
-			Core::Log("[RENDERER] Initializing Rendering Backend");
-			msg << "[CPU] Name: " << TerraPGE::Core::CpuName << std::endl << "[CPU] Cores: " << Core::CpuCores << std::endl << "[CPU] " << Core::SimdInfo.GetSupportString();
-			Core::Log(msg.str());
+			Core::LogInfo("[RENDERER]", "Initializing Rendering Backend");
+			msg << "[CPU] Name: " << Renderer::RenderingUtils::Profiler::CpuName << std::endl << "[CPU] Cores: " << Renderer::CpuCores << std::endl << "[CPU] " << Renderer::SimdInfo.GetSupportString();
+			Core::LogInfo("[RENDERER]", msg.str());
 
-			if (Core::SimdInfo.SSE42)
+			if (Renderer::SimdInfo.SSE42)
 			{
-				Core::Log("[RENDERER] Detected >= SSE 4.2 Activating SIMD Acceleration");
+				Core::LogInfo("[RENDERER]", "Detected >= SSE 4.2 Activating SIMD Acceleration");
 				Core::SimdAcceleration = true;
 			}
 			else
@@ -60,42 +293,50 @@ namespace TerraPGE::Renderer
 
 			msg.str("");
 			msg.clear();
-			std::wstring GpuDev = TerraPGE::Core::GetDevList();
+			std::wstring GpuDev = Renderer::RenderingUtils::Profiler::GetDevList();
 			std::string s(GpuDev.begin(), GpuDev.end());
 			msg << "[RENDERER] Other Devices: " << s << std::endl;
-			Core::Log(msg.str());
-
-
+			Core::LogInfo("[RENDERER]", msg.str());
 
 			switch (CurrBackend)
 			{
-				case RenderingBackend::CPU:
+				case RenderingBackendType::CPU:
 				{
 					EngineGdi = new GdiPP(Wnd.Wnd, true);
-					Core::sx = Wnd.GetClientArea().Width;
-					Core::sy = Wnd.GetClientArea().Height;
+					sx = Wnd.GetClientArea().Width;
+					sy = Wnd.GetClientArea().Height;
 
 					msg.str("");
 					msg.clear();
-					msg << "[CPU] Created GDI object with WxH: " << Core::sx << "x" << Core::sy;
+					msg << "[CPU] Created GDI object with WxH: " << Renderer::sx << "x" << Renderer::sy;
 
-					Core::Log(msg.str());
+					Core::LogInfo("[RENDERER]", msg.str());
 
-					delete[] Core::DepthBuffer;
-					delete[] Core::FrameBuffer;
+					delete[] Renderer::DepthBuffer;
+					delete[] Renderer::FrameBuffer;
 
 					// Create depth buffer
-					Core::DepthBuffer = DEBUG_NEW float[(SIZE_T)(Core::sx * Core::sy)];
-					Core::FrameBuffer = DEBUG_NEW float[(SIZE_T)(Core::sx * Core::sy * 3)];
+					Renderer::DepthBuffer = DEBUG_NEW float[(SIZE_T)(Renderer::sx * Renderer::sy)];
+					Renderer::FrameBuffer = DEBUG_NEW float[(SIZE_T)(Renderer::sx * Renderer::sy * 3)];
 
 					// Initial Client Region
 					EngineGdi->UpdateClientRgn();
-					Core::Log("[CPU] Rendering backend created successfully\n");
+					Core::LogInfo("[RENDERER]", "[CPU] Rendering backend created successfully\n");
 					break;
 				}
 				default:
 					Core::LogError("[RENDERER]", "Unsupported Rendering backend!", 1);
 			}
+		}
+
+
+		void DeleteRenderingBackend()
+		{
+			Core::LogInfo("[RENDERER]", "Destroying renderer");
+
+			delete[] DepthBuffer;
+			delete[] FrameBuffer;
+			delete[] ShadowMap;
 		}
 
 
@@ -105,9 +346,66 @@ namespace TerraPGE::Renderer
 		}
 
 
+		// Update screen info
+		void UpdateScreenInfo()
+		{
+			// Update GDI info
+			EngineGdi->UpdateClientRgn();
+
+			// Update screen dimenstions
+			sx = EngineGdi->ClientRect.right - EngineGdi->ClientRect.left;
+			sy = EngineGdi->ClientRect.bottom - EngineGdi->ClientRect.top;
+
+			// Update DepthBuffer
+			delete[] DepthBuffer;
+			delete[] FrameBuffer;
+			DepthBuffer = DEBUG_NEW float[sx * sy];
+			DepthBuffer = DEBUG_NEW float[sx * sy * 3];
+		}
+
+
 		void SetClearColor(int BrushIdx)
 		{
 			ClearBrush = (HBRUSH)GetStockObject(BrushIdx);
+		}
+
+
+		void __inline UpdateCursor(WndCreator& Wnd)
+		{
+			if (Wnd.HasFocus())
+			{
+				static POINT Tmp;
+
+				if (LockCursor)
+					SetCursorPos(sx / 2, sy / 2);
+
+				if (CursorShow)
+					while (ShowCursor(TRUE) < 0) {}
+				else
+					while (ShowCursor(FALSE) >= 0) {}
+			}
+		}
+
+
+		void UpdateWindow(WndCreator& Wnd, MSG* msg)
+		{
+			Wnd.Input.BeginFrame();
+
+			while (PeekMessageW(msg, NULL, 0, 0, PM_REMOVE))
+			{
+				// Check Msg
+				if (msg->message == WM_QUIT || msg->message == WM_CLOSE || msg->message == WM_DESTROY)
+				{
+					break;
+				}
+				else
+				{
+					TranslateMessage(msg);
+					DispatchMessageW(msg);
+				}
+			}
+
+			UpdateCursor(Wnd);
 		}
 
 
@@ -115,32 +413,39 @@ namespace TerraPGE::Renderer
 		// Probably this Renderer Becomes a class thats derivable
 		void RenderFormattedText(const int& startX, const int& startY, const std::string& str, const COLORREF& InitialColor, const int& BkMode = TRANSPARENT)
 		{
-			int lastPoint = 0;
+			size_t  lastPoint = 0;
 			std::vector<TEXT_PARAMS> SubStrs;
 
 			int CurrX = startX;
 			int CurrY = startY;
 			COLORREF CurrColor = InitialColor;
 			int CurrBkMode = BkMode;
+			bool RainBowMode = false;
+			bool WaveMode = false;
 
-			for (int i = 0; i < str.length(); i++)
+			static float RainbowStep = 0.0f;
+			static float RainbowSpeed = 0.25f;
+			static float WaveStep = 0.0f;
+			static float WaveSpeed = 0.0f;
+			static float WavePeriod = 0.0f;
+			static float WaveAmplitude = 0.0f;
+			int waveOffsetY = 0;
+
+			for (size_t i = 0; i < str.length(); i++)
 			{
-				if (i == str.length() - 1)
+				if (str.at(i) == '\n')
 				{
-					std::string sub = str.substr(lastPoint);
-					SubStrs.push_back(TEXT_PARAMS(CurrX, CurrY, sub, CurrColor));
-					lastPoint = i;
-					i = lastPoint;
-				}
-				else if (str.at(i) == '\n')
-				{
-					SubStrs.push_back(TEXT_PARAMS(CurrX, CurrY, str.substr(lastPoint, i - lastPoint), CurrColor));
+					SubStrs.push_back(TEXT_PARAMS(CurrX, CurrY, str.substr(lastPoint, i - lastPoint), CurrColor, CurrBkMode));
 					CurrY += 20; // TODO Dont hardcode this (ratio?) also (font, size etc)
 					CurrX = startX;
-					lastPoint = i;
+
+					lastPoint = i + 1;
+					continue;
 				}
-				else if (str.at(i) == '\\' && str.at(i+1) == '^')
+				else if (i + 2 < str.length() && str[i] == '\\' && str[i + 1] == '^') 
 				{
+					int consumed = 0;
+
 					switch (str.at(i+2))
 					{
 						case 'c':
@@ -152,13 +457,35 @@ namespace TerraPGE::Renderer
 							if (sscanf_s(&str[i], "\\^c{%d}{%d}{%d}%n", &r, &g, &b, &consumed) == 3)
 							{
 								std::string sub = str.substr(lastPoint, i - lastPoint);
-								SubStrs.push_back(TEXT_PARAMS(CurrX, CurrY, sub, CurrColor));
+								SubStrs.push_back(TEXT_PARAMS(CurrX, CurrY, sub, CurrColor, CurrBkMode));
+								CurrX += EngineGdi->MeasureTextWidth(sub.c_str());
+								CurrColor = RGB(r, g, b);
+
+								i += consumed - 1;
+								lastPoint = i + 1;
+								RainBowMode = false;
+								continue;
+							}
+							Core::LogError("[RENDERER]", "Failed to parse token! \\^c", TerraPGE::Core::TPGE_LOG_ERROR_RENDERER_NON_FATAL);
+							break;						
+						}
+						case 'b':
+						{
+							int bkMode;
+							int consumed = 0;
+
+							if (sscanf_s(&str[i], "\\^b{%d}%n", &bkMode, &consumed) == 1)
+							{
+								std::string sub = str.substr(lastPoint, i - lastPoint);
+								SubStrs.push_back(TEXT_PARAMS(CurrX, CurrY, sub, CurrColor, CurrBkMode));
 								CurrX += EngineGdi->MeasureTextWidth(sub.c_str());
 
 								i += consumed - 1;
 								lastPoint = i + 1;
-								CurrColor = RGB(r, g, b);
+								CurrBkMode = bkMode;
+								continue;
 							}
+							Core::LogError("[RENDERER]", "Failed to parse token! \\^b", TerraPGE::Core::TPGE_LOG_ERROR_RENDERER_NON_FATAL);
 							break;
 						}
 						case 'x':
@@ -169,75 +496,145 @@ namespace TerraPGE::Renderer
 							if (sscanf_s(&str[i], "\\^x{%d}%n", &offsetX, &consumed) == 1)
 							{
 								std::string sub = str.substr(lastPoint, i - lastPoint);
-								SubStrs.push_back(TEXT_PARAMS(CurrX, CurrY, sub, CurrColor));
+								SubStrs.push_back(TEXT_PARAMS(CurrX, CurrY, sub, CurrColor, CurrBkMode));
 								CurrX += EngineGdi->MeasureTextWidth(sub.c_str());
 
 								i += consumed - 1;
 								lastPoint = i + 1;
 								CurrX += offsetX;
+								continue;
 							}
-							break;
+						
+							Core::LogError("[RENDERER]", "Failed to parse token! \\^x", TerraPGE::Core::TPGE_LOG_ERROR_RENDERER_NON_FATAL);
+							break;					
 						}
 						case 'y':
 						{
 							int consumed = 0;
 							int offsetY = 0;
 
-							if (sscanf_s(&str[i], "\\^x{%d}%n", &offsetY, &consumed) == 1)
+							if (sscanf_s(&str[i], "\\^y{%d}%n", &offsetY, &consumed) == 1)
 							{
 								std::string sub = str.substr(lastPoint, i - lastPoint);
-								SubStrs.push_back(TEXT_PARAMS(CurrX, CurrY, sub, CurrColor));
+								SubStrs.push_back(TEXT_PARAMS(CurrX, CurrY, sub, CurrColor, CurrBkMode));
 								CurrX += EngineGdi->MeasureTextWidth(sub.c_str());
 
 								i += consumed - 1;
 								lastPoint = i + 1;
-								CurrY += offsetY;
+								CurrY += offsetY;							
+								continue;
 							}
+
+							Core::LogError("[RENDERER]", "Failed to parse token! \\^y", TerraPGE::Core::TPGE_LOG_ERROR_RENDERER_NON_FATAL);
 							break;
 						}
 						case 'r':
 						{
 							int consumed = 3;
 							std::string sub = str.substr(lastPoint, i - lastPoint);
-							SubStrs.push_back(TEXT_PARAMS(CurrX, CurrY, sub, CurrColor));
+							SubStrs.push_back(TEXT_PARAMS(CurrX, CurrY, sub, CurrColor, CurrBkMode));
 							CurrX += EngineGdi->MeasureTextWidth(sub.c_str());
+							CurrColor = InitialColor;
+							RainBowMode = false;
+							CurrBkMode = BkMode;
 
 							i += consumed - 1;
 							lastPoint = i + 1;
-
-							CurrColor = InitialColor;
+							continue;
 							break;
 						}
 						case 'e':
 						{
-							int consumed = 0;
-							std::string effect;
+							char effect[45] = {'\0'};
+							float ElapsedTime = 0.0f;
+							int consumedParameters = 0;
 
-							if (sscanf_s(&str[i], "\\^e{%s}%n", &str, &consumed) == 1)
+							if (sscanf_s(&str[i], "\\^e{%[^}]}{%f}%n", effect, (unsigned)_countof(effect), &ElapsedTime, &consumed) == 2)
 							{
-								if (effect == "Rainbow")
+								if (strcmp(effect, "Rainbow") == 0)
 								{
+									if (sscanf_s(&str[i+consumed], "{%f}%n", &RainbowSpeed, &consumedParameters) == 1)
+									{
+										consumed += consumedParameters;
+									}
+
 									std::string sub = str.substr(lastPoint, i - lastPoint);
-									SubStrs.push_back(TEXT_PARAMS(CurrX, CurrY, sub, CurrColor));
+									SubStrs.push_back(TEXT_PARAMS(CurrX, CurrY, sub, CurrColor, CurrBkMode));
 									CurrX += EngineGdi->MeasureTextWidth(sub.c_str());
 
-									i += consumed - 1;
-									lastPoint = i + 1;
-									// TODO  Set rainbow flag
+									RainBowMode = true;
+									Color c = Color::RainbowColor(RainbowStep);
+									RainbowStep += ElapsedTime * RainbowSpeed;
+									CurrColor = RGB((int)c.R, (int)c.G, (int)c.B);
+								}
+								else if(strcmp(effect, "Wave") == 0)
+								{
+									WaveMode = true;
+
+									std::string sub = str.substr(lastPoint, i - lastPoint);
+									SubStrs.push_back(TEXT_PARAMS(CurrX, CurrY, sub, CurrColor, CurrBkMode));
+									CurrX += EngineGdi->MeasureTextWidth(sub.c_str());
+									WaveStep += ElapsedTime * WaveSpeed;
+
+									if (sscanf_s(&str[i + consumed], "{%f}{%f}{%f}%n", &WaveAmplitude, &WavePeriod, &WaveSpeed, &consumedParameters) == 3)
+									{
+										consumed += consumedParameters;
+									}
 								}
 
 								i += consumed - 1;
 								lastPoint = i + 1;
+								continue;
 							}
+
+							Core::LogError("[RENDERER]", "Failed to parse token! \\^e", TerraPGE::Core::TPGE_LOG_ERROR_RENDERER_NON_FATAL);
+							break;
 						}
+						default:
+							Core::LogError("[RENDERER]", "Failed to parse token!", TerraPGE::Core::TPGE_LOG_ERROR_RENDERER_NON_FATAL);
+							break;
 					}
 				}
+				
+				if (RainBowMode)
+				{
+					Color c = Color::RainbowColor(RainbowStep);
+					RainbowStep += 1.0f * RainbowSpeed;
+					CurrColor = RGB((int)c.R, (int)c.G, (int)c.B);
+				}
+				
+				if (WaveMode)
+				{
+					float phase = WaveStep / WavePeriod;
+					waveOffsetY = (int)(WaveAmplitude * sinf(phase * 2.0f * PI));
+
+					WaveStep += WaveSpeed;
+				}
+
+				if (RainBowMode || WaveMode)
+				{
+					std::string sub = str.substr(i, 1);
+
+					SubStrs.push_back(TEXT_PARAMS(CurrX, CurrY + waveOffsetY, sub, CurrColor, CurrBkMode));
+					CurrX += EngineGdi->MeasureTextWidth(sub.c_str());
+
+					lastPoint = i + 1;
+					continue;
+				}
+			}
+
+			if (lastPoint < str.length())
+			{
+				std::string sub = str.substr(lastPoint);
+				SubStrs.push_back(TEXT_PARAMS(CurrX, CurrY, sub, CurrColor, CurrBkMode));
 			}
 
 			for (const TEXT_PARAMS& params : SubStrs)
 			{
-				Core::Log(params.Text);
-				EngineGdi->DrawStringA(params.X, params.Y, params.Text, params.Clr, BkMode);
+				if (params.Text.empty())
+					continue;
+
+				EngineGdi->DrawStringA(params.X, params.Y, params.Text, params.Clr, params.BkMode);
 			}
 		}
 
@@ -247,15 +644,15 @@ namespace TerraPGE::Renderer
 #ifdef UNICODE
 			// Draw FPS and some debug info
 			std::wstringstream ss;
-			ss << std::fixed << std::setprecision(2) << Core::FpsWStr << Fps << L" Cpu/Time: " << CpuUsage << L"/" << FrameTime << L" Memory Usage: " << CurrMB << L"/"
-				<< Core::MaxMemoryMB << L" MB " << (Core::DoMultiThreading ? L"(MultiThreaded)" : L"") << (Core::SimdAcceleration ? L" (SIMD)" : L"");
+			ss << std::fixed << std::setprecision(2) << Renderer::FpsWStr << Fps << L" Cpu/Time: " << CpuUsage << L"/" << FrameTime << L" Memory Usage: " << CurrMB << L"/"
+				<< Renderer::MaxMemoryMB << L" MB " << (Core::DoMultiThreading ? L"(MultiThreaded)" : L"") << (Core::SimdAcceleration ? L" (SIMD)" : L"");
 
 			//Wnd.SetWndTitle(Str);
 			Renderer::EngineGdi->DrawStringW(20, 20, ss.str(), RGB(255, 0, 0), TRANSPARENT);
 #endif
 #ifndef UNICODE
 			std::stringstream ss;
-			ss << std::fixed << std::setprecision(2) << Core::FpsStr << Fps << " Cpu/Time: " << CpuUsage << "/" << FrameTime << " Memory Usage: " << CurrMB << "/"
+			ss << std::fixed << std::setprecision(2) << Renderer::FpsStr << Fps << " Cpu/Time: " << CpuUsage << "/" << FrameTime << " Memory Usage: " << CurrMB << "/"
 				<< Core::MaxMemoryMB << " MB " << (Core::DoMultiThreading ? "(MultiThreaded)" : "") << (Core::SimdAcceleration ? " (SIMD)" : L"");		//Wnd.SetWndTitle(Str);
 			EngineGdi.DrawStringA(20, 20, ss.str(), RGB(255, 0, 0), TRANSPARENT);
 #endif
@@ -271,275 +668,66 @@ namespace TerraPGE::Renderer
 				SetClearColor(BLACK_BRUSH);
 			}
 
-			std::fill(Core::DepthBuffer, Core::DepthBuffer + Core::sx * Core::sy, 1.0f);
-			std::fill(Core::ShadowMap, Core::ShadowMap + Core::ShadowMapWidth * Core::ShadowMapHeight, 1.0f);
-			std::fill(Core::FrameBuffer, Core::FrameBuffer + (Core::sx * Core::sy * 3), 0.0f);
-		}
-
-
-		void SwapFrameBuffer(bool Hdr, bool GammaCorrection)
-		{
-			for (int i = 0; i < Core::sx * Core::sy; i++)
-			{
-				int index = i * 3;
-				float* ChannelPtr = Core::FrameBuffer + index;
-
-				float Rf, Gf, Bf = 0.0f;
-				int R, G, B = 0;
-
-				Rf = ChannelPtr[0];
-				Gf = ChannelPtr[1];
-				Bf = ChannelPtr[2];
-				
-				// this is done to remove branches
-				float hdrMask = Renderer::UseHDR ? 1.0f : 0.0f;
-				Rf = Rf + hdrMask * ((Rf / (1.0f + Rf)) - Rf);
-				Gf = Gf + hdrMask * ((Gf / (1.0f + Gf)) - Gf);
-				Bf = Bf + hdrMask * ((Bf / (1.0f + Bf)) - Bf);
-
-				Rf = std::clamp<float>(Rf, 0, 1.0f);
-				Gf = std::clamp<float>(Gf, 0, 1.0f);
-				Bf = std::clamp<float>(Bf, 0, 1.0f);
-
-				// this is done to remove branches
-				float gammaMask = Renderer::DoGammaCorrection ? 1.0f : 0.0f;
-				Rf = Rf + gammaMask * (Color::LinearToSRGB_Channel(Rf) - Rf);
-				Gf = Gf + gammaMask * (Color::LinearToSRGB_Channel(Gf) - Gf);
-				Bf = Bf + gammaMask * (Color::LinearToSRGB_Channel(Bf) - Bf);
-
-				// Final transformation to RGB Space
-				R = Rf * 255.0f;
-				G = Gf * 255.0f;
-				B = Bf * 255.0f;
-
-				int y = i / Core::sx;
-				int x = i % Core::sx;
-
-				// Write to out buffer
-				EngineGdi->QuickSetPixel(x, y, RGB(R, G, B));
-			}
+			std::fill(Renderer::DepthBuffer, Renderer::DepthBuffer + Renderer::sx * Renderer::sy, 1.0f);
+			std::fill(Renderer::ShadowMap, Renderer::ShadowMap + Renderer::ShadowMapWidth * Renderer::ShadowMapHeight, 1.0f);
+			std::fill(Renderer::FrameBuffer, Renderer::FrameBuffer + (Renderer::sx * Renderer::sy * 3), 0.0f);
 		}
 	}
 
 
-	namespace RenderingUtils
+	void SwapFrameBuffer(bool Hdr, bool GammaCorrection)
 	{
-		__inline bool ShouldCulltriangle(const Vec3& WorldSpacePos, Vec3 FaceNormal, const Vec3& CamPos)
+		float hdrMask = Renderer::UseHDR ? 1.0f : 0.0f;
+		float gammaMask = Renderer::DoGammaCorrection ? 1.0f : 0.0f;
+
+		for (int i = 0; i < Renderer::sx * Renderer::sy; i++)
 		{
-			//if ((TriNormal.Dot(WorldSpaceTri.Points[0] - Cam->Pos) < 0.0f) || !TerraPGE::DoCull || !MeshToRender->BackfaceCulling) // backface culling
-			float facing = FaceNormal.Dot(WorldSpacePos - CamPos);
-			return facing >= 0.0f;
-		}
+			int index = i * 3;
+			float* ChannelPtr = Renderer::FrameBuffer + index;
 
+			float Rf, Gf, Bf = 0.0f;
+			int R, G, B = 0;
 
-		__inline bool ShouldCulltriangle(const Vec3& ViewSpacePos, const Vec3& FaceNormal, const Matrix& ViewMatrix)
-		{
-			Vec3 viewPos = ViewSpacePos * ViewMatrix;
-			Vec3 normalVS = FaceNormal * ViewMatrix;
-			float facing = normalVS.Dot(viewPos);
-			return facing >= 0.0f;
-		}
+			Rf = ChannelPtr[0];
+			Gf = ChannelPtr[1];
+			Bf = ChannelPtr[2];
 
+			// this is done to remove branches
+			Rf = Rf + hdrMask * ((Rf / (1.0f + Rf)) - Rf);
+			Gf = Gf + hdrMask * ((Gf / (1.0f + Gf)) - Gf);
+			Bf = Bf + hdrMask * ((Bf / (1.0f + Bf)) - Bf);
 
-		void PrepareLights(LightObject** SceneLights, size_t LightCount)
-		{
-			// already do this? TODO
-			for (int i = 0; i < LightCount; i++)
-			{
-				LightObject* Light = SceneLights[i];
+			Rf = std::clamp<float>(Rf, 0, 1.0f);
+			Gf = std::clamp<float>(Gf, 0, 1.0f);
+			Bf = std::clamp<float>(Bf, 0, 1.0f);
 
-				Light->CalcVpMats();
-			}
-		}
+			// this is done to remove branches
+			float gammaMask = Renderer::DoGammaCorrection ? 1.0f : 0.0f;
+			Rf = Rf + gammaMask * (Color::LinearToSRGB_Channel(Rf) - Rf);
+			Gf = Gf + gammaMask * (Color::LinearToSRGB_Channel(Gf) - Gf);
+			Bf = Bf + gammaMask * (Color::LinearToSRGB_Channel(Bf) - Bf);
 
+			// Final transformation to RGB Space
+			R = Rf * 255.0f;
+			G = Gf * 255.0f;
+			B = Bf * 255.0f;
 
-		__inline Triangle TransformToWorld(const Triangle& Tri, const Matrix& Model)
-		{
-			Triangle out = Tri;
-			out.ApplyMatrix(Model);
+			int y = i / Renderer::sx;
+			int x = i % Renderer::sx;
 
-			for (int i = 0; i < 3; ++i)
-				out.WorldSpaceVerts.Points[i] = out.Points.Points[i];
-
-			return out;
-		}
-
-
-		__inline Triangle ProjectToViewSpace(const Triangle* Tri, Camera* Cam)
-		{
-			// 3d Space -> Viewed Space
-			Triangle Result = *Tri;
-			Result.ApplyMatrix(Cam->GetViewMatrix());
-
-			return Result;
-		}
-
-
-		std::vector<Triangle> VertexShader(Camera* Cam, Renderable* Object)
-		{
-			std::vector<Triangle> ClipSpaceTris = {};
-			ClipSpaceTris.reserve(Object->mesh->Triangles.size());
-
-			Vec3 NormPos = Vec3(0, 0, 0);
-			Vec3 NormDir = Vec3(0, 0, 0);
-			Vec3 TriNormal;
-
-			for (const Triangle& Tri : Object->mesh->Triangles)
-			{
-				// 3D Space / World Space
-				Triangle WorldSpaceTri = RenderingUtils::TransformToWorld(Tri, Object->Transform.GetWorldMatrix());
-
-				//TODO Fix this whole damn thing calc normals at mesh gen or at vertex shade time fuck the rest
-				TriNormal = Tri.FaceNormal;
-				if (Object->mesh->Normals.size() == 0)
-				{
-					NormPos = ((Tri.Points.Points[0] + Tri.Points.Points[1] + Tri.Points.Points[2]) / 3.0f);
-					NormDir = (Tri.Points.Points[1] - Tri.Points.Points[0]).GetVec3().CrossNormalized((Tri.Points.Points[2] - Tri.Points.Points[0])).Normalized();
-					TriNormal = -(WorldSpaceTri.Points.Points[1] - WorldSpaceTri.Points.Points[0]).GetVec3().CrossNormalized((WorldSpaceTri.Points.Points[2] - WorldSpaceTri.Points.Points[0])).Normalized(); // this line and the if statement is used for culling
-
-					for (int i = 0; i < 3; i++)
-					{
-						WorldSpaceTri.VertexNormals[i] *= Object->Transform.Normal;
-					}
-
-					WorldSpaceTri.NormalPositions[0] = NormPos;
-					WorldSpaceTri.NormalPositions[1] = Tri.Points.Points[0];
-					WorldSpaceTri.NormalPositions[2] = Tri.Points.Points[1];
-					WorldSpaceTri.NormalPositions[3] = Tri.Points.Points[2];
-					WorldSpaceTri.NormDirections[0] = NormDir;
-				}
-				else
-				{
-					TriNormal *= Object->Transform.Normal;
-					for (int i = 0; i < 3; i++)
-					{
-						WorldSpaceTri.VertexNormals[i] *= Object->Transform.Normal;
-					}
-
-					NormDir = WorldSpaceTri.FaceNormal;
-					NormPos = WorldSpaceTri.NormalPositions[0];
-				}
-
-				if (!RenderingUtils::ShouldCulltriangle(WorldSpaceTri.Points.Points[0], TriNormal, Cam->GetWorldPosition()) || !DoCull) // backface culling
-				{
-					WorldSpaceTri.FaceNormal = TriNormal;
-					Triangle ViewSpaceTri = RenderingUtils::ProjectToViewSpace(&WorldSpaceTri, Cam);
-
-					ViewSpaceTri.ApplyMatrix(Cam->GetProjectionMatrix());
-
-					ClipSpaceTris.push_back(ViewSpaceTri);
-				}
-			}
-			return ClipSpaceTris;
-		}
-
-
-		std::vector<Triangle> Clipping(const Triangle* Tri)
-		{
-			Triangle Clipped[2];
-
-			std::vector<Triangle> ListTris;
-			ListTris.push_back(*Tri);
-			int NewTris = 1;
-
-			for (int p = 0; p < 4; p++)
-			{
-				int NewTrisToAdd = 0;
-				while (NewTris > 0)
-				{
-					Triangle Test = ListTris.front();
-					ListTris.erase(ListTris.begin());
-					NewTris--;
-
-					switch (p)
-					{
-						case 0:
-						{
-							NewTrisToAdd = Test.ClipAgainstPlane({ 0.0f, 0.0f, 0.0f }, { 0.0f, 1.0f, 0.0f }, Clipped[0], Clipped[1], Renderer::DebugClip);
-							break;
-						}
-						case 1:
-						{
-							NewTrisToAdd = Test.ClipAgainstPlane({ 0.0f, (float)Core::sy - 1, 0.0f }, { 0.0f, -1.0f, 0.0f }, Clipped[0], Clipped[1], Renderer::DebugClip);
-							break;
-						}
-						case 2:
-						{
-							NewTrisToAdd = Test.ClipAgainstPlane({ 0.0f, 0.0f, 0.0f }, { 1.0f, 0.0f, 0.0f }, Clipped[0], Clipped[1], Renderer::DebugClip);
-							break;
-						}
-						case 3:
-						{
-							NewTrisToAdd = Test.ClipAgainstPlane({ (float)Core::sx - 1, 0.0f, 0.0f }, { -1.0f, 0.0f, 0.0f }, Clipped[0], Clipped[1], Renderer::DebugClip);
-							break;
-						}
-					}
-
-					for (int w = 0; w < NewTrisToAdd; w++)
-					{
-						ListTris.push_back(Clipped[w]);
-					}
-				}
-				NewTris = (int)ListTris.size();
-			}
-
-			return ListTris;
-		}
-
-
-		std::vector<Triangle> ClippingClipSpace(const Triangle* Tri)
-		{
-			std::vector<Triangle> Tris;
-			Tris.push_back(*Tri);
-
-			Vec4 planes[6] = {
-				{  0,  0,  1,  0 }, // z >= 0
-				{  1,  0,  0,  1 }, // x >= -w
-				{ -1,  0,  0,  1 }, // x <=  w
-				{  0,  1,  0,  1 }, // y >= -w
-				{  0, -1,  0,  1 }, // y <=  w
-				{  0,  0, -1,  1 }  // z <=  w
-			};
-
-			for (int p = 0; p < 6; ++p)
-			{
-				std::vector<Triangle> Next;
-
-				for (const Triangle& T : Tris)
-				{
-					Triangle O1, O2;
-					int count = T.ClipAgainstPlane(planes[p], O1, O2, DebugClip);
-
-					if (count >= 1)
-						Next.push_back(O1);
-					if (count == 2)
-						Next.push_back(O2);
-				}
-
-				Tris.swap(Next);
-
-				if (Tris.empty())
-					break;
-			}
-
-			return Tris;
-		}
-
-
-		void BuildRenderQueue(const Renderable** Renderables, int Sz)
-		{
-			// This is where i can do filtering and checking for transparency and stuff TODO
+			// Write to out buffer
+			EngineGdi->QuickSetPixel(x, y, RGB(R, G, B));
 		}
 	}
 
 
 	void RenderMesh(Camera* Cam, Renderable* Object, LightObject** SceneLights, size_t LightCount)
 	{
-		std::vector<Triangle> ClipSpaceTris = RenderingUtils::VertexShader(Cam, Object);
+		std::vector<Triangle> ClipSpaceTris = VertexShader(Cam, Object);
 
 		for (const Triangle& ClipSpaceTri : ClipSpaceTris)
 		{
-			std::vector<Triangle> Clipped = RenderingUtils::ClippingClipSpace(&ClipSpaceTri);
+			std::vector<Triangle> Clipped = Renderer::ClippingClipSpace(&ClipSpaceTri);
 
 			// initialize shader
 			ShaderArgs* Args = DEBUG_NEW ShaderArgs();
@@ -562,8 +750,8 @@ namespace TerraPGE::Renderer
 				ToDraw.ApplyPerspectiveDivide();
 
 				// Offset to viewport space (Ndc -> Screen Space)
-				ToDraw.Scale(Vec3((float)(Core::sx * 0.5f), (float)(Core::sy * 0.5f), 1.0f));
-				ToDraw.Translate(Vec3((float)(Core::sx * 0.5f), (float)(Core::sy * 0.5f), 0.0f));
+				ToDraw.Scale(Vec3((float)(Renderer::sx * 0.5f), (float)(Renderer::sy * 0.5f), 1.0f));
+				ToDraw.Translate(Vec3((float)(Renderer::sx * 0.5f), (float)(Renderer::sy * 0.5f), 0.0f));
 
 				//SceneLights, LightCount
 				Args->EditShaderData(TPGE_SHDR_TRI, &ToDraw, 0);
@@ -578,9 +766,9 @@ namespace TerraPGE::Renderer
 
 
 				if (Core::DoMultiThreading)
-					Renderer::BaryCentricRasterizer(Core::DepthBuffer, Core::sx, Core::sy, EngineGdi, Object->Shader, Args);
+					Renderer::BaryCentricRasterizer(Renderer::FrameBuffer, Renderer::DepthBuffer, Renderer::sx, Renderer::sy, Renderer::ShadowMap, Renderer::ShadowMapWidth, Renderer::ShadowMapHeight, Object->Shader, Args);
 				else
-					Renderer::BaryCentricRasterizer(Core::DepthBuffer, Core::sx, Core::sy, EngineGdi, Object->Shader, Args);
+					Renderer::BaryCentricRasterizer(Renderer::FrameBuffer, Renderer::DepthBuffer, Renderer::sx, Renderer::sy, Renderer::ShadowMap, Renderer::ShadowMapWidth, Renderer::ShadowMapHeight, Object->Shader, Args);
 			}
 
 			Args->Delete();
@@ -635,7 +823,7 @@ namespace TerraPGE::Renderer
 						const Matrix VpMatrix = Light->VpMatrices[0];
 						Proj.ApplyMatrix(VpMatrix);
 
-						Renderer::BaryCentricRasterizerDepth(&Proj, Core::ShadowMap, (SIZE_T)Core::ShadowMapWidth, (SIZE_T)Core::ShadowMapHeight);
+						Renderer::BaryCentricRasterizerDepth(&Proj, Renderer::ShadowMap, (SIZE_T)Renderer::ShadowMapWidth, (SIZE_T)Renderer::ShadowMapHeight);
 					}
 					else if (Light->Type == LightTypes::PointLight)
 					{
@@ -644,7 +832,7 @@ namespace TerraPGE::Renderer
 							Matrix VpMatrix = SceneLights[0]->VpMatrices[face];
 							Proj.ApplyMatrix(VpMatrix);
 
-							Renderer::BaryCentricRasterizerDepth(&Proj, Core::ShadowMap, (SIZE_T)Core::ShadowMapWidth, (SIZE_T)Core::ShadowMapHeight);
+							Renderer::BaryCentricRasterizerDepth(&Proj, Renderer::ShadowMap, (SIZE_T)Renderer::ShadowMapWidth, (SIZE_T)Renderer::ShadowMapHeight);
 						}
 					}
 				}
@@ -664,27 +852,25 @@ namespace TerraPGE::Renderer
 	}
 
 
-	void RenderSkybox(Camera* Cam, EnvironmentRenderable* sky)
+	void RenderSkybox(const float* Dst, const int W, const int H,  Camera* Cam, EnvironmentRenderable* sky)
 	{
 		if (sky == nullptr)
 			return;
 
-		const int W = Core::sx;
-		const int H = Core::sy;
-
 		const Matrix& Proj = Cam->GetProjectionMatrix();
 		const Matrix3x3 CamRot = Cam->GetRotationMatrix(); // rotation only
 		const float Fov = Cam->GetFov();
+		const float Aspect = Cam->GetAspectRatio();
 
 		for (int y = 0; y < H; ++y)
 		{
 			for (int x = 0; x < W; ++x)
 			{
 				// skyboox render
-				Color skyColor = sky->Render(x, y, W, H, Fov, CamRot);
+				Color skyColor = sky->Render(x, y, (1.0f / W), (1.0f / H), Fov, Aspect, CamRot);
 
 				// 5. Write color
-				Core::SetPixelFrameBuffer(x, y, skyColor.R, skyColor.G, skyColor.B);
+				Renderer::RenderingCore::SetPixelFrameBuffer(Renderer::FrameBuffer, x, y, Renderer::sx, skyColor.R, skyColor.G, skyColor.B);
 			}
 		}
 	}
@@ -692,15 +878,30 @@ namespace TerraPGE::Renderer
 
 	void RenderScene(Camera* Cam, Renderable** SceneObjects, LightObject** SceneLights, size_t ObjectCount, size_t LightCount, EnvironmentRenderable* Skybox = nullptr)
 	{
-		Renderer::RenderSkybox(Cam, Skybox);
+		CodeTimer Timer;
 
-		Renderer::RenderShadowMaps(SceneObjects, SceneLights, ObjectCount, LightCount, Core::ShadowMap);
+		Timer.Start();
+		Renderer::RenderSkybox(Renderer::FrameBuffer, Renderer::sx, Renderer::sy, Cam, Skybox);
+		float t = Timer.Stop();
+		Renderer::EnvironmentRendertime = t;
 
+		// multithreaded version not worth it
+		Timer.Start();
+		Renderer::RenderShadowMaps(SceneObjects, SceneLights, ObjectCount, LightCount, Renderer::ShadowMap);
+		t = Timer.Stop();
+		Renderer::RenderMeshDepthTime = t;
+
+		Timer.Start();
 		Renderer::RenderMeshes(Cam, SceneObjects, SceneLights, ObjectCount, LightCount);
-
+		t = Timer.Stop();
+		Renderer::RenderMeshTime = t;
 		//Renderer::RenderEnvironment();
 
-		RenderingCore::SwapFrameBuffer(Renderer::UseHDR, Renderer::DoGammaCorrection);
+		Timer.Start();
+		Renderer::SwapFrameBuffer(Renderer::UseHDR, Renderer::DoGammaCorrection);
+		Renderer::EngineGdi->SetNeedsPixelsRedrawn();
+		t = Timer.Stop();
+		Renderer::PresentTime = t;
 	}
 
 
@@ -713,6 +914,21 @@ namespace TerraPGE::Renderer
 				R = _mm_add_ps(R, _mm_mul_ps(HdrMask, _mm_sub_ps(_mm_div_ps(R, _mm_add_ps(one, R)), R)));
 				G = _mm_add_ps(G, _mm_mul_ps(HdrMask, _mm_sub_ps(_mm_div_ps(G, _mm_add_ps(one, G)), G)));
 				B = _mm_add_ps(B, _mm_mul_ps(HdrMask, _mm_sub_ps(_mm_div_ps(B, _mm_add_ps(one, B)), B)));
+			}
+
+			static __inline void ApplyGamma(__m128& R, __m128& G, __m128& B, const __m128& GammaMask)
+			{
+				__m128 Rgamma = R;
+				__m128 Ggamma = G;
+				__m128 Bgamma = B;
+
+				SIMDUtils::SSE::LinearToSRGB4(Rgamma);
+				SIMDUtils::SSE::LinearToSRGB4(Ggamma);
+				SIMDUtils::SSE::LinearToSRGB4(Bgamma);
+
+				R = _mm_add_ps(R, _mm_mul_ps(GammaMask, _mm_sub_ps(Rgamma, R)));
+				G = _mm_add_ps(G, _mm_mul_ps(GammaMask, _mm_sub_ps(Ggamma, G)));
+				B = _mm_add_ps(B, _mm_mul_ps(GammaMask, _mm_sub_ps(Bgamma, B)));
 			}
 
 			
@@ -756,11 +972,11 @@ namespace TerraPGE::Renderer
 						B = _mm_mul_ps(B, scale);
 
 						__m128i r, g, b;
-						SIMDUtils::SSE::RGB4ToByte(R, G, B, r, g, b);
+						SIMDUtils::SSE::RGB4ToByte4(R, G, B, r, g, b);
 
 						// Interleave BGR into 12-byte output
 						uint8_t* out = Renderer::EngineGdi->GetPixelBuffer() + rowBase + x * 3;
-						SIMDUtils::SSE::RGBStoreBGR(r, g, b, out);
+						SIMDUtils::SSE::RGB4StoreBGR4(r, g, b, out);
 					}
 					for (; x < width; ++x)
 					{
@@ -790,9 +1006,9 @@ namespace TerraPGE::Renderer
 						}
 
 						// Final transformation to RGB Space
-						R = Rf * 255.0f;
-						G = Gf * 255.0f;
-						B = Bf * 255.0f;
+						R = (int)(Rf * 255.0f);
+						G = (int)(Gf * 255.0f);
+						B = (int)(Bf * 255.0f);
 
 						// Write to out buffer
 						EngineGdi->QuickSetPixel(x, y, RGB(R, G, B));
@@ -801,17 +1017,36 @@ namespace TerraPGE::Renderer
 			}
 
 
+			void RenderSkyboxByChunk(EnvironmentRenderable* sky, const Camera* Cam, const uint64_t y0, const uint64_t y1, const uint64_t width, const uint64_t height, const float& Fov, const Matrix& Proj, const Matrix3x3& CamRot)
+			{
+				const float Aspect = Cam->GetAspectRatio();
+
+				for (uint64_t y = y0; y < y1; ++y)
+				{
+					for (uint64_t x = 0; x + 3 < width; x+=3)
+					{
+						Color skyColor = sky->Render(x, y, (1.0f / width), (1.0f / height), Fov, Aspect, CamRot);
+
+						Renderer::RenderingCore::SetPixelFrameBuffer(Renderer::FrameBuffer, x, y, width, skyColor.R, skyColor.G, skyColor.B);
+					}
+				}
+			}
+
+
 			void SwapFrameBuffer(float* Src, const int& Width, const int& Height, unsigned __int8* OutBuffer, const bool Hdr, const bool GammaCorrection)
 			{
 				const int pixelCount = Width * Height;
+				const float hdrMask = Renderer::UseHDR ? 1.0f : 0.0f;
+				const float gammaMask = Renderer::DoGammaCorrection ? 1.0f : 0.0f;
+
 
 				const __m128 zero = _mm_set1_ps(0.0f);
 				const __m128 one = _mm_set1_ps(1.0f);
 				const __m128 max1 = _mm_set1_ps(1.0f);
 				const __m128 scale = _mm_set1_ps(255.0f);
 
-				const __m128 hdrMask = _mm_set1_ps(Renderer::UseHDR ? 1.0f : 0.0f);
-				const __m128 gammaMask = _mm_set1_ps(Renderer::DoGammaCorrection ? 1.0f : 0.0f);
+				const __m128 HdrMask = _mm_set1_ps(hdrMask ? 1.0f : 0.0f);
+				const __m128 GammaMask = _mm_set1_ps(gammaMask ? 1.0f : 0.0f);
 
 				int i = 0;
 				for (; i <= pixelCount - 4; i += 4)
@@ -824,26 +1059,24 @@ namespace TerraPGE::Renderer
 					SIMDUtils::SSE::LoadRGB4(src, R, G, B);
 
 					// HDR
-					ApplyHDR(R, G, B, hdrMask, one);
+					ApplyHDR(R, G, B, HdrMask, one);
 
 					SIMDUtils::SSE::ClampRGBFloat4(R, G, B, zero, max1);
 
 					// Gamma
-					SIMDUtils::SSE::LinearToSRGB4(R);
-					SIMDUtils::SSE::LinearToSRGB4(G);
-					SIMDUtils::SSE::LinearToSRGB4(B);
+					ApplyGamma(R, G, B, GammaMask);
 
 					// Scale
-					_mm_mul_ps(R, scale);
-					_mm_mul_ps(G, scale);
-					_mm_mul_ps(B, scale);
+					R = _mm_mul_ps(R, scale);
+					G = _mm_mul_ps(G, scale);
+					B = _mm_mul_ps(B, scale);
 
 					__m128i r, g, b;
-					SIMDUtils::SSE::RGB4ToByte(R, G, B, r, g, b);
+					SIMDUtils::SSE::RGB4ToByte4(R, G, B, r, g, b);
 
 					// Interleave BGR into 12-byte output
 					uint8_t* out = OutBuffer + i * 3;
-					SIMDUtils::SSE::RGBStoreBGR(r, g, b, out);
+					SIMDUtils::SSE::RGB4StoreBGR4(r, g, b, out);
 				}
 
 				for (; i < pixelCount; ++i)
@@ -859,7 +1092,6 @@ namespace TerraPGE::Renderer
 					Bf = ChannelPtr[2];
 
 					// this is done to remove branches
-					float hdrMask = Renderer::UseHDR ? 1.0f : 0.0f;
 					Rf = Rf + hdrMask * ((Rf / (1.0f + Rf)) - Rf);
 					Gf = Gf + hdrMask * ((Gf / (1.0f + Gf)) - Gf);
 					Bf = Bf + hdrMask * ((Bf / (1.0f + Bf)) - Bf);
@@ -869,38 +1101,286 @@ namespace TerraPGE::Renderer
 					Bf = std::clamp<float>(Bf, 0, 1.0f);
 
 					// this is done to remove branches
-					float gammaMask = Renderer::DoGammaCorrection ? 1.0f : 0.0f;
 					Rf = Rf + gammaMask * (Color::LinearToSRGB_Channel(Rf) - Rf);
 					Gf = Gf + gammaMask * (Color::LinearToSRGB_Channel(Gf) - Gf);
 					Bf = Bf + gammaMask * (Color::LinearToSRGB_Channel(Bf) - Bf);
 
-					// Final transformation to RGB Space
-					R = Rf * 255.0f;
-					G = Gf * 255.0f;
-					B = Bf * 255.0f;
+					R = (int)(Rf * 255.0f);
+					G = (int)(Gf * 255.0f);
+					B = (int)(Bf * 255.0f);
 
-					int y = i / Core::sx;
-					int x = i % Core::sx;
+					int y = i / Renderer::sx;
+					int x = i % Renderer::sx;
 
-					// Write to out buffer
 					EngineGdi->QuickSetPixel(x, y, RGB(R, G, B));
 				}
 			}
+		}
 
 
-			void RenderScene(Camera* Cam, Renderable** SceneObjects, LightObject** SceneLights, size_t ObjectCount, size_t LightCount, EnvironmentRenderable* Skybox = nullptr)
+		namespace AVX
+		{
+			static __inline void ApplyHDR(__m256& R, __m256& G, __m256& B, const __m256& HdrMask, const __m256& one)
 			{
-				Renderer::RenderSkybox(Cam, Skybox);
+				R = _mm256_add_ps(R, _mm256_mul_ps(HdrMask, _mm256_sub_ps(_mm256_div_ps(R, _mm256_add_ps(one, R)), R)));
+				G = _mm256_add_ps(G, _mm256_mul_ps(HdrMask, _mm256_sub_ps(_mm256_div_ps(G, _mm256_add_ps(one, G)), G)));
+				B = _mm256_add_ps(B, _mm256_mul_ps(HdrMask, _mm256_sub_ps(_mm256_div_ps(B, _mm256_add_ps(one, B)), B)));
+			}
 
-				Renderer::RenderShadowMaps(SceneObjects, SceneLights, ObjectCount, LightCount, Core::ShadowMap);
+			static __inline void ApplyGamma(__m256& R, __m256& G, __m256& B, const __m256& GammaMask)
+			{
+				__m256 Rgamma = R;
+				__m256 Ggamma = G;
+				__m256 Bgamma = B;
 
+				SIMDUtils::AVX::LinearToSRGB8(Rgamma);
+				SIMDUtils::AVX::LinearToSRGB8(Ggamma);
+				SIMDUtils::AVX::LinearToSRGB8(Bgamma);
+
+				R = _mm256_add_ps(R, _mm256_mul_ps(GammaMask, _mm256_sub_ps(Rgamma, R)));
+				G = _mm256_add_ps(G, _mm256_mul_ps(GammaMask, _mm256_sub_ps(Ggamma, G)));
+				B = _mm256_add_ps(B, _mm256_mul_ps(GammaMask, _mm256_sub_ps(Bgamma, B)));
+			}
+
+			void SwapFrameBuffer(float* Src, const int& Width, const int& Height, unsigned __int8* OutBuffer, const bool Hdr, const bool GammaCorrection)
+			{
+				const int pixelCount = Width * Height;
+				const float hdrMask = Renderer::UseHDR ? 1.0f : 0.0f;
+				const float gammaMask = Renderer::DoGammaCorrection ? 1.0f : 0.0f;
+
+
+				const __m256 zero = _mm256_set1_ps(0.0f);
+				const __m256 one = _mm256_set1_ps(1.0f);
+				const __m256 max1 = _mm256_set1_ps(1.0f);
+				const __m256 scale = _mm256_set1_ps(255.0f);
+
+				const __m256 HdrMask = _mm256_set1_ps(hdrMask ? 1.0f : 0.0f);
+				const __m256 GammaMask = _mm256_set1_ps(gammaMask ? 1.0f : 0.0f);
+
+				int i = 0;
+				for (; i <= pixelCount - 8; i += 8)
+				{
+					float* src = Src + i * 3;
+
+					__m256 R, G, B;
+
+					// Load 12 floats (4 pixels)
+					SIMDUtils::AVX::LoadRGB8(src, R, G, B);
+
+					// HDR
+					ApplyHDR(R, G, B, HdrMask, one);
+
+					SIMDUtils::AVX::ClampRGBFloat8(R, G, B, zero, max1);
+
+					// Gamma
+					ApplyGamma(R, G, B, GammaMask);
+
+					// Scale
+					R = _mm256_mul_ps(R, scale);
+					G = _mm256_mul_ps(G, scale);
+					B = _mm256_mul_ps(B, scale);
+
+					__m256i r, g, b;
+					SIMDUtils::AVX::RGB8ToByte8(R, G, B, r, g, b);
+
+					// Interleave BGR into 12-byte output
+					uint8_t* out = OutBuffer + i * 3;
+					SIMDUtils::AVX::RGB8StoreBGR8(r, g, b, out);
+				}
+
+				for (; i < pixelCount; ++i)
+				{
+					int index = i * 3;
+					float* ChannelPtr = Src + index;
+
+					float Rf, Gf, Bf = 0.0f;
+					int R, G, B = 0;
+
+					Rf = ChannelPtr[0];
+					Gf = ChannelPtr[1];
+					Bf = ChannelPtr[2];
+
+					// this is done to remove branches
+					Rf = Rf + hdrMask * ((Rf / (1.0f + Rf)) - Rf);
+					Gf = Gf + hdrMask * ((Gf / (1.0f + Gf)) - Gf);
+					Bf = Bf + hdrMask * ((Bf / (1.0f + Bf)) - Bf);
+
+					Rf = std::clamp<float>(Rf, 0, 1.0f);
+					Gf = std::clamp<float>(Gf, 0, 1.0f);
+					Bf = std::clamp<float>(Bf, 0, 1.0f);
+
+					// this is done to remove branches
+					Rf = Rf + gammaMask * (Color::LinearToSRGB_Channel(Rf) - Rf);
+					Gf = Gf + gammaMask * (Color::LinearToSRGB_Channel(Gf) - Gf);
+					Bf = Bf + gammaMask * (Color::LinearToSRGB_Channel(Bf) - Bf);
+
+					R = (int)(Rf * 255.0f);
+					G = (int)(Gf * 255.0f);
+					B = (int)(Bf * 255.0f);
+
+					int y = i / Renderer::sx;
+					int x = i % Renderer::sx;
+
+					EngineGdi->QuickSetPixel(x, y, RGB(R, G, B));
+				}
+			}
+		
+			void SwapFrameBufferByChunk(float* Frame, const unsigned __int32 width, const unsigned __int32  y0, const unsigned __int32 y1)
+			{
+				float hdrMask = Renderer::UseHDR ? 1.0f : 0.0f;
+
+				const __m256 zero = _mm256_set1_ps(0.0f);
+				const __m256 one = _mm256_set1_ps(1.0f);
+				const __m256 max1 = _mm256_set1_ps(1.0f);
+				const __m256 scale = _mm256_set1_ps(255.0f);
+
+				const __m256 HdrMask = _mm256_set1_ps(hdrMask);
+				const __m256 gammaMask = _mm256_set1_ps(Renderer::DoGammaCorrection ? 1.0f : 0.0f);
+
+				for (unsigned __int32 y = y0; y < y1; ++y)
+				{
+					unsigned __int32 rowBase = y * width * 3;
+					unsigned __int32 x = 0;
+
+					for (; x + 7 < width; x += 8)
+					{
+						float* ChannelPtr = Frame + rowBase + x * 3;
+
+						__m256 R, G, B;
+
+						SIMDUtils::AVX::LoadRGB8(ChannelPtr, R, G, B);
+
+						ApplyHDR(R, G, B, HdrMask, one);
+
+						SIMDUtils::AVX::ClampRGBFloat8(R, G, B, zero, max1);
+
+						// Gamma
+						SIMDUtils::AVX::LinearToSRGB8(R);
+						SIMDUtils::AVX::LinearToSRGB8(G);
+						SIMDUtils::AVX::LinearToSRGB8(B);
+
+						// Scale
+						R = _mm256_mul_ps(R, scale);
+						G = _mm256_mul_ps(G, scale);
+						B = _mm256_mul_ps(B, scale);
+
+						__m256i r, g, b;
+						SIMDUtils::AVX::RGB8ToByte8(R, G, B, r, g, b);
+
+						// Interleave BGR into 12-byte output
+						uint8_t* out = Renderer::EngineGdi->GetPixelBuffer() + rowBase + x * 3;
+						SIMDUtils::AVX::RGB8StoreBGR8(r, g, b, out);
+					}
+					for (; x < width; ++x)
+					{
+						float* ChannelPtr = Frame + rowBase + x * 3;
+
+						float Rf = 0.0f, Gf = 0.0f, Bf = 0.0f;
+						int R = 0, G = 0, B = 0;
+
+						Rf = ChannelPtr[0];
+						Gf = ChannelPtr[1];
+						Bf = ChannelPtr[2];
+
+						Rf = Rf + hdrMask * ((Rf / (1.0f + Rf)) - Rf);
+						Gf = Gf + hdrMask * ((Gf / (1.0f + Gf)) - Gf);
+						Bf = Bf + hdrMask * ((Bf / (1.0f + Bf)) - Bf);
+
+						Rf = std::clamp<float>(Rf, 0, 1.0f);
+						Gf = std::clamp<float>(Gf, 0, 1.0f);
+						Bf = std::clamp<float>(Bf, 0, 1.0f);
+
+						if (Renderer::DoGammaCorrection)
+						{
+							// Gamma Correction
+							Rf = Color::LinearToSRGB_Channel(Rf);
+							Gf = Color::LinearToSRGB_Channel(Gf);
+							Bf = Color::LinearToSRGB_Channel(Bf);
+						}
+
+						// Final transformation to RGB Space
+						R = (int)(Rf * 255.0f);
+						G = (int)(Gf * 255.0f);
+						B = (int)(Bf * 255.0f);
+
+						// Write to out buffer
+						EngineGdi->QuickSetPixel(x, y, RGB(R, G, B));
+					}
+				}
+			}
+
+			void RenderSkyboxByChunk(EnvironmentRenderable* sky, const Camera* Cam, const uint64_t y0, const uint64_t y1, const uint64_t width, const uint64_t height, const float& Fov, const Matrix& Proj, const Matrix3x3& CamRot)
+			{
+				const float Aspect = Cam->GetAspectRatio();
+
+				for (uint64_t y = y0; y < y1; ++y)
+				{
+					for (uint64_t x = 0; x + 3 < width; x += 3)
+					{
+						Color skyColor = sky->Render(x, y, (1.0f/width), (1.0f / height), Fov, Aspect, CamRot);
+
+						Renderer::RenderingCore::SetPixelFrameBuffer(Renderer::FrameBuffer, x, y, width, skyColor.R, skyColor.G, skyColor.B);
+					}
+				}
+			}
+		}
+
+
+		void RenderScene(Camera* Cam, Renderable** SceneObjects, LightObject** SceneLights, size_t ObjectCount, size_t LightCount, EnvironmentRenderable* Skybox = nullptr)
+		{
+			if (SimdInfo.AVX2)
+			{
+				CodeTimer Timer;
+
+				Timer.Start();
+				Renderer::RenderSkybox(Renderer::FrameBuffer, Renderer::sx, Renderer::sy, Cam, Skybox);
+				float t = Timer.Stop();
+				Renderer::EnvironmentRendertime = t;
+
+				// multithreaded version not worth it
+				Timer.Start();
+				Renderer::RenderShadowMaps(SceneObjects, SceneLights, ObjectCount, LightCount, Renderer::ShadowMap);
+				t = Timer.Stop();
+				Renderer::RenderMeshDepthTime = t;
+
+				Timer.Start();
 				Renderer::RenderMeshes(Cam, SceneObjects, SceneLights, ObjectCount, LightCount);
-
+				t = Timer.Stop();
+				Renderer::RenderMeshTime = t;
 				//Renderer::RenderEnvironment();
 
-				Renderer::RenderingCore::SwapFrameBuffer(Renderer::UseHDR, Renderer::DoGammaCorrection);
-				//Renderer::SIMD::SSE::SwapFrameBuffer(Core::FrameBuffer, Core::sx, Core::sy, Renderer::EngineGdi->GetPixelBuffer(), Renderer::UseHDR, Renderer::DoGammaCorrection);
+				Timer.Start();
+				Renderer::SIMD::AVX::SwapFrameBuffer(Renderer::FrameBuffer, Renderer::sx, Renderer::sy, Renderer::EngineGdi->GetPixelBuffer(), Renderer::UseHDR, Renderer::DoGammaCorrection);
 				Renderer::EngineGdi->SetNeedsPixelsRedrawn();
+				t = Timer.Stop();
+				Renderer::PresentTime = t;
+			}
+			else
+			{
+				CodeTimer Timer;
+
+				Timer.Start();
+				Renderer::RenderSkybox(Renderer::FrameBuffer, Renderer::sx, Renderer::sy, Cam, Skybox);
+				float t = Timer.Stop();
+				Renderer::EnvironmentRendertime = t;
+
+				// multithreaded version not worth it
+				Timer.Start();
+				Renderer::RenderShadowMaps(SceneObjects, SceneLights, ObjectCount, LightCount, Renderer::ShadowMap);
+				t = Timer.Stop();
+				Renderer::RenderMeshDepthTime = t;
+
+				Timer.Start();
+				Renderer::RenderMeshes(Cam, SceneObjects, SceneLights, ObjectCount, LightCount);
+				t = Timer.Stop();
+				Renderer::RenderMeshTime = t;
+				//Renderer::RenderEnvironment();
+
+				Timer.Start();
+				Renderer::SIMD::SSE::SwapFrameBuffer(Renderer::FrameBuffer, Renderer::sx, Renderer::sy, Renderer::EngineGdi->GetPixelBuffer(), Renderer::UseHDR, Renderer::DoGammaCorrection);
+				Renderer::EngineGdi->SetNeedsPixelsRedrawn();
+				t = Timer.Stop();
+				Renderer::PresentTime = t;
 			}
 		}
 	}
@@ -944,9 +1424,9 @@ namespace TerraPGE::Renderer
 					}
 
 					// Final transformation to RGB Space
-					R = Rf * 255.0f;
-					G = Gf * 255.0f;
-					B = Bf * 255.0f;
+					R = (int)(Rf * 255.0f);
+					G = (int)(Gf * 255.0f);
+					B = (int)(Bf * 255.0f);
 
 					// Write to out buffer
 					EngineGdi->QuickSetPixel(x, y, RGB(R, G, B));
@@ -954,9 +1434,10 @@ namespace TerraPGE::Renderer
 			}
 		}
 
+
 		void SwapFrameBuffer(float* Frame, uint64_t Width, uint64_t Height, bool Hdr, bool GammaCorrection)
 		{
-			uint64_t ChunkSz = std::max<uint64_t>(1, Height / Core::CpuCores);
+			uint64_t ChunkSz = std::max<uint64_t>(1, Height / Renderer::CpuCores);
 
 			for (uint64_t y = 0; y < Height; y += ChunkSz)
 			{
@@ -971,7 +1452,10 @@ namespace TerraPGE::Renderer
 				else
 					Core::ThreadPool.EnqueueTask([Frame, y0, y1, Width]()
 						{
-							Renderer::SIMD::SSE::SwapFrameBufferByChunk(Frame, Width, y0, y1);
+							if(SimdInfo.AVX2)
+								Renderer::SIMD::AVX::SwapFrameBufferByChunk(Frame, Width, y0, y1);
+							else
+								Renderer::SIMD::SSE::SwapFrameBufferByChunk(Frame, Width, y0, y1);
 						});
 			}
 
@@ -981,13 +1465,15 @@ namespace TerraPGE::Renderer
 
 		void RenderSkyboxByChunk(EnvironmentRenderable* sky, const Camera* Cam, const uint64_t y0, const uint64_t y1, const uint64_t width, const uint64_t height, const float& Fov, const Matrix& Proj, const Matrix3x3& CamRot)
 		{
+			const float Aspect = Cam->GetAspectRatio();
+
 			for (uint64_t y = y0; y < y1; ++y)
 			{
 				for (uint64_t x = 0; x < width; ++x)
 				{
-					Color skyColor = sky->Render(x, y, width, height, Fov, CamRot);
+					Color skyColor = sky->Render(x, y, (1.0f / width), (1.0f / height), Fov, Aspect, CamRot);
 
-					Core::SetPixelFrameBuffer(x, y, skyColor.R, skyColor.G, skyColor.B);
+					Renderer::RenderingCore::SetPixelFrameBuffer(Renderer::FrameBuffer, x, y, width, skyColor.R, skyColor.G, skyColor.B);
 				}
 			}
 		}
@@ -1000,10 +1486,10 @@ namespace TerraPGE::Renderer
 			const Matrix& Proj = Cam->GetProjectionMatrix();
 			const Matrix3x3 CamRot = Cam->GetRotationMatrix();
 
-			const uint64_t Width = Core::sx;
-			const uint64_t Height = Core::sy;
+			const uint64_t Width = Renderer::sx;
+			const uint64_t Height = Renderer::sy;
 
-			const uint64_t ChunkSz = std::max<uint64_t>(1, Height / Core::CpuCores);
+			const uint64_t ChunkSz = std::max<uint64_t>(1, Height / Renderer::CpuCores);
 			const float Fov = Cam->GetFov();
 
 			for (uint64_t y = 0; y < Height; y += ChunkSz)
@@ -1021,26 +1507,122 @@ namespace TerraPGE::Renderer
 		}
 
 
+		// not worth it currently (maybe one thread per shadow map would be better since its such a quick op) TODO
+		void RenderShadowMaps(Renderable** SceneObjects, LightObject** SceneLights, size_t ObjectCount, size_t LightCount, float* Buffer)
+		{
+			bool HasLight = LightCount >= 1;
+
+			for (int objIdx = 0; objIdx < ObjectCount; objIdx++)
+			{
+				Renderable* Object = SceneObjects[objIdx];
+
+				for (const Triangle& Tri : Object->mesh->Triangles)
+				{
+					// 3D Space / World Space
+					Triangle Proj = Tri;
+					Proj.ApplyMatrix(Object->Transform.World);
+
+					for (int i = 0; i < 3; i++)
+					{
+						Proj.WorldSpaceVerts.Points[i] = Proj.Points.Points[i];
+					}
+
+					if (Renderer::DoShadows && HasLight)
+					{
+						// TODO Add more maps for supporting more lights
+						LightObject* Light = SceneLights[0];
+						// 3D Space -> Viewed Space -> Clipped Space
+
+						if (Light->Type == LightTypes::DirectionalLight)
+						{
+							const Matrix VpMatrix = Light->VpMatrices[0];
+							Proj.ApplyMatrix(VpMatrix);
+
+							Multithreaded::BaryCentricRasterizerDepth(&Proj, Renderer::ShadowMap, (SIZE_T)Renderer::ShadowMapWidth, (SIZE_T)Renderer::ShadowMapHeight);
+						}
+						else if (Light->Type == LightTypes::PointLight)
+						{
+							for (int face = 0; face < 6; face++)
+							{
+								Matrix VpMatrix = SceneLights[0]->VpMatrices[face];
+								Proj.ApplyMatrix(VpMatrix);
+
+								Multithreaded::BaryCentricRasterizerDepth(&Proj, Renderer::ShadowMap, (SIZE_T)Renderer::ShadowMapWidth, (SIZE_T)Renderer::ShadowMapHeight);
+							}
+						}
+					}
+				}
+			}
+		}
+
+
 		void RenderScene(Camera* Cam, Renderable** SceneObjects, LightObject** SceneLights, size_t ObjectCount, size_t LightCount, EnvironmentRenderable* Skybox = nullptr)
 		{
+			CodeTimer Timer;
+
+			Timer.Start();
 			Multithreaded::RenderSkybox(Cam, Skybox);
+			float t = Timer.Stop();
+			Renderer::EnvironmentRendertime = t;
 
-			Renderer::RenderShadowMaps(SceneObjects, SceneLights, ObjectCount, LightCount, Core::ShadowMap);
+			// multithreaded version not worth it
+			Timer.Start();
+			Renderer::RenderShadowMaps(SceneObjects, SceneLights, ObjectCount, LightCount, Renderer::ShadowMap);
+			t = Timer.Stop();
+			Renderer::RenderMeshDepthTime = t;
 
+			Timer.Start();
 			Renderer::RenderMeshes(Cam, SceneObjects, SceneLights, ObjectCount, LightCount);
-
+			t = Timer.Stop();
+			Renderer::RenderMeshTime = t;
 			//Renderer::RenderEnvironment();
 
-			Multithreaded::SwapFrameBuffer(Core::FrameBuffer, Core::sx, Core::sy, UseHDR, Renderer::DoGammaCorrection);
+			Timer.Start();
+			Multithreaded::SwapFrameBuffer(Renderer::FrameBuffer, Renderer::sx, Renderer::sy, UseHDR, Renderer::DoGammaCorrection);
+			t = Timer.Stop();
+			Renderer::PresentTime = t;
 		}
 	}
 
 
-	namespace GPU
+	namespace _GPU
 	{
 
 	}
 }
+
+
+//class RenderingBackend
+//{
+
+//};
+
+//class CPUBackend: RenderingBackend
+//{
+
+//};
+
+
+//class Renderer
+//{
+//	Renderer(RenderingBackend* backend)
+//	{
+
+//	}
+
+//	public:
+
+//	Renderer* Create(RenderingBackend* Backend)
+//	{
+
+//	}
+
+//	void RenderScene(Camera* Cam, TerraPGE::Renderable** SceneObjects, LightObject** SceneLights, size_t ObjectCount, size_t LightCount, EnvironmentRenderable* Skybox = nullptr)
+//	{
+
+//	}
+//};
+
 
 
 

@@ -1,7 +1,6 @@
 #pragma once
 #include "Math.h"
 #include "ObjectTransform.h"
-#include "Mesh.h"
 #include "RayCaster.h"
 
 #define ICE_KINETIC_FRICTION 0.03
@@ -71,43 +70,43 @@ enum class ColliderType
 
 struct SphereColliderParams
 {
-	float radius;
-	Vec3 Offset;
+	float radius = 0.0f;
+	Vec3 Offset = Vec3(0.0f,  0.0f, 0.0f);
 };
 
 struct AABBColliderParams
 {
-	Vec3 halfExtents;
-	Vec3 offset;
+	Vec3 halfExtents = Vec3(0.0f, 0.0f, 0.0f);
+	Vec3 offset = Vec3(0.0f, 0.0f, 0.0f);
 };
 
 struct OBBColliderParams
 {
-	Vec3 halfExtents;
-	Matrix3x3 orientation;   // Local rotation basis (3x3)
-	Vec3 offset;
+	Vec3 halfExtents = Vec3(0.0f, 0.0f, 0.0f);
+	Matrix3x3 orientation = Matrix3x3();   // Local rotation basis (3x3)
+	Vec3 offset = Vec3(0.0f, 0.0f, 0.0f);
 };
 
 struct CapsuleColliderParams
 {
-	float radius;
-	float halfHeight;        // distance from center to sphere center end
-    Vec3 axis;     // normalized capsule axis (direction)
-	Vec3 offset;
+	float radius = 0.0f;
+	float halfHeight = 0.0f;        // distance from center to sphere center end
+    Vec3 axis = Vec3(0.0f, 0.0f, 0.0f);    // normalized capsule axis (direction)
+	Vec3 offset = Vec3(0.0f, 0.0f, 0.0f);
 };
 
 class Collider
 {
     ObjectTransform* Transform = nullptr;
 public:
-	ColliderType type;
+	ColliderType type =  ColliderType::None;
 	RigidBody body; // maybe just a pointer to the renderable (or mesh) rigidbody
 	bool PhysicsEnabled = false;
 	// TODO Breaak these up to seperate classes use polymorphism prolly
-	SphereColliderParams  _sphereParams;
-	AABBColliderParams    _AABBParams;
-	OBBColliderParams     _OBBParams;
-	CapsuleColliderParams _capsuleParams;
+    SphereColliderParams  _sphereParams = { 0.0f, {0.0f,0.0f,0.0f} };
+	AABBColliderParams    _AABBParams = { {0.0f,0.0f,0.0f}, {0.0f,0.0f,0.0f} };
+    OBBColliderParams     _OBBParams = { {0.0f,0.0f,0.0f}, Matrix3x3(), {0.0f,0.0f,0.0f} };
+    CapsuleColliderParams _capsuleParams = { 0.0f, 0.0f, {0.0f,0.0f,0.0f}, {0.0f,0.0f,0.0f} };
 
 
     Collider() = delete;

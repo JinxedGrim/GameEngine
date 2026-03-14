@@ -43,7 +43,7 @@ public:
 	}
 
 
-	LightObject(Vec3 Pos, Vec3 LightDir, Vec3 LightColor, float AmbientCoeff, float DiffuseCoeff, float SpecularCoeff, float Near = 0.1f, float Far = 100.0f) : GameObject(Vec3(1.0f, 1.0f, 1.0f), Vec3(0.0f, 0.0f, 0.0f), Pos)
+	LightObject(Vec3 Pos, Vec3 LightColor, float AmbientCoeff, float DiffuseCoeff, float SpecularCoeff, float Near = 0.1f, float Far = 100.0f) : GameObject(Vec3(1.0f, 1.0f, 1.0f), Vec3(0.0f, 0.0f, 0.0f), Pos)
 	{
 		this->Color = LightColor;
 
@@ -154,7 +154,7 @@ class DirectionalLight : public LightObject
 	float _lightDistane = 0.0f;
 
 public:
-	DirectionalLight() : LightObject(Vec3(), Vec3(), Vec3(255, 255, 255), 0.15f, 0.15f, 0.15f)
+	DirectionalLight() : LightObject(Vec3(), Vec3(255, 255, 255), 0.15f, 0.15f, 0.15f)
 	{
 		this->Left = -40.0f;
 		this->Right = 40.0f;
@@ -168,7 +168,7 @@ public:
 	}
 
 
-	DirectionalLight(Vec3 LightDir, float LightDistance, Vec3 LightColor, float Left, float Right, float Bottom, float Top, float AmbientCoeff, float DiffuseCoeff, float SpecularCoeff, Vec3 CenterPoint = Vec3()) : LightObject(CenterPoint, LightDir, LightColor, AmbientCoeff, DiffuseCoeff, SpecularCoeff)
+	DirectionalLight(Vec3 LightDir, float LightDistance, Vec3 LightColor, float Left, float Right, float Bottom, float Top, float AmbientCoeff, float DiffuseCoeff, float SpecularCoeff, Vec3 CenterPoint = Vec3()) : LightObject(CenterPoint, LightColor, AmbientCoeff, DiffuseCoeff, SpecularCoeff)
 	{
 		this->Left = Left;
 		this->Right = Right;
@@ -210,7 +210,7 @@ public:
 	}
 
 
-	DirectionalLight(Vec3 LightDir, float LightDistance, Vec3 LightColor, float AmbientCoeff, float DiffuseCoeff, float SpecularCoeff, Vec3 CenterPoint = Vec3(0.0f, 0.0f, 0.0f)) : LightObject(Vec3(0, 0, 0), LightDir, LightColor, AmbientCoeff, DiffuseCoeff, SpecularCoeff)
+	DirectionalLight(Vec3 LightDir, float LightDistance, Vec3 LightColor, float AmbientCoeff, float DiffuseCoeff, float SpecularCoeff, Vec3 CenterPoint = Vec3(0.0f, 0.0f, 0.0f)) : LightObject(Vec3(0, 0, 0), LightColor, AmbientCoeff, DiffuseCoeff, SpecularCoeff)
 	{
 		this->IsVpDirty = true;
 		this->Left = -40.0f;
@@ -284,7 +284,7 @@ public:
 		// 5. Sample shadow map
 		int MapIdx = ContIdx(ShadowX, ShadowY, W);
 
-		// TODO BAD INTERP     Core::ShadowMap[MapIdx]
+		// TODO BAD INTERP     Renderer::ShadowMap[MapIdx]
 		*ShadowMapDepth = ShadowMap[MapIdx];
 		*ShadowDepth = ShadowUV.z + ShadowMapBias;
 
@@ -325,7 +325,7 @@ class PointLight : public LightObject
 	float QuadraticAttenuation = 0.0f;
 
 public:
-	PointLight() : LightObject(Vec3(), Vec3(), Vec3(255, 255, 255), 0.15f, 0.15f, 0.15f)
+	PointLight() : LightObject(Vec3(), Vec3(255, 255, 255), 0.15f, 0.15f, 0.15f)
 	{
 		this->ConstantAttenuation = 0.0f;
 		this->LinearAttenuation = 0.0f;
@@ -334,7 +334,7 @@ public:
 		this->Type = LightTypes::PointLight;
 	}
 
-	PointLight(Vec3 Pos, Vec3 LightDir, Vec3 LightColor, float ConstantAttenuation, float LinearAttenuation, float QuadraticAttenuation, float AmbientCoeff, float DiffuseCoeff, float SpecularCoeff) : LightObject(Pos, LightDir, LightColor, AmbientCoeff, DiffuseCoeff, SpecularCoeff)
+	PointLight(Vec3 Pos, Vec3 LightColor, float ConstantAttenuation, float LinearAttenuation, float QuadraticAttenuation, float AmbientCoeff, float DiffuseCoeff, float SpecularCoeff) : LightObject(Pos, LightColor, AmbientCoeff, DiffuseCoeff, SpecularCoeff)
 	{
 		this->ConstantAttenuation = ConstantAttenuation;
 		this->LinearAttenuation = LinearAttenuation;
@@ -399,7 +399,7 @@ public:
 	float LinearAttenuation = 0.0f;
 	float QuadraticAttenuation = 0.0f;
 
-	SpotLight(Vec3 Pos, Vec3 LightDir, Vec3 LightColor, float CutoffAngle, float ConstantAttenuation, float LinearAttenuation, float QuadraticAttenuation, float AmbientCoeff, float DiffuseCoeff, float SpecularCoeff) : LightObject(Pos, LightDir, LightColor, AmbientCoeff, DiffuseCoeff, SpecularCoeff)
+	SpotLight(Vec3 Pos, Vec3 LightDir, Vec3 LightColor, float CutoffAngle, float ConstantAttenuation, float LinearAttenuation, float QuadraticAttenuation, float AmbientCoeff, float DiffuseCoeff, float SpecularCoeff) : LightObject(Pos, LightColor, AmbientCoeff, DiffuseCoeff, SpecularCoeff)
 	{
 		this->CutoffAngle = CutoffAngle;
 		this->ConstantAttenuation = ConstantAttenuation;

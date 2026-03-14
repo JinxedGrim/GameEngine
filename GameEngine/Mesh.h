@@ -31,6 +31,7 @@ class Triangle
 		memset(Points.Normals, 0, sizeof(Points.Normals));
 	}
 
+
 	Triangle(const Vec3& P1, const Vec3& P2, const Vec3& P3)
 	{
 		this->Points.Points[0] = P1;
@@ -38,10 +39,12 @@ class Triangle
 		this->Points.Points[2] = P3;
 	}
 
+
 	Triangle(const Triangle& B)
 	{
 		*this = B;
 	}
+
 
 	void Translate(const Vec3& Value)
 	{
@@ -50,12 +53,14 @@ class Triangle
 		this->Points.Points[2] += Value;
 	}
 
+
 	const void Translated(Triangle* Out, const Vec3& Value)
 	{
 		Out->Points.Points[0] = this->Points.Points[0] + Value;
 		Out->Points.Points[1] = this->Points.Points[1] + Value;
 		Out->Points.Points[2] = this->Points.Points[2] + Value;
 	}
+
 
 	void Scale(const Vec3& Value)
 	{
@@ -64,12 +69,14 @@ class Triangle
 		this->Points.Points[2] *= Value;
 	}
 
+
 	const void Scaled(Triangle* Out, const Vec3& Value)
 	{
 		Out->Points.Points[0] = this->Points.Points[0] * Value;
 		Out->Points.Points[1] = this->Points.Points[1] * Value;
 		Out->Points.Points[2] = this->Points.Points[2] * Value;
 	}
+
 
 	void Rotate(const Matrix& Rot)
 	{
@@ -91,6 +98,7 @@ class Triangle
 		this->Points.Points[1] *= MatToApply;
 		this->Points.Points[2] *= MatToApply;
 	}
+
 
 	void ApplyPerspectiveDivide()
 	{
@@ -385,20 +393,16 @@ class Triangle
 
 
 	Vertex Points;
-
 	Vertex WorldSpaceVerts = {};
-
 	Vec3 FaceNormal = Vec3();
 	Vec3 VertexNormals[3] = {};
 	Vec3 NormalPositions[4] = {};
 	Vec3 NormDirections[4] = {};
 
 	TextureCoords TexCoords[3] = {};
-	size_t TexCoords_[3] = {};
 
 	Vec3 Col = Vec3(255, 0, 0);
 	Material* Material;
-
 	bool UseMeshMaterial = false;
 	bool HasTexture = false;
 	bool OverrideTextureColor = false;
@@ -414,6 +418,7 @@ class Mesh
 
 	}
 
+
 	Mesh(std::vector<Triangle> Triangles, std::string MeshName = "")
 	{
 		this->Triangles = Triangles;
@@ -425,10 +430,12 @@ class Mesh
 		this->CalculateNormals();
 	}
 
+
 	Mesh(std::string Fn)
 	{
 		this->LoadMesh(Fn);
 	}
+
 
 	Mesh(Mesh m, Material* Mat)
 	{
@@ -441,6 +448,7 @@ class Mesh
 		this->ChangeMatInfo(Mat);
 	}
 
+
 	void TranslateTriangles(Vec3 Value)
 	{
 		for (int i = 0; i < this->Triangles.size(); i++)
@@ -448,6 +456,7 @@ class Mesh
 			Triangles.at(i).Translate(Value);
 		}
 	}
+
 
 	void ScaleTriangles(Vec3 Value)
 	{
@@ -459,6 +468,7 @@ class Mesh
 		}
 	}
 
+
 	Mesh ScaledTriangles(Vec3 Value)
 	{
 		Mesh Out = *this;
@@ -469,6 +479,7 @@ class Mesh
 			Out.Triangles.at(i).Points.Points[2] * Value;
 		}
 	}
+
 
 	void ChangeMatInfo(Material* MatToApply)
 	{
@@ -482,6 +493,7 @@ class Mesh
 				Tri.HasTexture = true;
 		}
 	}
+
 
 	bool LoadMesh(std::string FnPath, std::string Prefix="Assets\\")
 	{
@@ -497,7 +509,7 @@ class Mesh
 		std::string MtlLibFn = "";
 		Material* CurrMat = nullptr;
 
-		std::cout << "Loading Mesh: " << Prefix + FnPath << std::endl;
+		TerraPGE::Core::LogInfo("[MATERIAL]", "Loading Mesh: " + Prefix + FnPath);
 
 		while (!ifs.eof())
 		{
@@ -510,7 +522,23 @@ class Mesh
 			SS << Line;
 			std::string Str = SS.str();
 
-			if (Str.find("v ") != std::string::npos)
+			// Find and Load material
+			if (Str.find("mtllib ") != std::string::npos)
+			{
+				SS >> Unused >> Unused >> Unused >> Unused >> Unused >> Unused >> MtlLibFn;
+			}
+			else if (Str.find("usemtl ") != std::string::npos)
+			{
+				//char Prefix[7];
+				std::string MaterialFn;
+				SS >> Unused >> Unused >> Unused >> Unused >> Unused >> Unused >> MaterialFn;
+				CurrMat = Material::LoadMaterialFile(MtlLibFn, MaterialFn, Prefix);
+				this->MatCount++;
+				this->Materials.push_back(CurrMat);
+			}
+
+			// Vertex definitions
+			else if (Str.find("v ") != std::string::npos)
 			{
 				Vec3 Vert;
 				SS >> Unused >> Vert.x >> Vert.y >> Vert.z;
@@ -538,6 +566,8 @@ class Mesh
 
 				TexCache.push_back(TexCoord);
 			}
+	
+			// Create Triangle			
 			else if (Str.find("f ") != std::string::npos)
 			{
 				std::vector<std::string> Indices;
@@ -552,6 +582,7 @@ class Mesh
 				if (Indices.size() == 3)
 				{
 					Triangle Tmp;
+					
 					for (int i = 0; i < 3; i++)
 					{
 						std::stringstream IndexSS(Indices[i]);
@@ -587,14 +618,29 @@ class Mesh
 						}
 
 						Vec3 vertex = VertCache[vertexIndex];
+						VertexIndices.push_back(vertexIndex);
 
 						if (texCoordIndex >= 0)
+						{
 							Tmp.TexCoords[i] = TexCache[texCoordIndex];
+							TexCoordsIndices.push_back(texCoordIndex);
+						}
 						else
-							Tmp.TexCoords[i] = { 0, 0 }; 
+						{
+							Tmp.TexCoords[i] = { 0, 0 };
+							TexCoordsIndices.push_back(-1);
+						}
 
 						if (normalIndex >= 0)
+						{
 							Tmp.FaceNormal = NormalCache[normalIndex];
+							NormalIndices.push_back(normalIndex);
+						}
+						else
+						{
+							Tmp.FaceNormal = { 0, 0, 0};
+							NormalIndices.push_back(-1);
+						}
 
 						Tmp.Points.Points[i] = vertex;
 					}
@@ -605,24 +651,9 @@ class Mesh
 					this->Triangles.push_back(Tmp);
 				}
 			}
-			else if (Str.find("usemtl ") != std::string::npos)
-			{
-				//char Prefix[7];
-				std::string MaterialFn;
-				SS >> Unused >> Unused >> Unused >> Unused >> Unused >> Unused >> MaterialFn;
-				CurrMat = Material::LoadMaterialFile(MtlLibFn, MaterialFn, Prefix);
-				this->MatCount++;
-				this->Materials.push_back(CurrMat);
-			}
-			else if (Str.find("mtllib ") != std::string::npos)
-			{
-				SS >> Unused >> Unused >> Unused >> Unused >> Unused >> Unused >> MtlLibFn;
-			}
 		}
 
-#ifdef _DEBUG
-		std::cout << "Done" << std::endl;
-#endif
+		TerraPGE::Core::LogInfo("[Mesh]", "Finished Loading");
 
 		FnPath = FnPath.substr(FnPath.find_last_of("/\\") + 1);
 		FnPath = FnPath.substr(0, FnPath.find_last_of(".obj") - 3);
@@ -648,6 +679,7 @@ class Mesh
 		return true;
 	}
 
+
 	void CalculateNormals()
 	{
 		for (Triangle& Tri : this->Triangles)
@@ -665,15 +697,19 @@ class Mesh
 		this->NormalCount = (int)this->Normals.size();
 	}
 
+
 	// Make this obsolete
 	std::vector<Triangle> Triangles = {};
+	std::vector<Vec3> Normals = {};
 
 	std::string MeshName = "";
 	std::vector<Vec3> VertexCache = {};
+	std::vector<SIZE_T> VertexIndices = {};
 	std::vector<Vec3> NormalCache = {};
+	std::vector<SIZE_T> NormalIndices = {};
 	std::vector<TextureCoords> TexCoords = {};
+	std::vector<SIZE_T> TexCoordsIndices = {};
 	std::vector<Material*> Materials = {};
-	std::vector<Vec3> Normals = {};
 
 	int VertexCount = 0;
 	int TriangleCount = 0;

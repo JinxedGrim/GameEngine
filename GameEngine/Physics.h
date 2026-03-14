@@ -1,7 +1,7 @@
 #pragma once
 #include "Math.h"
-#include "GameObject.h"
 #include "RayCaster.h"
+#include "Collider.h"
 
 namespace TerraPGE::Physics
 {
@@ -96,14 +96,24 @@ namespace TerraPGE::Physics
     }
 
 
-    float IntegrateRestitution(float r)
+    __inline Vec3 IntegrateRestitution(const Vec3& Velocity, const Vec3&  CollisionNormal, const float& Restitution, float Dt)
     {
-        return 0.0f;
+        Vec3 VelocityDelta = Vec3(0.0f,  0.0f, 0.0f);
+        float vn = Velocity.Dot(CollisionNormal);
+
+        if (vn < 0)
+        {
+            VelocityDelta -= (CollisionNormal * (1.0f + Restitution) * vn);
+        }
+
+        return VelocityDelta;
     }
 
 
     void Integrate(Collider* collider, float dt, Collider* Floor, const RaycastHit* FloorHit, bool ApplyGravity = true)
     {
+        // if velocity ==  0.0f sleep the obj
+
         if (!collider->PhysicsEnabled)
             return;
 
@@ -114,52 +124,24 @@ namespace TerraPGE::Physics
         if (collider->body.IsGrounded)
             collider->body.Velocity += IntegrateFriction(collider->body.KineticFriction, Floor->body.KineticFriction, collider->body.mass, dt, collider->body.Velocity);
 
-        // Integrate position (all axes)
-        Vec3 deltaWorld = IntegrateVelocity(collider->body.Velocity, dt);
-
-        /*
-        if (Floor && deltaWorld.y < 0.0f)
-        {
-            float distanceToFloor = FloorHit->distance;
-
-            if (-deltaWorld.y > distanceToFloor)
-            {
-                deltaWorld.y = -distanceToFloor;
-                collider->body.Velocity.y = 0.0f;
-                collider->body.IsGrounded = true;
-            }
-        }*/
-            //set y
-        collider->SetEulerAngles(
-            collider->GetEulerAngles() + collider->body.AngularVelocity * dt
-        );
-
-        collider->SetPosition(collider->GetPosition() + deltaWorld);
-
         if (collider->type == ColliderType::None)
             return;
+
+        Vec3 PredictedPosition = collider->GetPosition() + IntegrateVelocity(collider->body.Velocity, dt);
+
+        collider->body.IsGrounded = false;
 
         // Ground collision
         if (Floor && collider->TestCollision(Floor))
         {
-            Vec3 worldPos = collider->GetPosition();
-            worldPos.y = FloorHit->point.y;
-            collider->SetPosition(worldPos);
+            PredictedPosition.y = FloorHit->point.y;
             collider->body.Velocity.y = 0.0f;
-
 
             if (collider->body.Velocity.y < 0.0f)
             {
-                // calculate bounce
-                //float v_n = collider->body.Velocity.Dot(FloorHit->normal);
-                
-                //collider->body.Velocity.y = -collider->body.Velocity.y * collider->body.restitution;
- 
-                //if (v_n >= 0) return;
-                //Vec3 j = FloorHit->normal * (-(1 + collider->body.restitution) * v_n) / (1.0f / collider->body.mass);
-                //collider->body.Velocity += j / collider->body.mass;  // p += j; v = p/m
+                Vec3 RestitutionVelocity = IntegrateRestitution(collider->body.Velocity, FloorHit->normal, collider->body.restitution, dt);
 
-
+                collider->body.Velocity += RestitutionVelocity;
 
                 if (std::abs(collider->body.Velocity.y) < 0.05f) // small threshold
                 {
@@ -167,10 +149,14 @@ namespace TerraPGE::Physics
                     collider->body.IsGrounded = true;
                 }
             }
-
-            return;
         }
 
-        collider->body.IsGrounded = false;
+        //set y
+        collider->SetEulerAngles(
+            collider->GetEulerAngles() + collider->body.AngularVelocity * dt
+        );
+
+        // Integrate position (all axes)
+        collider->SetPosition(PredictedPosition);
     }
 }

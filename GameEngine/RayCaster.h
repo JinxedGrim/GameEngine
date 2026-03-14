@@ -1,6 +1,6 @@
 #pragma once
 #include "Math.h"
-#include "GameObject.h"
+#include "Mesh.h"
 
 struct RaycastHit
 {
@@ -207,8 +207,6 @@ bool RaycastMesh(Ray ray, const std::vector<Triangle>& triangles, RaycastHit* ou
 	Vec3 worldRayOrigin = ray.origin;
 	ray.origin = ray.origin * InverseWorld;
 	ray.direction = (ray.direction * normalMatrix.Inversed()).Normalized();
-
-	std::cout << "ray.origin: " << ray.origin << " dir: " << ray.direction << std::endl;
 
 	for (const Triangle& tri : triangles)
 	{
