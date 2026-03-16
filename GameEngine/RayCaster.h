@@ -41,47 +41,121 @@ bool RayIntersectsSphere(const Ray& ray, const Vec3& center, float radius, Rayca
 
 bool RayIntersectsAABB(const Ray& ray, const Vec3& center, const Vec3& halfExtents, RaycastHit* out)
 {
+	const float EPSILON = 1e-8f;
+
 	Vec3 min = center - halfExtents;
 	Vec3 max = center + halfExtents;
 
-	float tmin = (min.x - ray.origin.x) / ray.direction.x;
-	float tmax = (max.x - ray.origin.x) / ray.direction.x;
-	if (tmin > tmax) std::swap(tmin, tmax);
+	float tmin = -FLT_MAX;
+	float tmax = FLT_MAX;
 
-	float tymin = (min.y - ray.origin.y) / ray.direction.y;
-	float tymax = (max.y - ray.origin.y) / ray.direction.y;
-	if (tymin > tymax) std::swap(tymin, tymax);
+	Vec3 hitNormal = Vec3(0, 0, 0);
 
-	if (tmin > tymax || tymin > tmax)
-		return false;
+	// ----- X slab -----
+	if (fabs(ray.direction.x) < EPSILON)
+	{
+		// Ray parallel to X planes
+		if (ray.origin.x < min.x || ray.origin.x > max.x)
+			return false;
+	}
+	else
+	{
+		float invD = 1.0f / ray.direction.x;
+		float t1 = (min.x - ray.origin.x) * invD;
+		float t2 = (max.x - ray.origin.x) * invD;
 
-	if (tymin > tmin) tmin = tymin;
-	if (tymax < tmax) tmax = tymax;
+		Vec3 n = Vec3(-1, 0, 0);
 
-	float tzmin = (min.z - ray.origin.z) / ray.direction.z;
-	float tzmax = (max.z - ray.origin.z) / ray.direction.z;
-	if (tzmin > tzmax) std::swap(tzmin, tzmax);
+		if (t1 > t2)
+		{
+			std::swap(t1, t2);
+			n = Vec3(1, 0, 0);
+		}
 
-	if (tmin > tzmax || tzmin > tmax)
-		return false;
+		if (t1 > tmin)
+		{
+			tmin = t1;
+			hitNormal = n;
+		}
+
+		tmax = std::min(tmax, t2);
+		if (tmin > tmax)
+			return false;
+	}
+
+	// ----- Y slab -----
+	if (fabs(ray.direction.y) < EPSILON)
+	{
+		if (ray.origin.y < min.y || ray.origin.y > max.y)
+			return false;
+	}
+	else
+	{
+		float invD = 1.0f / ray.direction.y;
+		float t1 = (min.y - ray.origin.y) * invD;
+		float t2 = (max.y - ray.origin.y) * invD;
+
+		Vec3 n = Vec3(0, -1, 0);
+
+		if (t1 > t2)
+		{
+			std::swap(t1, t2);
+			n = Vec3(0, 1, 0);
+		}
+
+		if (t1 > tmin)
+		{
+			tmin = t1;
+			hitNormal = n;
+		}
+
+		tmax = std::min(tmax, t2);
+		if (tmin > tmax)
+			return false;
+	}
+
+	// ----- Z slab -----
+	if (fabs(ray.direction.z) < EPSILON)
+	{
+		if (ray.origin.z < min.z || ray.origin.z > max.z)
+			return false;
+	}
+	else
+	{
+		float invD = 1.0f / ray.direction.z;
+		float t1 = (min.z - ray.origin.z) * invD;
+		float t2 = (max.z - ray.origin.z) * invD;
+
+		Vec3 n = Vec3(0, 0, -1);
+
+		if (t1 > t2)
+		{
+			std::swap(t1, t2);
+			n = Vec3(0, 0, 1);
+		}
+
+		if (t1 > tmin)
+		{
+			tmin = t1;
+			hitNormal = n;
+		}
+
+		tmax = std::min(tmax, t2);
+		if (tmin > tmax)
+			return false;
+	}
 
 	float t = tmin;
-	if (t < 0) t = tmax;
-	if (t < 0) return false;
+	if (t < 0.0f)
+		t = tmax;
+
+	if (t < 0.0f)
+		return false;
 
 	out->hit = true;
 	out->distance = t;
 	out->point = ray.origin + ray.direction * t;
-
-	// normal
-	Vec3 localPoint = out->point - center;
-	Vec3 absPoint = localPoint.GetAbs();
-	if (absPoint.x > absPoint.y && absPoint.x > absPoint.z)
-		out->normal = Vec3(localPoint.x > 0 ? 1 : -1, 0, 0);
-	else if (absPoint.y > absPoint.x && absPoint.y > absPoint.z)
-		out->normal = Vec3(0, localPoint.y > 0 ? 1 : -1, 0);
-	else
-		out->normal = Vec3(0, 0, localPoint.z > 0 ? 1 : -1);
+	out->normal = hitNormal;
 
 	return true;
 }

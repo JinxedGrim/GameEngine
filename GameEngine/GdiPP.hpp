@@ -164,6 +164,17 @@ private:
 };
 
 
+enum class PenPPStyles : int
+{
+    Solid = PS_SOLID,
+    Dash = PS_DASH,
+    Dot = PS_DOT, 
+    DashDot = PS_DASHDOT,
+    DashDotDot = PS_DASHDOTDOT,
+    Invisible = PS_NULL,
+    InsideFrame = PS_INSIDEFRAME
+};
+
 class PenPP
 {
 public:
@@ -598,6 +609,7 @@ public:
                 ErrorHandler("[GdiPP]  Failed to set text color");
                 return false;
             }
+
             return TextOutA(ScreenDC, X, Y, Text.data(), (int)Text.length());
         }
         else
@@ -1142,9 +1154,7 @@ public:
         if (ClearMode == GDIPP_PIXELCLEAR)
         {
             if (DoubleBuffered)
-            {
                 SetDIBitsToDevice(this->MemDC, 0, 0, this->ScreenSz.x, this->ScreenSz.y, 0, 0, 0, this->ScreenSz.y, PixelBuffer, &bi, DIB_RGB_COLORS);
-            }
             else
                 SetDIBitsToDevice(this->ScreenDC, 0, 0, this->ScreenSz.x, this->ScreenSz.y, 0, 0, 0, this->ScreenSz.y, PixelBuffer, &bi, DIB_RGB_COLORS);
             return;

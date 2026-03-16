@@ -16,7 +16,7 @@
 // X. Redesign multithreading
 // X. implement a prefab system
 // X. Bloom
-// X Add some PBR stuff (metallness, roughness)
+// X  Add some PBR stuff (metallness, roughness)
 // X. Skybox sun sampling (color/intensity/exposure/etc)
 // X. Caclulate Vertex norms for all 3 vertices and store them
 // X. Better reosource management
@@ -26,6 +26,9 @@
 // X. Sub surface scattering
 // X. GGX 
 // X. IBL || IBL approxZ
+// X. experiment with terrain deformations
+// X. Unify logging
+// X. More UI
 // X. Audio system 
 // X. Voice 
 // X. SpotLights
@@ -122,7 +125,7 @@ namespace TerraPGE
 	static bool ApplyGravity = true;
 	static float FrameTime = 0.0f;
 	static float PhysTime = 0.0f;
-
+	static bool DebugColliders = true;
 
 
 
@@ -132,18 +135,81 @@ namespace TerraPGE
 		Renderer::RenderMesh(Gdi, Cam, R.mesh, R.Scalar, R.RotationRads, R.Pos, LightSrc.LightPos, LightSrc.Color, LightSrc.AmbientCoeff, LightSrc.DiffuseCoeff, LightSrc.SpecularCoeff, Shader, SHADER_TYPE);
 	}*/
 
-	void UpdateLoadingScreen()
+	void UpdateLoadingScreen(WndCreator& Wnd, Scene * scene)
 	{
-		Renderer::RenderingCore::ClearScreen();
-		CurrScene->DrawLoadingScreen(Renderer::EngineGdi);
-		Renderer::EngineGdi->SetNeedsPixelsRedrawn();
+		MSG msg;
+		Renderer::RenderingCore::UpdateWindow(Wnd, &msg);
+		Renderer::RenderingCore::ClearScreen(true);
+		scene->DrawLoadingScreen(Renderer::EngineGdi);
 		Renderer::EngineGdi->DrawDoubleBufferPO();
 	}
 
 
-	void MemCheckpoint()
+	namespace DebugUtils
 	{
+		void DrawDebugCollider(const Collider* c)
+		{
+			switch (c->type)
+			{
+				case ColliderType::AABB:
+				{
+					Vec3 min = c->GetPosition() + c->_AABBParams.offset - c->_AABBParams.halfExtents * c->GetParentScale();
+					Vec3 max = c->GetPosition() + c->_AABBParams.offset + c->_AABBParams.halfExtents * c->GetParentScale();
+					Vec3 col = { 0.0f, 0.0f,  0.0f };
 
+					if(c->IsColliding)
+						col = { 255,  0, 0 };
+					else
+						col = { 0.0f,  255, 255 };
+
+					Vec3 v0 = { min.x, min.y, min.z };
+					Vec3 v1 = { max.x, min.y, min.z };
+					Vec3 v2 = { max.x, max.y, min.z };
+					Vec3 v3 = { min.x, max.y, min.z };
+
+					Vec3 v4 = { min.x, min.y, max.z };
+					Vec3 v5 = { max.x, min.y, max.z };
+					Vec3 v6 = { max.x, max.y, max.z };
+					Vec3 v7 = { min.x, max.y, max.z };
+
+					// bottom
+					Renderer::RenderingCore::Render3DLine(CurrScene->MainCamera, v0, v1, col);
+					Renderer::RenderingCore::Render3DLine(CurrScene->MainCamera, v1, v2, col);
+					Renderer::RenderingCore::Render3DLine(CurrScene->MainCamera, v2, v3, col);
+					Renderer::RenderingCore::Render3DLine(CurrScene->MainCamera, v3, v0, col);
+
+					// top
+					Renderer::RenderingCore::Render3DLine(CurrScene->MainCamera, v4, v5, col);
+					Renderer::RenderingCore::Render3DLine(CurrScene->MainCamera, v5, v6, col);
+					Renderer::RenderingCore::Render3DLine(CurrScene->MainCamera, v6, v7, col);
+					Renderer::RenderingCore::Render3DLine(CurrScene->MainCamera, v7, v4, col);
+
+					// vertical
+					Renderer::RenderingCore::Render3DLine(CurrScene->MainCamera, v0, v4, col);
+					Renderer::RenderingCore::Render3DLine(CurrScene->MainCamera, v1, v5, col);
+					Renderer::RenderingCore::Render3DLine(CurrScene->MainCamera, v2, v6, col);
+					Renderer::RenderingCore::Render3DLine(CurrScene->MainCamera, v3, v7, col);
+
+					break;
+				}
+				case ColliderType::None:
+				{
+					break;
+				}
+				default:
+					throw;
+			};
+		}
+
+		void  DrawAllColliders(Renderable** Objects, size_t Sz)
+		{
+			for (size_t idx = 0; idx < Sz; idx++)
+			{
+				Collider* c = &(Objects[idx]->collider);
+
+				DrawDebugCollider(c);
+			}
+		}
 	}
 
 
@@ -161,11 +227,11 @@ namespace TerraPGE
 
 		// Counters
 		MSG msg                      = { 0 };
+		LightObject** LightsToRender = nullptr;
+		Renderable** RenderQueue = nullptr;
 		double ElapsedTime           = 0.0;
 		double physicsAccumulator    = 0.0;
-		LightObject** LightsToRender = nullptr;
 		CurrScene                    = FirstScene;
-		Renderable** RenderQueue                         = nullptr;
 		const std::vector<Renderable*>* SceneRenderQueue = nullptr;
 		const std::vector<LightObject*>* SceneLights     = nullptr;
 		std::vector<Renderable*> Roots;
@@ -175,7 +241,7 @@ namespace TerraPGE
 		Renderer::RenderingCore::UpdateWindow(Wnd, &msg);
 		SceneManager* _sceneManager = SceneManager::Create(CurrScene);
 
-		UpdateLoadingScreen();
+		UpdateLoadingScreen(Wnd, CurrScene);
 		CurrScene->BeginScene(Wnd);
 		
 		auto FrameStart      = std::chrono::steady_clock::now();
@@ -202,13 +268,13 @@ namespace TerraPGE
 
 			// call draw code
 			CurrScene->RunTick(Renderer::EngineGdi, Wnd, (float)ElapsedTime);
-			Roots = CurrScene->GetRoots();
 
+			Roots = CurrScene->GetRoots();
 			SceneRenderQueue = CurrScene->GetObjects();
 			SceneLights      = CurrScene->GetLights();
 
-			LightsToRender = DEBUG_NEW LightObject * [CurrScene->GetLights()->size()];
-			RenderQueue    = DEBUG_NEW Renderable * [CurrScene->GetObjects()->size()];
+			LightsToRender = DEBUG_NEW LightObject * [SceneLights->size()];
+			RenderQueue    = DEBUG_NEW Renderable * [SceneRenderQueue->size()];
 
 			for (size_t idx = 0; idx < SceneLights->size(); idx++)
 			{
@@ -314,13 +380,17 @@ namespace TerraPGE
 				Renderer::RenderingCore::DrawFpsCounter(Wnd, Fps, CurrMB, ElapsedTime, Renderer::RenderingUtils::Profiler::CalculateCpuUsage(CpuFrameDelta * 1e-9, ElapsedTime, Renderer::CpuCores));
 			}
 
+			if (DebugColliders)
+			{
+				DebugUtils::DrawAllColliders(RenderQueue, SceneRenderQueue->size());
+			}
+
 			delete[] LightsToRender;
 			delete[] RenderQueue;
 
 
 			// Draw to screen
 			Renderer::EngineGdi->DrawDoubleBufferPO();
-			//EngineGdi.DrawDoubleBuffer();
 
 			// Calc elapsed time
 			ElapsedTime = std::chrono::duration<double>(std::chrono::steady_clock::now() - FrameStart).count();

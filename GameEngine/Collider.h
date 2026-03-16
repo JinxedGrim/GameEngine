@@ -100,6 +100,7 @@ class Collider
     ObjectTransform* Transform = nullptr;
 public:
 	ColliderType type =  ColliderType::None;
+    bool IsColliding = false;
 	RigidBody body; // maybe just a pointer to the renderable (or mesh) rigidbody
 	bool PhysicsEnabled = false;
 	// TODO Breaak these up to seperate classes use polymorphism prolly
@@ -164,7 +165,7 @@ public:
 
 	bool TestCollision(const Collider* other)  const
 	{
-        if (other == nullptr)
+        if (other == nullptr || other->Transform == nullptr)
             return false;
 
         switch (this->type)
@@ -183,7 +184,7 @@ public:
         switch (this->type)
         {
             case ColliderType::Sphere:   return RayIntersectsSphere(*ray, this->GetPosition() + this->_sphereParams.Offset, _sphereParams.radius, OutHit);
-            case ColliderType::AABB:     return RayIntersectsAABB(*ray, this->GetPosition() + this->_AABBParams.offset, _AABBParams.halfExtents * this->GetParentScale(), OutHit);
+            case ColliderType::AABB:     return RayIntersectsAABB(*ray, this->GetPosition() + this->_AABBParams.offset, this->_AABBParams.halfExtents * this->GetParentScale(), OutHit);
             case ColliderType::OBB:      return RayIntersectsOBB(*ray, this->GetPosition() + this->_OBBParams.offset, _OBBParams.halfExtents * this->GetParentScale(), _OBBParams.orientation, OutHit);
             case ColliderType::Capsule:  return RayIntersectsCapsule(*ray, this->GetPosition() + this->_capsuleParams.offset, _capsuleParams.axis,  _capsuleParams.radius, OutHit);
             default: return false;
@@ -765,15 +766,17 @@ private:
 
     bool TestAABB(const Collider* o) const
     {
-        Vec3 p1 = Transform->GetWorldPosition() + _AABBParams.offset;
-        Vec3 e1 = _AABBParams.halfExtents * this->GetParentScale();
-        Vec3 Scale = o->GetParentScale();
+        if (o == nullptr || o->Transform == nullptr)
+            return false;
+
+        Vec3 p1 = this->GetPosition() + this->_AABBParams.offset;
+        Vec3 e1 = this->_AABBParams.halfExtents * this->GetParentScale();
 
         switch (o->type)
         {
         case ColliderType::Sphere:
             return SphereVAABB(
-                o->Transform->GetWorldPosition() + o->_sphereParams.Offset,
+                o->GetPosition() + o->_sphereParams.Offset,
                 o->_sphereParams.radius,
                 p1,
                 e1
@@ -782,14 +785,14 @@ private:
         case ColliderType::AABB:
             return AABBvAABB(
                 p1, e1,
-                this->GetPosition() + o->_AABBParams.offset,
-                o->_AABBParams.halfExtents * Scale
+                o->GetPosition() + o->_AABBParams.offset,
+                o->_AABBParams.halfExtents * o->GetParentScale()
             );
 
         case ColliderType::OBB:
             return AABBvOBB(
-                p1, _AABBParams.halfExtents * this->GetParentScale(),
-                o->Transform->GetWorldPosition() + o->_OBBParams.offset,
+                p1, o->_AABBParams.halfExtents * o->GetParentScale(),
+                o->GetPosition() + o->_OBBParams.offset,
                 e1,
                 o->_OBBParams.orientation
             );
@@ -797,14 +800,14 @@ private:
         case ColliderType::Capsule:
             return AABBvCapsule(
                 p1, e1,
-                o->Transform->GetWorldPosition() + o->_capsuleParams.offset,
+                o->GetPosition() + o->_capsuleParams.offset,
                 o->_capsuleParams.radius,
                 o->_capsuleParams.halfHeight
             );
         default:
             // replace TODO
+            TerraPGE::Core::LogError("[Collision]", "Invalid Collider Type!", 1);
             throw(0xEE);
-            //TerraPGE::Core::LogError("[Collision]", "Invalid Collider Type!", 1);
             break;
         }
 

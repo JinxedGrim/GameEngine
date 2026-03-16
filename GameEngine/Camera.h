@@ -288,26 +288,50 @@ public:
 		this->IsViewDirty = true;
 	}
 
-
-	Ray ScreenPointToRay(int sx, int sy, int ScreenWidth, int ScreenHeight)
+	bool PointToScreen(const Vec3& P, Vec2& Out, SIZE_T BufferWidth, SIZE_T BufferHeight)
 	{
-		float NdcX = (2.0f * sx / ScreenWidth) - 1.0f;
-		float NdcY = 1.0f - (2.0f * sy / ScreenHeight);
+		Vec4 clip = Vec4(P, 1.0f) * (this->GetViewMatrix());
+		clip *= this->GetProjectionMatrix();
 
-		Vec4 NearClip = Vec4(NdcX, NdcY, 0.0f, 1.0f);
-		Vec4 FarClip = Vec4(NdcX, NdcY, 1.0f, 1.0f);
+		if (clip.w <= 0.0f)
+			return false;
 
-		Vec4 ViewSpaceNearClip = NearClip * this->GetProjectionMatrix().Inversed();
-		Vec4 ViewSpaceFarClip = NearClip * this->GetProjectionMatrix().Inversed();
-		ViewSpaceNearClip.CorrectPerspective();
-		ViewSpaceFarClip.CorrectPerspective();
+		float invW = 1.0f / clip.w;
 
-		Vec4 WorldSpaceNearClip = ViewSpaceNearClip * this->GetViewMatrix().Inversed();
-		Vec4 WorldSpaceFarClip = ViewSpaceFarClip * this->GetViewMatrix().Inversed();
+		float ndcX = clip.x * invW;
+		float ndcY = clip.y * invW;
 
-		Ray Out = Ray(WorldSpaceNearClip, (WorldSpaceFarClip.xyz() - WorldSpaceNearClip.xyz()).Normalized());
+		Out.x = (ndcX * 0.5f + 0.5f) * BufferWidth;
+		Out.y = (ndcY * 0.5f + 0.5f) * BufferHeight;
 
-		return Out;
+		return true;
+	}
+
+	Ray ScreenPointToRay(float sx, float sy, int width, int height)
+	{
+		float ndcX = (2.0f * sx / width) - 1.0f;
+		float ndcY = (2.0f * sy / height) - 1.0f;
+
+		float aspect = (float)width / (float)height;
+
+		float tanHalfFov = tanf(this->Fov * 0.5f);
+
+		float px = ndcX * aspect * tanHalfFov;
+		float py = ndcY * tanHalfFov;
+
+		Matrix* Mat = this->Transform._GetWorldMatrixPtr();
+		Vec3 forward = Mat->GetForward();
+		Vec3 right = Mat->GetRight();
+		Vec3 up = Mat->GetUp();
+
+		Vec3 dir =
+			(forward +
+				right * px +
+				up * py).Normalized();
+
+		Vec3 origin = this->GetWorldPosition();
+
+		return Ray(origin, dir);
 	}
 
 

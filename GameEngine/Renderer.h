@@ -639,6 +639,19 @@ namespace TerraPGE::Renderer
 		}
 
 
+		// TODO pass buffer params
+		void Render3DLine(Camera* Cam, Vec3 Start, Vec3 End, Color Color)
+		{
+			Vec2 P1;
+			Vec2 P2;
+
+			if (Cam->PointToScreen(Start, P1, Renderer::sx, Renderer::sy) && Cam->PointToScreen(End, P2, Renderer::sx, Renderer::sy))
+			{
+				Renderer::EngineGdi->DrawLine(P1.x, P1.y, P2.x, P2.y, PenPP((int)PenPPStyles::Solid, 2, RGB(Color.R, Color.G, Color.B)));
+			}
+		}
+
+
 		void DrawFpsCounter(WndCreator& Wnd, const float& Fps, const SIZE_T CurrMB, double FrameTime, double CpuUsage)
 		{
 #ifdef UNICODE
@@ -659,7 +672,7 @@ namespace TerraPGE::Renderer
 		}
 
 
-		void ClearScreen()
+		void ClearScreen(bool FullClear = false)
 		{
 			// clear the screen
 
@@ -667,6 +680,9 @@ namespace TerraPGE::Renderer
 			{
 				SetClearColor(BLACK_BRUSH);
 			}
+
+			if(FullClear)
+				Renderer::EngineGdi->Clear();
 
 			std::fill(Renderer::DepthBuffer, Renderer::DepthBuffer + Renderer::sx * Renderer::sy, 1.0f);
 			std::fill(Renderer::ShadowMap, Renderer::ShadowMap + Renderer::ShadowMapWidth * Renderer::ShadowMapHeight, 1.0f);

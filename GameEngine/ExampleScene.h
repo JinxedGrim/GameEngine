@@ -73,7 +73,7 @@ class ExampleScene : public TerraPGE::Scene
 		sl.Render = true;
 
 		this->LoadingMode++;
-		TerraPGE::UpdateLoadingScreen();
+		TerraPGE::UpdateLoadingScreen(Wnd, this);
 		this->Txt = Texture::Create("Test.bmp");
 		this->AK47 = DEBUG_NEW Mesh("AK47.obj");
 		this->Plane = DEBUG_NEW Mesh("FlatTerrain.obj");
@@ -83,14 +83,14 @@ class ExampleScene : public TerraPGE::Scene
 		this->CubeMsh = DEBUG_NEW Cube(1, 1, 1, CubeMat);
 		this->CubeMesh2 = DEBUG_NEW Cube(1, 1, 1, WorldBlockMat);
 		this->LoadingMode++;
-		TerraPGE::UpdateLoadingScreen();
+		TerraPGE::UpdateLoadingScreen(Wnd, this);
 
 		LockCamera = false;
 		this->MainCamera->SetLocalPosition(Vec3(0, 3, 0));
 		this->MainCamera->SetLocalViewAngles(Vec3(0, 0, 0));
 
 		this->LoadingMode++;
-		TerraPGE::UpdateLoadingScreen();
+		TerraPGE::UpdateLoadingScreen(Wnd, this);
 		CubeRender = DEBUG_NEW TerraPGE::Renderable(CubeMsh, this->MainCamera, Vec3(1.0f, 1.0f, 1.0f), Vec3(0.0f, 0.0f, 0.0f), Vec3(0.0f, 5.f, -4.0f), TerraPGE::EngineShaders::DefaultShader);
 		CubeRender->collider.PhysicsEnabled = false;
 		Ak47Render = DEBUG_NEW TerraPGE::Renderable(CubeMesh2, this->MainCamera, Vec3(1.0f, 1.0f, 1.0f), Vec3(0.0f, 0.0f, 0.0f), Vec3(0.0f, 6.f, 4.0f), TerraPGE::EngineShaders::DefaultShader);
@@ -100,19 +100,19 @@ class ExampleScene : public TerraPGE::Scene
 
 		AABBColliderParams params = Collider::CalculateAABB(Ak47Render->mesh->Triangles);
 		Ak47Render->AddAABBCollider(params, 1.0f, 0.2f, InitialVelocity);
-		Ak47Render->collider.body.KineticFriction = RUBBER_KINETIC_FRICTION;
-		Ak47Render->collider.body.restitution = 0.5f;
+		Ak47Render->collider.body.KineticFriction = ICE_KINETIC_FRICTION;
+		Ak47Render->collider.body.restitution = 0.35f;
 
 		params = Collider::CalculateAABB(PlaneRender->mesh->Triangles);
 		PlaneRender->AddAABBCollider(params, 1000.0f, 0.1f, Vec3(0.0f, 0.0f, 0.0f));
-		PlaneRender->collider.body.KineticFriction = WOOD_KINETIC_FRICTION;
+		PlaneRender->collider.body.KineticFriction = ICE_KINETIC_FRICTION;
 		PlaneRender->collider.PhysicsEnabled = false;
 
 		//this->SlRender = DEBUG_NEW TerraPGE::Renderable(&(sl.LightMesh), (this->MainCamera), Vec3(1.0f, 1.0f, 1.0f), Vec3(0.0f, 0.0f, 0.0f), sl.Transform.GetLocalPosition(), TerraPGE::EngineShaders::Shader_Frag_Phong, ShaderTypes::SHADER_FRAGMENT);
 		SettingsTh = std::thread(ExampleScene::Settings, this);
 
 		this->LoadingMode++;
-		TerraPGE::UpdateLoadingScreen();
+		TerraPGE::UpdateLoadingScreen(Wnd, this);
 
 		//for (int x = 0; x < 20; x++) 
 		//{
@@ -130,26 +130,30 @@ class ExampleScene : public TerraPGE::Scene
 
 	void DrawLoadingScreen(GdiPP* Gdi)
 	{
-		if (LoadingMode == 0)
+		std::stringstream str;
+
+		switch (LoadingMode)
 		{
-			Gdi->DrawStringA(TerraPGE::Renderer::sx / 2, TerraPGE::Renderer::sy / 2, "Loading Scene", RGB(255, 255, 255), TRANSPARENT);
+			case 0:
+				str << "Loadiing Scene";
+				break;
+			case 1:
+				str << "Loadiing Meshes";
+				break;
+			case 2:
+				str << "Creating Lighting Objs";
+				break;
+			case 3:
+				str << "Creating Objects And Calculating Bounding boxes";
+				break;
+			case 4:
+				str << TerraPGE::Renderer::TPGE_TEXT_COLOR_TOKEN  << "{255}{0}{0}" << "Spawning World";
+				break;
+			default:
+				break;
 		}
-		else if (LoadingMode == 1)
-		{
-			Gdi->DrawStringA(TerraPGE::Renderer::sx / 2, TerraPGE::Renderer::sy / 2, "Loading Meshes", RGB(255, 255, 255), TRANSPARENT);
-		}
-		else if (LoadingMode == 2)
-		{
-			Gdi->DrawStringA(TerraPGE::Renderer::sx / 2, TerraPGE::Renderer::sy / 2, "Creating Lights", RGB(255, 255, 255), TRANSPARENT);
-		}
-		else if (LoadingMode == 3)
-		{
-			Gdi->DrawStringA(TerraPGE::Renderer::sx / 2, TerraPGE::Renderer::sy / 2, "Creating Objects And Calculating Bounding boxes", RGB(255, 255, 255), TRANSPARENT);
-		}
-		else if (LoadingMode == 4)
-		{
-			Gdi->DrawStringA(TerraPGE::Renderer::sx / 2, TerraPGE::Renderer::sy / 2, "Spawning World", RGB(255, 0, 0), TRANSPARENT);
-		}
+
+		TerraPGE::Renderer::RenderingCore::RenderFormattedText(TerraPGE::Renderer::sx / 2, TerraPGE::Renderer::sy / 2, str.str(), RGB(255, 255, 255));
 	}
 
 
@@ -478,22 +482,15 @@ class ExampleScene : public TerraPGE::Scene
 	{
 		TerraPGE::Renderable* hovered = nullptr;
 		this->MainCamera->Transform.WalkTransformChain();
+		Ray ray = this->MainCamera->ScreenPointToRay(TerraPGE::Renderer::sx * 0.5f, TerraPGE::Renderer::sx * 0.5f, TerraPGE::Renderer::sx, TerraPGE::Renderer::sy);
 
 		for (TerraPGE::Renderable* obj : *ToRender)
 		{
-			Matrix inv = obj->Transform.GetWorldMatrix();
-			Vec3 Dir = this->MainCamera->GetLookDirection();
-			Vec3 Origin = this->MainCamera->Transform.GetWorldPosition();
-
-			if (!obj) continue;
-
-			Ray camRay = Ray(Origin, Dir);
-
 			RaycastHit Out;
-			if (RaycastMesh(camRay, obj->mesh->Triangles, &Out, &inv))
+
+			if (RaycastMesh(ray, obj->mesh->Triangles, &Out, obj->Transform._GetWorldMatrixPtr()))
 			{
-				if (Out.hit)
-					hovered = obj;
+				hovered = obj;
 			}
 		}
 
@@ -515,6 +512,7 @@ class ExampleScene : public TerraPGE::Scene
 		//}
 
 		this->AddLight(&Dl);
+
 		HoveredRend = GetHoveredObj(this->GetObjects());
 	}
 
@@ -658,7 +656,10 @@ class ExampleScene : public TerraPGE::Scene
 			{
 				outStr << MenuStr << TerraPGE::Renderer::TPGE_TEXT_NEW_LINE_TOKEN <<
 					EngineMenu << TerraPGE::Renderer::TPGE_TEXT_NEW_LINE_TOKEN <<
-					
+					CpuStr << TerraPGE::Renderer::CpuCores << TerraPGE::Renderer::TPGE_TEXT_NEW_LINE_TOKEN <<
+					SIMDStr << TerraPGE::Renderer::SimdInfo.GetSupportString() << TerraPGE::Renderer::TPGE_TEXT_NEW_LINE_TOKEN <<
+					TerraPGE::Renderer::TPGE_TEXT_NEW_LINE_TOKEN << TerraPGE::Renderer::TPGE_TEXT_NEW_LINE_TOKEN <<
+
 					FrameTimeStr << TerraPGE::FrameTime << TerraPGE::Renderer::TPGE_TEXT_NEW_LINE_TOKEN << 
 					PhysTimeStr << TerraPGE::PhysTime << TerraPGE::Renderer::TPGE_TEXT_NEW_LINE_TOKEN <<
 					EnvTimeStr << TerraPGE::Renderer::EnvironmentRendertime << TerraPGE::Renderer::TPGE_TEXT_NEW_LINE_TOKEN <<
@@ -666,15 +667,11 @@ class ExampleScene : public TerraPGE::Scene
 					MrTimeStr << TerraPGE::Renderer::RenderMeshTime << TerraPGE::Renderer::TPGE_TEXT_NEW_LINE_TOKEN <<
 					PrTimeStr << TerraPGE::Renderer::PresentTime << TerraPGE::Renderer::TPGE_TEXT_NEW_LINE_TOKEN << TerraPGE::Renderer::TPGE_TEXT_NEW_LINE_TOKEN  <<
 
-					CpuStr << TerraPGE::Renderer::CpuCores << TerraPGE::Renderer::TPGE_TEXT_NEW_LINE_TOKEN <<
-					SIMDStr << TerraPGE::Renderer::SimdInfo.GetSupportString() << TerraPGE::Renderer::TPGE_TEXT_NEW_LINE_TOKEN <<
-					TerraPGE::Renderer::TPGE_TEXT_NEW_LINE_TOKEN <<
 					MultiThreadingStr << TerraPGE::Core::DoMultiThreading << TerraPGE::Renderer::TPGE_TEXT_NEW_LINE_TOKEN <<
 					SimdAccelStr << TerraPGE::Core::SimdAcceleration << TerraPGE::Renderer::TPGE_TEXT_NEW_LINE_TOKEN <<
 					PhysicsEngineStr << TerraPGE::DoPhysics << TerraPGE::Renderer::TPGE_TEXT_NEW_LINE_TOKEN;
 
-				Gdi->DrawStringW(20, 200, GpuStr + TerraPGE::Renderer::RenderingUtils::Profiler::GetDevList(), RGB(255, 0, 0), TRANSPARENT);
-
+				Gdi->DrawStringW(20, 120, GpuStr + TerraPGE::Renderer::RenderingUtils::Profiler::GetDevList(), RGB(255, 0, 0), TRANSPARENT);
 				TerraPGE::Renderer::RenderingCore::RenderFormattedText(20, 40, outStr.str(), RGB(255, 0, 0));
 			}
 			else if (DebugMenuTab == 2)

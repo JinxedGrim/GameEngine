@@ -15,18 +15,8 @@ namespace TerraPGE::Physics
         float FallbackHeight = 0.0f;
     };
 
-    const static Vec3 GRAVITY_ACCELERATION_VECTOR = Vec3(0, -9.81, 0);  // m/s²
+    static Vec3 GRAVITY_ACCELERATION_VECTOR = Vec3(0, -9.81, 0);  // m/s²
 
-    //float GetFloorHeight(const Vec3& pos, Collider* self, const std::vector<Collider*>& World)
-    //{
-    //    Ray r(pos, Vec3(0, -1, 0));
-    //    RaycastHit hit;
-
-    //    if (Raycast(r, world, hit))
-    //        return hit.point.y;
-    //
-    //    return -INFINITY; // no floor
-    //}
 
     inline float KineticFrictionAverage(float mu1, float mu2)
     {
@@ -96,7 +86,7 @@ namespace TerraPGE::Physics
     }
 
 
-    __inline Vec3 IntegrateRestitution(const Vec3& Velocity, const Vec3&  CollisionNormal, const float& Restitution, float Dt)
+    __inline Vec3 IntegrateRestitution(const Vec3& Velocity, const Vec3&  CollisionNormal, const float& Restitution, const float Dt)
     {
         Vec3 VelocityDelta = Vec3(0.0f,  0.0f, 0.0f);
         float vn = Velocity.Dot(CollisionNormal);
@@ -110,45 +100,54 @@ namespace TerraPGE::Physics
     }
 
 
+    __inline Vec3 IntegrateDrag()
+    {
+
+    }
+
+
     void Integrate(Collider* collider, float dt, Collider* Floor, const RaycastHit* FloorHit, bool ApplyGravity = true)
     {
         // if velocity ==  0.0f sleep the obj
 
-        if (!collider->PhysicsEnabled)
+        if (!collider->PhysicsEnabled || collider->type == ColliderType::None)
             return;
 
-        // Apply gravity only if not grounded
         if (ApplyGravity && !collider->body.IsGrounded)
             collider->body.Velocity += IntegrateGravity(dt);
-        
-        if (collider->body.IsGrounded)
+
+        if (collider->body.IsGrounded && collider->body.Velocity != Vec3(0.0f, 0.0f, 0.0f))
             collider->body.Velocity += IntegrateFriction(collider->body.KineticFriction, Floor->body.KineticFriction, collider->body.mass, dt, collider->body.Velocity);
 
-        if (collider->type == ColliderType::None)
-            return;
-
         Vec3 PredictedPosition = collider->GetPosition() + IntegrateVelocity(collider->body.Velocity, dt);
+        collider->SetPosition(PredictedPosition);
 
+        //TODO Maybe not do this (instant update)
         collider->body.IsGrounded = false;
+        collider->IsColliding = false;
 
         // Ground collision
         if (Floor && collider->TestCollision(Floor))
         {
             PredictedPosition.y = FloorHit->point.y;
-            collider->body.Velocity.y = 0.0f;
 
             if (collider->body.Velocity.y < 0.0f)
             {
-                Vec3 RestitutionVelocity = IntegrateRestitution(collider->body.Velocity, FloorHit->normal, collider->body.restitution, dt);
+                collider->body.IsGrounded = true;
 
-                collider->body.Velocity += RestitutionVelocity;
-
-                if (std::abs(collider->body.Velocity.y) < 0.05f) // small threshold
+                if (collider->body.restitution > 0.0f)
                 {
-                    collider->body.Velocity.y = 0.0f;
-                    collider->body.IsGrounded = true;
+                    Vec3 RestitutionVelocity = IntegrateRestitution(collider->body.Velocity, FloorHit->normal, collider->body.restitution, dt);
+                    collider->body.Velocity += RestitutionVelocity;
+
+                    if (std::abs(collider->body.Velocity.y) < 0.05f) // small threshold
+                        collider->body.Velocity.y = 0.0f;
+                    else
+                        collider->body.IsGrounded = false;
                 }
             }
+
+            collider->IsColliding = true;
         }
 
         //set y
