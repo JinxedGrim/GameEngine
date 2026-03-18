@@ -269,18 +269,24 @@ bool RayIntersectsCapsule(const Ray& ray, const Vec3& p0, const Vec3& p1, float 
 
 // this overload is meant only to be used for a WorldRay && local set of triangles
 // it will first transform the ray into the objects space then it will it preform the ray cast
-bool RaycastMesh(Ray ray, const std::vector<Triangle>& triangles, RaycastHit* outHit, Matrix* ObjectWorld)
+bool RaycastMesh(Ray ray, const std::vector<Triangle>& triangles, RaycastHit* outHit, const Matrix* ObjectWorld)
 {
 	bool foundHit = false;
 	float closest = FLT_MAX;
 
 	Matrix InverseWorld = ObjectWorld->Inversed();
 	Matrix3x3 normalMatrix = ObjectWorld->GetBasis3x3();
+	Matrix3x3 InvNormal = normalMatrix.Inversed();
+
 
 	RaycastHit temp;
 	Vec3 worldRayOrigin = ray.origin;
-	ray.origin = ray.origin * InverseWorld;
-	ray.direction = (ray.direction * normalMatrix.Inversed()).Normalized();
+	Vec3 worldRayDir = ray.direction;
+
+	Matrix Inv = ObjectWorld->Inversed();  // full 4x4 affine inverse
+	ray.origin = Vec4(ray.origin, 1.0f) * Inv;          // full affine
+	ray.direction = ray.direction * Inv.GetBasis3x3();     // w=0, ignore translation
+	ray.direction.Normalize();
 
 	for (const Triangle& tri : triangles)
 	{
@@ -294,6 +300,12 @@ bool RaycastMesh(Ray ray, const std::vector<Triangle>& triangles, RaycastHit* ou
 			{
 				closest = temp.distance;
 				*outHit = temp;
+				std::stringstream str;
+				str << "World Matrix Translation: " <<  ObjectWorld->GetTranslation() << "World Matrix Basis: {R: {" << ObjectWorld->GetRight() << "}, "  << " U: {" << ObjectWorld->GetUp() << "}, " << "F: {" << ObjectWorld->GetForward() << "}, " << "Inv Matrix Basis: {R: {" << Inv.GetRight() << "}, " << " U: {" << Inv.GetUp() << "}, " << "F: {" << Inv.GetForward() << "}, " << "\n";
+				str << "World Ray origin: " << worldRayOrigin << " local Direction: " << worldRayDir << "\n";
+				str << "local ray  origin: " << ray.origin << " local Direction: " << ray.direction << " \nRayCast: {HitPoint: " << temp.point << ", Normal: " << temp.normal << "}";
+
+				TerraPGE::Core::Log(str.str());
 				foundHit = true;
 			}
 		}

@@ -333,6 +333,19 @@ public:
 
 		return Ray(origin, dir);
 	}
+	
+
+	void PointAt(const Vec3& TargetPos)
+	{
+		this->Transform.WalkTransformChain();
+		Vec3 Direction = (this->Transform.GetWorldPosition() - TargetPos).Normalized();
+
+		float yaw = ToDegree(atan2(-Direction.x, -Direction.z));
+		float pitch = ToDegree(-asin(Direction.y));
+
+
+		this->Transform.SetWorldEulerAngles({pitch, yaw, 0.0f});
+	}
 
 
 	Matrix3x3 GetRotationMatrix()

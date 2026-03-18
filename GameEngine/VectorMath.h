@@ -7,11 +7,11 @@ constexpr float ToDegree(float r) { return r * (180.0f / PI); }
 constexpr float ToRad(float d) { return d * (PI / 180.0f); }
 
 #ifndef ToDegreeD
-#define ToDegreeD(Deg) (double)((Deg) * (180.0 / PI))
+#define ToDegreeD(Deg) (double)(((double)Deg) * (180.0 / PI))
 #endif
 
 #ifndef ToRadD
-#define ToRadD(Rad) (double)((Rad) * (PI / 180.0))
+#define ToRadD(Rad) (double)(((double)Rad) * (PI / 180.0))
 #endif
 
 #define FLOAT_LOWEST 0.0000001f 

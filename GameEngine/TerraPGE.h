@@ -157,10 +157,14 @@ namespace TerraPGE
 					Vec3 max = c->GetPosition() + c->_AABBParams.offset + c->_AABBParams.halfExtents * c->GetParentScale();
 					Vec3 col = { 0.0f, 0.0f,  0.0f };
 
-					if(c->IsColliding)
+					if (!c->PhysicsEnabled)
+						col = { 1, 1, 1 };
+					else if (c->body.Velocity == Vec3(0.0f, 0.0f, 0.0f))
+						col = { 0,  255, 255 };
+					else if(c->IsColliding)
 						col = { 255,  0, 0 };
 					else
-						col = { 0.0f,  255, 255 };
+						col = { 0,  255, 0 };
 
 					Vec3 v0 = { min.x, min.y, min.z };
 					Vec3 v1 = { max.x, min.y, min.z };

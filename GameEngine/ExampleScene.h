@@ -97,11 +97,11 @@ class ExampleScene : public TerraPGE::Scene
 		PlaneRender = DEBUG_NEW TerraPGE::Renderable(Plane, this->MainCamera, Vec3(2.0f, 1.0f, 2.0f), Vec3(0.0f, 0.0f, 0.0f), Vec3(0.0f, 0.0f, 0.0f), TerraPGE::EngineShaders::DefaultShader);
 		//TerraPGE::EngineShaders::Shader_Frag_Phong         Shader_Texture_Only
 		CubeRender->mesh->MeshName = "SmileCube";
-
 		AABBColliderParams params = Collider::CalculateAABB(Ak47Render->mesh->Triangles);
 		Ak47Render->AddAABBCollider(params, 1.0f, 0.2f, InitialVelocity);
 		Ak47Render->collider.body.KineticFriction = ICE_KINETIC_FRICTION;
 		Ak47Render->collider.body.restitution = 0.35f;
+		CubeRender->AddAABBCollider(params, 5, 0.5f);
 
 		params = Collider::CalculateAABB(PlaneRender->mesh->Triangles);
 		PlaneRender->AddAABBCollider(params, 1000.0f, 0.1f, Vec3(0.0f, 0.0f, 0.0f));
@@ -244,7 +244,7 @@ class ExampleScene : public TerraPGE::Scene
 		if (Wnd.Input.IsKeyDown('C'))
 		{
 			CubeRender->Transform.WalkTransformChain();
-			//Cam->Transform.PointAt(CubeRender->Transform.GetWorldPosition(), Cam->CamUp);
+			MainCamera->PointAt(CubeRender->Transform.GetWorldPosition());
 		}
 
 		if (Wnd.Input.IsKeyPressed(Inputs::TAB))
@@ -267,7 +267,7 @@ class ExampleScene : public TerraPGE::Scene
 			}
 		}
 
-		if (GetAsyncKeyState(VK_F2))
+		if (Wnd.Input.IsKeyPressed(VK_F2))
 		{
 			float fov = this->MainCamera->GetFov();
 			switch (this->DebugMenuTab)
@@ -292,7 +292,7 @@ class ExampleScene : public TerraPGE::Scene
 			}
 		}
 
-		if (GetAsyncKeyState(VK_F3))
+		if (Wnd.Input.IsKeyPressed(VK_F3))
 		{
 			switch (this->DebugMenuTab)
 			{
@@ -449,7 +449,7 @@ class ExampleScene : public TerraPGE::Scene
 			//Cam->Transform.SetLocalPosition(-((Vec3(0.0f, 0.0f, 0.0f) - LightSrcPos).Normalized()) * 100.0f);
 		}
 
-		if (Wnd.Input.IsKeyDown('P'))
+		if (Wnd.Input.IsKeyPressed('P'))
 		{
 			TerraPGE::DoPhysics = !TerraPGE::DoPhysics;
 		}
@@ -482,7 +482,12 @@ class ExampleScene : public TerraPGE::Scene
 	{
 		TerraPGE::Renderable* hovered = nullptr;
 		this->MainCamera->Transform.WalkTransformChain();
-		Ray ray = this->MainCamera->ScreenPointToRay(TerraPGE::Renderer::sx * 0.5f, TerraPGE::Renderer::sx * 0.5f, TerraPGE::Renderer::sx, TerraPGE::Renderer::sy);
+		Ray ray = this->MainCamera->ScreenPointToRay(TerraPGE::Renderer::sx * 0.5f, TerraPGE::Renderer::sy * 0.5f, TerraPGE::Renderer::sx, TerraPGE::Renderer::sy);
+
+		ray.origin = this->MainCamera->Transform.GetWorldPosition();
+		ray.direction = this->MainCamera->Transform.GetWorldMatrix().GetForward().Normalized();
+
+		float Closest = FLT_MAX;
 
 		for (TerraPGE::Renderable* obj : *ToRender)
 		{
@@ -490,7 +495,11 @@ class ExampleScene : public TerraPGE::Scene
 
 			if (RaycastMesh(ray, obj->mesh->Triangles, &Out, obj->Transform._GetWorldMatrixPtr()))
 			{
-				hovered = obj;
+				if (Out.distance < Closest)
+				{
+					Closest = Out.distance;
+					hovered = obj;
+				}
 			}
 		}
 

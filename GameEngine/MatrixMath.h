@@ -94,69 +94,81 @@ public:
 
 	__inline Vec3 GetUp() const
 	{
-		return Vec3(this->_matrix[1][0], this->_matrix[1][1], this->_matrix[1][2]);
+		return Vec3(this->_21, this->_22, this->_23);
 	}
 
 
 	__inline Vec3 GetForward() const
 	{
-		return Vec3(this->_matrix[2][0], this->_matrix[2][1], this->_matrix[2][2]);
+		return Vec3(this->_31, this->_32, this->_33);
+	}
+
+	__inline Vec3 ExtractScale()
+	{
+		Vec3 X = this->GetRight();
+		Vec3 Y = this->GetUp();
+		Vec3 Z = this->GetForward();
+
+		return Vec3(
+			X.Magnitude(),
+			Y.Magnitude(),
+			Z.Magnitude()
+		);
 	}
 	
 
 	void Inverse()
 	{
-		float a = this->_11, b = this->_12, c = this->_13;
-		float d = this->_21, e = this->_22, f = this->_23;
-		float g = this->_31, h = this->_32, i = this->_33;
+		Vec3 scale = ExtractScale(); // row lengths
 
-		float det =
-			a * (e * i - f * h)
-			- b * (d * i - f * g)
-			+ c * (d * h - e * g);
+		Vec3 rowX(_11, _12, _13);
+		Vec3 rowY(_21, _22, _23);
+		Vec3 rowZ(_31, _32, _33);
 
-		float invDet = 1.0f / det;
+		// Isolate rotation
+		rowX = rowX / scale.x;
+		rowY = rowY / scale.y;
+		rowZ = rowZ / scale.z;
 
-		this->_11 = (e * i - f * h) * invDet;
-		this->_12 = -(b * i - c * h) * invDet;
-		this->_13 = (b * f - c * e) * invDet;
+		// Transpose = rotation inverse
+		Matrix3x3 rotInv;
+		rotInv._11 = rowX.x; rotInv._12 = rowY.x; rotInv._13 = rowZ.x;
+		rotInv._21 = rowX.y; rotInv._22 = rowY.y; rotInv._23 = rowZ.y;
+		rotInv._31 = rowX.z; rotInv._32 = rowY.z; rotInv._33 = rowZ.z;
 
-		this->_21 = -(d * i - f * g) * invDet;
-		this->_22 = (a * i - c * g) * invDet;
-		this->_23 = -(a * f - c * d) * invDet;
+		// Apply scale inverse along columns
+		rotInv._11 /= scale.x; rotInv._21 /= scale.x; rotInv._31 /= scale.x; // X column
+		rotInv._12 /= scale.y; rotInv._22 /= scale.y; rotInv._32 /= scale.y; // Y column
+		rotInv._13 /= scale.z; rotInv._23 /= scale.z; rotInv._33 /= scale.z; // Z column
 
-		this->_31 = (d * h - e * g) * invDet;
-		this->_32 = -(a * h - b * g) * invDet;
-		this->_33 = (a * e - b * d) * invDet;
+		*this = rotInv;
 	}
 
 	Matrix3x3 Inversed()
 	{
-		float a = this->_11, b = this->_12, c = this->_13;
-		float d = this->_21, e = this->_22, f = this->_23;
-		float g = this->_31, h = this->_32, i = this->_33;
+		Vec3 scale = ExtractScale(); // row lengths
 
-		float det =
-			a * (e * i - f * h)
-			- b * (d * i - f * g)
-			+ c * (d * h - e * g);
+		Vec3 rowX(_11, _12, _13);
+		Vec3 rowY(_21, _22, _23);
+		Vec3 rowZ(_31, _32, _33);
 
-		float invDet = 1.0f / det;
+		// Isolate rotation
+		rowX = rowX / scale.x;
+		rowY = rowY / scale.y;
+		rowZ = rowZ / scale.z;
 
-		Matrix3x3 Out;
-		Out._11 = (e * i - f * h) * invDet;
-		Out._12 = -(b * i - c * h) * invDet;
-		Out._13 = (b * f - c * e) * invDet;
+		// Transpose = rotation inverse
+		Matrix3x3 rotInv;
+		rotInv._11 = rowX.x; rotInv._12 = rowY.x; rotInv._13 = rowZ.x;
+		rotInv._21 = rowX.y; rotInv._22 = rowY.y; rotInv._23 = rowZ.y;
+		rotInv._31 = rowX.z; rotInv._32 = rowY.z; rotInv._33 = rowZ.z;
 
-		Out._21 = -(d * i - f * g) * invDet;
-		Out._22 = (a * i - c * g) * invDet;
-		Out._23 = -(a * f - c * d) * invDet;
+		// Apply scale inverse along **rows**, not columns
+		rotInv._11 /= scale.x; rotInv._21 /= scale.x; rotInv._31 /= scale.x; // X column
+		rotInv._12 /= scale.y; rotInv._22 /= scale.y; rotInv._32 /= scale.y; // Y column
+		rotInv._13 /= scale.z; rotInv._23 /= scale.z; rotInv._33 /= scale.z; // Z column
 
-		Out._31 = (d * h - e * g) * invDet;
-		Out._32 = -(a * h - b * g) * invDet;
-		Out._33 = (a * e - b * d) * invDet;
-
-		return Out;
+		return rotInv;
 	}
 };
 
@@ -242,7 +254,7 @@ public:
 
 	__inline Vec3 GetUp() const
 	{
-		return Vec3(_matrix[1][0], _matrix[1][1], _matrix[1][2]);
+		return Vec3(_21, _22, _23);
 	}
 
 
@@ -504,8 +516,8 @@ public:
 	}
 
 
-	// General 3x3 inverse
-	Matrix3x3 Inverse3x3()
+	// General 3x3 inverse (UNIFORM SCALING _ONLY)
+	Matrix3x3 UniformInverse3x3() const
 	{
 		float a = this->_11, b = this->_12, c = this->_13;
 		float d = this->_21, e = this->_22, f = this->_23;
@@ -543,11 +555,11 @@ public:
 
 
 	// works for affine transforms only 
-	Matrix Inversed()
+	Matrix Inversed() const
 	{
 		Matrix out;
 
-		Matrix3x3 Upper = this->Inverse3x3();
+		Matrix3x3 Upper = this->GetBasis3x3().Inversed();
 
 		Vec3 NewTrans = -(this->GetTranslation() * Upper);
 
@@ -558,11 +570,9 @@ public:
 	}
 
 
-	// works for affine transforms only 
 	void Inverse()
 	{
-
-		Matrix3x3 Upper = this->Inverse3x3();
+		Matrix3x3 Upper = this->GetBasis3x3().Inversed();
 
 		Vec3 NewTrans = -(this->GetTranslation() * Upper);
 
