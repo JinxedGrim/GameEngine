@@ -119,56 +119,68 @@ public:
 
 	void Inverse()
 	{
-		Vec3 scale = ExtractScale(); // row lengths
+		float a = _11, b = _12, c = _13;
+		float d = _21, e = _22, f = _23;
+		float g = _31, h = _32, i = _33;
 
-		Vec3 rowX(_11, _12, _13);
-		Vec3 rowY(_21, _22, _23);
-		Vec3 rowZ(_31, _32, _33);
+		float det =
+			a * (e * i - f * h)
+			- b * (d * i - f * g)
+			+ c * (d * h - e * g);
 
-		// Isolate rotation
-		rowX = rowX / scale.x;
-		rowY = rowY / scale.y;
-		rowZ = rowZ / scale.z;
+		if (fabs(det) < 1e-8f)
+			*this = Matrix3x3::Identity(); // or assert
 
-		// Transpose = rotation inverse
-		Matrix3x3 rotInv;
-		rotInv._11 = rowX.x; rotInv._12 = rowY.x; rotInv._13 = rowZ.x;
-		rotInv._21 = rowX.y; rotInv._22 = rowY.y; rotInv._23 = rowZ.y;
-		rotInv._31 = rowX.z; rotInv._32 = rowY.z; rotInv._33 = rowZ.z;
+		float invDet = 1.0f / det;
 
-		// Apply scale inverse along columns
-		rotInv._11 /= scale.x; rotInv._21 /= scale.x; rotInv._31 /= scale.x; // X column
-		rotInv._12 /= scale.y; rotInv._22 /= scale.y; rotInv._32 /= scale.y; // Y column
-		rotInv._13 /= scale.z; rotInv._23 /= scale.z; rotInv._33 /= scale.z; // Z column
+		Matrix3x3 out;
 
-		*this = rotInv;
+		out._11 = (e * i - f * h) * invDet;
+		out._12 = (c * h - b * i) * invDet;
+		out._13 = (b * f - c * e) * invDet;
+
+		out._21 = (f * g - d * i) * invDet;
+		out._22 = (a * i - c * g) * invDet;
+		out._23 = (c * d - a * f) * invDet;
+
+		out._31 = (d * h - e * g) * invDet;
+		out._32 = (b * g - a * h) * invDet;
+		out._33 = (a * e - b * d) * invDet;
+
+		*this = out;
 	}
 
 	Matrix3x3 Inversed()
 	{
-		Vec3 scale = ExtractScale(); // row lengths
+		float a = _11, b = _12, c = _13;
+		float d = _21, e = _22, f = _23;
+		float g = _31, h = _32, i = _33;
 
-		Vec3 rowX(_11, _12, _13);
-		Vec3 rowY(_21, _22, _23);
-		Vec3 rowZ(_31, _32, _33);
+		float det =
+			a * (e * i - f * h)
+			- b * (d * i - f * g)
+			+ c * (d * h - e * g);
 
-		// Isolate rotation
-		rowX = rowX / scale.x;
-		rowY = rowY / scale.y;
-		rowZ = rowZ / scale.z;
+		if (fabs(det) < 1e-8f)
+			return Matrix3x3::Identity(); // or assert
 
-		// Transpose = rotation inverse
-		Matrix3x3 rotInv;
-		rotInv._11 = rowX.x; rotInv._12 = rowY.x; rotInv._13 = rowZ.x;
-		rotInv._21 = rowX.y; rotInv._22 = rowY.y; rotInv._23 = rowZ.y;
-		rotInv._31 = rowX.z; rotInv._32 = rowY.z; rotInv._33 = rowZ.z;
+		float invDet = 1.0f / det;
 
-		// Apply scale inverse along **rows**, not columns
-		rotInv._11 /= scale.x; rotInv._21 /= scale.x; rotInv._31 /= scale.x; // X column
-		rotInv._12 /= scale.y; rotInv._22 /= scale.y; rotInv._32 /= scale.y; // Y column
-		rotInv._13 /= scale.z; rotInv._23 /= scale.z; rotInv._33 /= scale.z; // Z column
+		Matrix3x3 out;
 
-		return rotInv;
+		out._11 = (e * i - f * h) * invDet;
+		out._12 = (c * h - b * i) * invDet;
+		out._13 = (b * f - c * e) * invDet;
+
+		out._21 = (f * g - d * i) * invDet;
+		out._22 = (a * i - c * g) * invDet;
+		out._23 = (c * d - a * f) * invDet;
+
+		out._31 = (d * h - e * g) * invDet;
+		out._32 = (b * g - a * h) * invDet;
+		out._33 = (a * e - b * d) * invDet;
+
+		return out;
 	}
 };
 
@@ -548,11 +560,12 @@ public:
 	}
 
 
-	void SetBasis(const Matrix3x3* Basis)
+	void SetBasis(const Matrix3x3* B)
 	{
-		std::memcpy(_matrix, Basis->_matrix, sizeof(Basis->_matrix));
+		_11 = B->_11; _12 = B->_12; _13 = B->_13;
+		_21 = B->_21; _22 = B->_22; _23 = B->_23;
+		_31 = B->_31; _32 = B->_32; _33 = B->_33;
 	}
-
 
 	// works for affine transforms only 
 	Matrix Inversed() const

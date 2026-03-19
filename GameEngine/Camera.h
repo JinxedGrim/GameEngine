@@ -40,14 +40,17 @@ private:
 
 	CameraStyles _cameraStyle = CameraStyles::FirstPerson;
 
+
 	void __inline __fastcall CalcCamViewMatrix(const Vec3& TargetPos)
 	{
 		this->ViewMatrix = Matrix::CalcViewMatrix(this->Transform.GetWorldPosition(), TargetPos, this->CamUp);
 	}
 
+
 public:
 
 	float Velocity = 8.0f;
+
 
 	Camera() = delete;
 
@@ -71,6 +74,7 @@ public:
 		this->GetViewMatrix();
 		this->GetProjectionMatrix();
 	}
+
 
 	Camera(float Top, float Bottom, float Left, float Right, float AspectRatio, float Fov, float Near, float Far) : GameObject(Vec3(0, 0, 0))
 	{
@@ -214,7 +218,7 @@ public:
 			switch (this->_cameraStyle)
 			{
 			case CameraStyles::FirstPerson:
-				this->ViewMatrix = this->Transform.Local.CalcInverseView(this->CamUp);
+				this->ViewMatrix = this->Transform.GetWorldMatrix().CalcInverseView(this->CamUp);
 				break;
 			case CameraStyles::Orthographic:
 				this->ViewMatrix = Matrix::CalcViewMatrix(((this->CenterPoint - this->Transform.GetLocalPosition()).Normalized()) * 50.0f, Vec3(0.0f, 0.0f, 0.0f), Vec3(0, 1, 0));
@@ -257,10 +261,16 @@ public:
 	}
 
 
-	Vec3 GetLookDirection() const
+	Vec3 GetLookDirection()
 	{
 		return Vec3::EulerToDirection(this->Transform.GetWorldRotation());
 		//return this->GetForward().Normalized();
+	}
+
+
+	Vec3  GetWorldLookDirection()
+	{
+		return this->Transform._GetWorldMatrixPtr()->GetForward();
 	}
 
 
@@ -288,6 +298,7 @@ public:
 		this->IsViewDirty = true;
 	}
 
+
 	bool PointToScreen(const Vec3& P, Vec2& Out, SIZE_T BufferWidth, SIZE_T BufferHeight)
 	{
 		Vec4 clip = Vec4(P, 1.0f) * (this->GetViewMatrix());
@@ -307,14 +318,15 @@ public:
 		return true;
 	}
 
+
 	Ray ScreenPointToRay(float sx, float sy, int width, int height)
 	{
 		float ndcX = (2.0f * sx / width) - 1.0f;
-		float ndcY = (2.0f * sy / height) - 1.0f;
+		float ndcY = 1.0f - (2.0f * sy / height);
 
 		float aspect = (float)width / (float)height;
 
-		float tanHalfFov = tanf(this->Fov * 0.5f);
+		float tanHalfFov = tanf(ToRad(this->Fov * 0.5f));
 
 		float px = ndcX * aspect * tanHalfFov;
 		float py = ndcY * tanHalfFov;
@@ -337,7 +349,6 @@ public:
 
 	void PointAt(const Vec3& TargetPos)
 	{
-		this->Transform.WalkTransformChain();
 		Vec3 Direction = (this->Transform.GetWorldPosition() - TargetPos).Normalized();
 
 		float yaw = ToDegree(atan2(-Direction.x, -Direction.z));

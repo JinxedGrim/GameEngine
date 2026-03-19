@@ -149,7 +149,7 @@ namespace TerraPGE::Renderer
 			for (int i = 0; i < LightCount; i++)
 			{
 				LightObject* Light = SceneLights[i];
-				Light->Transform.WalkTransformChain();
+				Light->Transform.UpdateTransformChain();
 				Light->CalcVpMats();
 			}
 		}
@@ -821,7 +821,8 @@ namespace TerraPGE::Renderer
 			{
 				// 3D Space / World Space
 				Triangle Proj = Tri;
-				Proj.ApplyMatrix(Object->Transform.World);
+				Matrix ObjWorld = Object->Transform.GetWorldMatrix();
+				Proj.ApplyMatrix(ObjWorld);
 
 				for (int i = 0; i < 3; i++)
 				{
@@ -1531,12 +1532,13 @@ namespace TerraPGE::Renderer
 			for (int objIdx = 0; objIdx < ObjectCount; objIdx++)
 			{
 				Renderable* Object = SceneObjects[objIdx];
+				Matrix ObjWorld = Object->Transform.GetWorldMatrix();
 
 				for (const Triangle& Tri : Object->mesh->Triangles)
 				{
 					// 3D Space / World Space
 					Triangle Proj = Tri;
-					Proj.ApplyMatrix(Object->Transform.World);
+					Proj.ApplyMatrix(ObjWorld);
 
 					for (int i = 0; i < 3; i++)
 					{

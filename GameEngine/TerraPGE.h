@@ -361,10 +361,9 @@ namespace TerraPGE
 
 			for (Renderable* Obj : Roots)
 			{
-				Obj->Transform.WalkTransformChain();
+				Obj->Transform.UpdateTransformChain();
 			}
 
-			CurrScene->MainCamera->Transform.WalkTransformChain();
 			PhysTime = Timer.Stop();
 
 			Timer.Start();

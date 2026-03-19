@@ -29,6 +29,13 @@
 #define PLASTIC_STATIC_FRICTION 0.4
 #define RUBBER_SOFT_STATIC_FRICTION 1.0
 
+#define COLLISION_EPSILON 1e-6f
+
+#define COLLISION_MASK_EVERYTHING 0xFFFFFFFF
+
+#define LayerIdxToBits(a) 1 << a
+#define DEFAULT_LAYER LayerIdxToBits(0)
+
 class RigidBody
 {
 public:
@@ -103,6 +110,8 @@ public:
     bool IsColliding = false;
 	RigidBody body; // maybe just a pointer to the renderable (or mesh) rigidbody
 	bool PhysicsEnabled = false;
+    uint32_t Layer = DEFAULT_LAYER;
+    uint32_t Mask = COLLISION_MASK_EVERYTHING;
 	// TODO Breaak these up to seperate classes use polymorphism prolly
     SphereColliderParams  _sphereParams = { 0.0f, {0.0f,0.0f,0.0f} };
 	AABBColliderParams    _AABBParams = { {0.0f,0.0f,0.0f}, {0.0f,0.0f,0.0f} };
@@ -121,11 +130,13 @@ public:
 	}
 
 
-	Collider(RigidBody body, ColliderType Type, ObjectTransform* Transform, void* Params = nullptr)
+	Collider(RigidBody body, ColliderType Type, ObjectTransform* Transform, uint32_t Layer = DEFAULT_LAYER, uint32_t Mask = COLLISION_MASK_EVERYTHING, void* Params = nullptr)
 	{
 		this->type = Type;
 		this->body = body;
         this->Transform = Transform;
+        this->Layer = Layer;
+        this->Mask = Mask;
 
 		if (Params == nullptr)
 			return;
@@ -163,10 +174,36 @@ public:
 	}
 
 
+    inline static bool CanCollide(const Collider* a, const Collider* b)
+    {
+        return (a->Mask & b->Layer) && (b->Mask & a->Layer);
+    }
+
+    inline static bool CanCollide(const Collider* a, uint32_t bLayer, uint32_t bMask)
+    {
+        return (a->Mask & bLayer) && (bMask & a->Layer);
+    }
+
+
+    inline bool CanCollide(uint32_t bLayer, uint32_t bMask) const
+    {
+        return (this->Mask & bLayer) && (bMask & this->Layer);
+    }
+
+
+    inline bool CanCollide(const Collider* b) const
+    {
+        return (this->Mask & b->Layer) && (b->Mask & this->Layer);
+    }
+
+
 	bool TestCollision(const Collider* other)  const
 	{
         if (other == nullptr || other->Transform == nullptr)
             return false;
+
+        if (!CanCollide(this, other))
+            return  false;
 
         switch (this->type)
         {
@@ -179,8 +216,11 @@ public:
 	}
 
 
-    bool TestCollision(const Ray* ray, RaycastHit* OutHit)  const
+    bool TestCollision(const Ray* ray, RaycastHit* OutHit, uint32_t RayLayer = DEFAULT_LAYER,  uint32_t RayMask = COLLISION_MASK_EVERYTHING)  const
     {
+        if (!CanCollide(this, RayLayer, RayMask))
+            return false;
+
         switch (this->type)
         {
             case ColliderType::Sphere:   return RayIntersectsSphere(*ray, this->GetPosition() + this->_sphereParams.Offset, _sphereParams.radius, OutHit);
@@ -194,6 +234,9 @@ public:
 
     static bool TestCollision(const Collider* A, const Collider* B) 
     {
+        if (!CanCollide(A, B))
+            return  false;
+
         switch (A->type)
         {
         case ColliderType::Sphere:   return A->TestSphere(B);
@@ -791,9 +834,9 @@ private:
 
         case ColliderType::OBB:
             return AABBvOBB(
-                p1, o->_AABBParams.halfExtents * o->GetParentScale(),
+                p1, e1,
                 o->GetPosition() + o->_OBBParams.offset,
-                e1,
+                o->_OBBParams.halfExtents * o->GetParentScale(),
                 o->_OBBParams.orientation
             );
 

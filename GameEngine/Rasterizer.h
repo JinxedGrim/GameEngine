@@ -308,7 +308,8 @@ namespace TerraPGE::Renderer
 
 				for (int i = 0; i < 3; i++)
 				{
-					WorldSpaceTri.VertexNormals[i] *= Object->Transform.Normal;
+					WorldSpaceTri.VertexNormals[i] *= Object->Transform.GetNormalMatrix();
+					WorldSpaceTri.VertexNormals[i].Normalize();
 				}
 
 				WorldSpaceTri.NormalPositions[0] = NormPos;
@@ -319,10 +320,9 @@ namespace TerraPGE::Renderer
 			}
 			else
 			{
-				TriNormal *= Object->Transform.Normal;
 				for (int i = 0; i < 3; i++)
 				{
-					WorldSpaceTri.VertexNormals[i] *= Object->Transform.Normal;
+					WorldSpaceTri.VertexNormals[i] *= Object->Transform.GetNormalMatrix();
 				}
 
 				NormDir = WorldSpaceTri.FaceNormal;

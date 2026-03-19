@@ -278,15 +278,11 @@ bool RaycastMesh(Ray ray, const std::vector<Triangle>& triangles, RaycastHit* ou
 	Matrix3x3 normalMatrix = ObjectWorld->GetBasis3x3();
 	Matrix3x3 InvNormal = normalMatrix.Inversed();
 
-
 	RaycastHit temp;
 	Vec3 worldRayOrigin = ray.origin;
-	Vec3 worldRayDir = ray.direction;
 
-	Matrix Inv = ObjectWorld->Inversed();  // full 4x4 affine inverse
-	ray.origin = Vec4(ray.origin, 1.0f) * Inv;          // full affine
-	ray.direction = ray.direction * Inv.GetBasis3x3();     // w=0, ignore translation
-	ray.direction.Normalize();
+	ray.origin = Vec4(ray.origin, 1.0f) * InverseWorld;
+	ray.direction = (ray.direction * InvNormal).Normalized();
 
 	for (const Triangle& tri : triangles)
 	{
@@ -300,12 +296,6 @@ bool RaycastMesh(Ray ray, const std::vector<Triangle>& triangles, RaycastHit* ou
 			{
 				closest = temp.distance;
 				*outHit = temp;
-				std::stringstream str;
-				str << "World Matrix Translation: " <<  ObjectWorld->GetTranslation() << "World Matrix Basis: {R: {" << ObjectWorld->GetRight() << "}, "  << " U: {" << ObjectWorld->GetUp() << "}, " << "F: {" << ObjectWorld->GetForward() << "}, " << "Inv Matrix Basis: {R: {" << Inv.GetRight() << "}, " << " U: {" << Inv.GetUp() << "}, " << "F: {" << Inv.GetForward() << "}, " << "\n";
-				str << "World Ray origin: " << worldRayOrigin << " local Direction: " << worldRayDir << "\n";
-				str << "local ray  origin: " << ray.origin << " local Direction: " << ray.direction << " \nRayCast: {HitPoint: " << temp.point << ", Normal: " << temp.normal << "}";
-
-				TerraPGE::Core::Log(str.str());
 				foundHit = true;
 			}
 		}

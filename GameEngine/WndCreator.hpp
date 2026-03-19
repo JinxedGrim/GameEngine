@@ -347,6 +347,8 @@ struct InputData
     std::array<uint8_t, 256> KeyDown{};
     std::array<uint8_t, 256> KeyPressed{};
     std::array<uint8_t, 256> KeyReleased{};
+    std::array<uint8_t, 8> MousePressed{};  // bits for buttons pressed this frame
+    std::array<uint8_t, 8> MouseReleased{};
 
     int32_t MouseX = 0;
     int32_t MouseY = 0;
@@ -405,6 +407,8 @@ public:
         Previous = Current;
         Current.KeyPressed.fill(0);
         Current.KeyReleased.fill(0);
+        Current.MousePressed.fill(0);
+        Current.MouseReleased.fill(0);
         Current.DeltaX = 0;
         Current.DeltaY = 0;
     }
@@ -429,12 +433,15 @@ public:
 
     void OnMouseButtons(USHORT flags)
     {
-        if (flags & RI_MOUSE_LEFT_BUTTON_DOWN)  Current.MouseButtons |= (1 << 0);
-        if (flags & RI_MOUSE_LEFT_BUTTON_UP)    Current.MouseButtons &= ~(1 << 0);
-        if (flags & RI_MOUSE_RIGHT_BUTTON_DOWN) Current.MouseButtons |= (1 << 1);
-        if (flags & RI_MOUSE_RIGHT_BUTTON_UP)   Current.MouseButtons &= ~(1 << 1);
-        if (flags & RI_MOUSE_MIDDLE_BUTTON_DOWN) Current.MouseButtons |= (1 << 2);
-        if (flags & RI_MOUSE_MIDDLE_BUTTON_UP)   Current.MouseButtons &= ~(1 << 2);
+        auto Press = [&](int idx) { Current.MousePressed[idx] = 1; Current.MouseButtons |= (1 << idx); };
+        auto Release = [&](int idx) { Current.MouseReleased[idx] = 1; Current.MouseButtons &= ~(1 << idx); };
+
+        if (flags & RI_MOUSE_LEFT_BUTTON_DOWN)  Press(0);
+        if (flags & RI_MOUSE_LEFT_BUTTON_UP)    Release(0);
+        if (flags & RI_MOUSE_RIGHT_BUTTON_DOWN) Press(1);
+        if (flags & RI_MOUSE_RIGHT_BUTTON_UP)   Release(1);
+        if (flags & RI_MOUSE_MIDDLE_BUTTON_DOWN) Press(2);
+        if (flags & RI_MOUSE_MIDDLE_BUTTON_UP)   Release(2);
     }
 
     bool IsLeftMouseDown()
@@ -442,10 +449,27 @@ public:
         return (Current.MouseButtons & (1 << 0)) != 0;
     }
 
+    bool IsLeftMousePressed()
+    {
+        return IsMousePressed(0);
+    }
+
+    bool IsRightMousePressed()
+    {
+        return IsMousePressed(1);
+    }
+
     bool IsRightMouseDown()
     {
         return (Current.MouseButtons & (1 << 1)) != 0;
     }
+
+
+    bool IsMiddleMousePressed()
+    {
+        return IsMousePressed(2);
+    }
+
 
     bool IsMiddleMouseDown()
     {
@@ -455,6 +479,8 @@ public:
     bool IsKeyDown(int key) const { return Current.KeyDown[key]; }
     bool IsKeyPressed(int key) const { return Current.KeyPressed[key]; }
     bool IsKeyReleased(int key) const { return Current.KeyReleased[key]; }
+    bool IsMousePressed(int btn) const { return Current.MousePressed[btn]; }
+    bool IsMouseReleased(int btn) const { return Current.MouseReleased[btn]; }
 };
 
 

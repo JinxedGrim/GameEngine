@@ -32,6 +32,7 @@ class ExampleScene : public TerraPGE::Scene
 	std::vector<TerraPGE::Renderable*> WorldCubes = {};
 
 	int DebugMenuTab = 0;
+	int ObjectMenuTab = 0;
 	int LoadingMode = 0;
 	bool Paused = false;
 	bool LockCamera = false;
@@ -98,13 +99,13 @@ class ExampleScene : public TerraPGE::Scene
 		//TerraPGE::EngineShaders::Shader_Frag_Phong         Shader_Texture_Only
 		CubeRender->mesh->MeshName = "SmileCube";
 		AABBColliderParams params = Collider::CalculateAABB(Ak47Render->mesh->Triangles);
-		Ak47Render->AddAABBCollider(params, 1.0f, 0.2f, InitialVelocity);
+		Ak47Render->AddAABBCollider(params, 1.0f, 0.2f, DEFAULT_LAYER, COLLISION_MASK_EVERYTHING, InitialVelocity);
 		Ak47Render->collider.body.KineticFriction = ICE_KINETIC_FRICTION;
 		Ak47Render->collider.body.restitution = 0.35f;
 		CubeRender->AddAABBCollider(params, 5, 0.5f);
 
 		params = Collider::CalculateAABB(PlaneRender->mesh->Triangles);
-		PlaneRender->AddAABBCollider(params, 1000.0f, 0.1f, Vec3(0.0f, 0.0f, 0.0f));
+		PlaneRender->AddAABBCollider(params, 1000.0f, 0.1f);
 		PlaneRender->collider.body.KineticFriction = ICE_KINETIC_FRICTION;
 		PlaneRender->collider.PhysicsEnabled = false;
 
@@ -243,7 +244,6 @@ class ExampleScene : public TerraPGE::Scene
 	{
 		if (Wnd.Input.IsKeyDown('C'))
 		{
-			CubeRender->Transform.WalkTransformChain();
 			MainCamera->PointAt(CubeRender->Transform.GetWorldPosition());
 		}
 
@@ -454,11 +454,19 @@ class ExampleScene : public TerraPGE::Scene
 			TerraPGE::DoPhysics = !TerraPGE::DoPhysics;
 		}
 
-		if (Wnd.Input.IsLeftMouseDown())
+		if (Wnd.Input.IsLeftMousePressed())
 		{
 			if (HoveredRend)
 			{
-				HoveredRend->collider.body.Velocity = this->MainCamera->GetLookDirection().Normalized() * 8.0f;
+				HoveredRend->collider.body.Velocity += this->MainCamera->GetLookDirection().Normalized() * 8.0f;
+			}
+		}
+
+		if (Wnd.Input.IsRightMousePressed())
+		{
+			if (HoveredRend)
+			{
+				this->MainCamera->Transform.SetParent(&HoveredRend->Transform);
 			}
 		}
 
@@ -481,11 +489,11 @@ class ExampleScene : public TerraPGE::Scene
 	TerraPGE::Renderable* GetHoveredObj(const std::vector<TerraPGE::Renderable*>* ToRender)
 	{
 		TerraPGE::Renderable* hovered = nullptr;
-		this->MainCamera->Transform.WalkTransformChain();
+		this->MainCamera->Transform.UpdateTransformChain();
 		Ray ray = this->MainCamera->ScreenPointToRay(TerraPGE::Renderer::sx * 0.5f, TerraPGE::Renderer::sy * 0.5f, TerraPGE::Renderer::sx, TerraPGE::Renderer::sy);
 
-		ray.origin = this->MainCamera->Transform.GetWorldPosition();
-		ray.direction = this->MainCamera->Transform.GetWorldMatrix().GetForward().Normalized();
+		//ray.origin = this->MainCamera->Transform.GetWorldPosition();
+		//ray.direction = this->MainCamera->Transform.GetWorldMatrix().GetForward().Normalized();
 
 		float Closest = FLT_MAX;
 
@@ -539,55 +547,6 @@ class ExampleScene : public TerraPGE::Scene
 		Gdi->DrawLine(CenterPoint.x, CenterPoint.y + Gap, CenterPoint.x, CenterPoint.y + Gap + Len, Pen);       // Bottom
 		Gdi->DrawLine(CenterPoint.x - Gap - Len, CenterPoint.y, CenterPoint.x - Gap, CenterPoint.y, Pen);       // Left
 		Gdi->DrawLine(CenterPoint.x + Gap, CenterPoint.y, CenterPoint.x + Gap + Len, CenterPoint.y, Pen);       // Right
-
-		const static int rightSideGap = 250;
-
-		if (HoveredRend != nullptr)
-		{
-			Gdi->DrawStringA(TerraPGE::Renderer::sx - rightSideGap, 40, HoveredRend->mesh->MeshName, RGB(255, 0, 0), TRANSPARENT);
-			Gdi->DrawStringA(TerraPGE::Renderer::sx - rightSideGap, 60, "Pos (" + std::to_string(HoveredRend->Transform.GetLocalPosition().x) + ", " + std::to_string(HoveredRend->Transform.GetLocalPosition().y) + ", " + std::to_string(HoveredRend->Transform.GetLocalPosition().z) + ")", RGB(255, 0, 0), TRANSPARENT);
-
-			if (HoveredRend->mesh->Materials.size() != 0)
-			{
-				if (HoveredRend->mesh->Materials.size() == 1)
-				{
-					Gdi->DrawStringA(TerraPGE::Renderer::sx - rightSideGap, 80, HoveredRend->mesh->Materials[0]->MaterialName, RGB(255, 0, 0), TRANSPARENT);
-				}
-				else
-				{
-					Gdi->DrawStringA(TerraPGE::Renderer::sx - rightSideGap, 80, "Material Count: " + std::to_string(HoveredRend->mesh->Materials.size()), RGB(255, 0, 0), TRANSPARENT);
-				}
-
-				if (HoveredRend->mesh->Materials[0]->Textures.size() != 0)
-				{
-					if (HoveredRend->mesh->Materials[0]->Textures.size() == 1)
-					{
-						Gdi->DrawStringA(TerraPGE::Renderer::sx - rightSideGap, 100, HoveredRend->mesh->Materials[0]->Textures[0]->Name, RGB(255, 0, 0), TRANSPARENT);
-					}
-					else
-					{
-						Gdi->DrawStringA(TerraPGE::Renderer::sx - rightSideGap, 100, "Textures: " + HoveredRend->mesh->Materials[0]->Textures.size(), RGB(255, 0, 0), TRANSPARENT);
-					}
-				}
-				else
-				{
-					Gdi->DrawStringA(TerraPGE::Renderer::sx - rightSideGap, 100, "No Texture", RGB(255, 0, 0), TRANSPARENT);
-				}
-			}
-			else
-			{
-				Gdi->DrawStringA(TerraPGE::Renderer::sx - rightSideGap, 80, "No Material", RGB(255, 0, 0), TRANSPARENT);
-			}
-
-			Gdi->DrawStringA(TerraPGE::Renderer::sx - rightSideGap, 120, "ShaderType: " + std::to_string((int)HoveredRend->SHADER_TYPE), RGB(255, 0, 0), TRANSPARENT);
-
-			Gdi->DrawStringA(TerraPGE::Renderer::sx - rightSideGap, 140, "Physics Enabled: " + std::to_string(HoveredRend->collider.PhysicsEnabled), RGB(255, 0, 0), TRANSPARENT);
-
-			if (HoveredRend->collider.PhysicsEnabled)
-			{
-				Gdi->DrawStringA(TerraPGE::Renderer::sx - rightSideGap, 160, "Velocity: (" + std::to_string(HoveredRend->collider.body.Velocity.x) + ", " + std::to_string(HoveredRend->collider.body.Velocity.y) + ", " + std::to_string(HoveredRend->collider.body.Velocity.z) + ")", RGB(255, 0, 0), TRANSPARENT);
-			}
-		}
 	}
 
 
@@ -612,6 +571,7 @@ class ExampleScene : public TerraPGE::Scene
 			static const std::string CamRotZstr = ", Roll: ";
 			static const std::string CamRotEndstr = ")";
 			static const std::string CamWorldRotXstr = " World: ( Pitch: ";
+			static const std::string ParentStr = " Parent: ";
 
 			static const std::string EngineMenu = "    (TAB) Engine Settings";
 			static const std::string PhysTimeStr = "    PhysicsTime: ";
@@ -647,9 +607,14 @@ class ExampleScene : public TerraPGE::Scene
 
 			if (this->DebugMenuTab == 0)
 			{
+				std::string pstr = "None";
+				if (this->MainCamera->Transform.Parent != nullptr)
+					"Yes";
+
 				outStr << MenuStr << TerraPGE::Renderer::TPGE_TEXT_NEW_LINE_TOKEN <<
 					CameraMenu << AspectStr << MainCamera->GetAspectRatio() << NearStr << MainCamera->GetNear() << FarStr << MainCamera->GetFar() << TerraPGE::Renderer::TPGE_TEXT_NEW_LINE_TOKEN <<
 					FovStr << this->MainCamera->GetFov() << TerraPGE::Renderer::TPGE_TEXT_NEW_LINE_TOKEN <<
+					ParentStr << pstr << TerraPGE::Renderer::TPGE_TEXT_NEW_LINE_TOKEN <<
 					CamPosXstr << LocalPos.x << CamPosYstr << LocalPos.y << CamPosZstr << LocalPos.z << CamPosEndstr << CamPosWolrd << std::to_string(WorldPos.x) << CamPosYstr << WorldPos.y << CamPosZstr << WorldPos.z << CamPosEndstr << TerraPGE::Renderer::TPGE_TEXT_NEW_LINE_TOKEN <<
 					CamRotXstr << LocalEuler.x << CamRotYstr << LocalEuler.y << CamRotZstr << LocalEuler.z << CamRotEndstr << CamWorldRotXstr << WorldEuler.x << CamRotYstr << WorldEuler.y << CamRotZstr << WorldEuler.z << CamRotEndstr;
 
@@ -710,6 +675,79 @@ class ExampleScene : public TerraPGE::Scene
 		}
 
 		DrawCrosshair(Gdi);
+
+		const static int rightSideGap = 250;
+
+		if (HoveredRend != nullptr)
+		{
+			std::stringstream str;
+
+			str << "Object Debug Menu:  " << HoveredRend->mesh->MeshName << "\n";
+			str << "Use (MouseWheel) to change menu\n";
+
+			//TerraPGE::Renderer::sx - rightSideGap, 80,
+
+			if(ObjectMenuTab == 0)
+				str << std::setprecision(5) << "Object Pos: {" << HoveredRend->Transform.GetLocalPosition() << "} Rot: {" << HoveredRend->Transform.GetWorldRotation() << "} Scale: {" << HoveredRend->Transform.GetLocalScale() << "}\n";
+			
+			if (ObjectMenuTab == 0)
+			{
+				str << "{ ";
+				if (HoveredRend->mesh->Materials.size() == 0)
+				{
+					str << "No Materials }\n";
+				}
+				
+				if (HoveredRend->mesh->Materials.size() == 1)
+				{
+					str << HoveredRend->mesh->Materials[0]->MaterialName << " }\n";
+					if (HoveredRend->mesh->Materials[0]->Textures.size() != 0)
+					{
+						if (HoveredRend->mesh->Materials[0]->Textures.size() == 1)
+							str << HoveredRend->mesh->Materials[0]->Textures[0]->Name << "\n";
+						else
+						{
+							int i = 0;
+							for (; i < HoveredRend->mesh->Materials[0]->Textures.size() - 1; i++)
+							{
+								str << HoveredRend->mesh->Materials[0]->Textures[i]->Name << ", ";
+
+								if (i % 4 == 0.0f)
+								{
+									str << "\n";
+								}
+							}
+							str << HoveredRend->mesh->Materials[0]->Textures[i++]->Name << ", ";
+						}
+					}
+					else
+						str << "No Texture\n";
+				}
+				else
+				{
+					int i = 0;
+					for (; i < HoveredRend->mesh->Materials.size() - 1; i++)
+					{
+						str << HoveredRend->mesh->Materials[i]->MaterialName << ", ";
+
+						if (i % 4 == 0.0f)
+						{
+							str << "\n";
+						}
+					}
+					str << HoveredRend->mesh->Materials[i++]->MaterialName << "} ";
+				}
+			}
+
+			str << "ShaderType: " << (int)HoveredRend->SHADER_TYPE << "\n";
+			str << "Physics Enabled: " << HoveredRend->collider.PhysicsEnabled << "\n";
+
+			if (HoveredRend->collider.PhysicsEnabled)
+				str << "Velocity: {" << HoveredRend->collider.body.Velocity << "}";
+
+			TerraPGE::Renderer::RenderingCore::RenderFormattedText(20, 300, str.str(), RGB(255, 0, 0));
+		}
+
 	}
 
 

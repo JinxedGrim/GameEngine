@@ -7,11 +7,15 @@ private:
 	Vec3 LocalPosition = Vec3(1.0f, 5.0f, 1.0f);
 	Vec3 LocalScale = Vec3(1.0f, 1.0f, 1.0f);
 	Vec3 LocalEulerRotation = Vec3(0.0f, 0.0f, 0.0f);
-	bool IsTransformDirty = false;
+
+	bool IsWorldMatrixDirty = false;
+	bool IsNormalMatrixDirty = false;
+	bool IsInverseWorldDirty = false;
 
 	void RecalculateLocalMatrix()
 	{
 		this->Local = Matrix::CreateScalarMatrix(LocalScale) * Matrix::CreateRotationMatrix(LocalEulerRotation) * Matrix::CreateTranslationMatrix(LocalPosition);
+		this->MarkDirty();
 	}
 
 	void RecalculateLocalVec3()
@@ -20,24 +24,56 @@ private:
 		//Local.Decompose(this->LocalScale, this->LocalEulerRotation, this->LocalPosition);
 	}
 
-public:
+	void MarkDirty()
+	{
+		if (IsWorldMatrixDirty)
+			return;
+
+		IsWorldMatrixDirty = true;
+		IsNormalMatrixDirty = true;
+		IsInverseWorldDirty = true;
+
+		for (auto* c : Children)
+			c->MarkDirty();
+	}
+
 	Matrix World = Matrix::CreateIdentity();
 	Matrix Normal = Matrix::CreateIdentity();
 	Matrix Local = Matrix::CreateIdentity();
+	Matrix InverseWorld = Matrix::CreateIdentity();
+public:
 
 	ObjectTransform()
 	{
 		LocalPosition = Vec3(1.0f, 5.0f, 1.0f);
 		LocalScale = Vec3(1.0f, 1.0f, 1.0f);
 		LocalEulerRotation = Vec3(0.0f, 0.0f, 0.0f);
+
+		this->MarkDirty();
+	}
+
+
+	ObjectTransform(const Vec3& Pos, const Vec3& scale = Vec3(1.0f, 1.0f, 1.0f), const Vec3& euler = Vec3(0.0f, 0.0f, 0.0f)) : LocalPosition(Pos), LocalScale(scale), LocalEulerRotation(euler)
+	{
+		RecalculateLocalMatrix();
+		this->MarkDirty();
+	}
+
+
+	Vec3 GetWorldRight()
+	{
+		return GetWorldMatrix().GetRight().Normalized();
+	}
+
+	Vec3 GetWorldUp()
+	{
+		return GetWorldMatrix().GetUp().Normalized();
 	}
 
 
 	Vec3 GetWorldForward() 
 	{
-		this->WalkTransformChain();
-		Matrix m = this->GetWorldMatrix();
-		return m.GetForward();
+		return this->GetWorldMatrix().GetForward();
 	}
 
 
@@ -52,20 +88,78 @@ public:
 
 		return FallbackForward.Normalized();
 	}
+	
 
-
-	ObjectTransform(const Vec3& Pos, const Vec3& scale = Vec3(1.0f, 1.0f, 1.0f), const Vec3& euler = Vec3(0.0f, 0.0f, 0.0f)) : LocalPosition(Pos), LocalScale(scale), LocalEulerRotation(euler)
+	Matrix* _GetWorldMatrixPtr()
 	{
-		RecalculateLocalMatrix();
+		this->UpdateTransformChain();
+		return &this->World;
 	}
 
 
-	Matrix GetWorldMatrix() const
+	Matrix* _GetLocalMatrixPtr()
 	{
-		Matrix m = Local;
-		for (const ObjectTransform* p = Parent; p; p = p->Parent)
-			m = p->Local * m;
-		return m;
+		return &this->Local;
+	}
+
+
+	Matrix GetWorldMatrix()
+	{
+		this->UpdateTransformChain();
+
+		return this->World;
+	}
+
+
+	Matrix GetInverseWorldMatrix()
+	{
+		UpdateTransformChain();
+
+		if (IsInverseWorldDirty)
+		{
+			InverseWorld = World.Inversed();
+			IsInverseWorldDirty = false;
+		}
+
+
+		if (IsNormalMatrixDirty)
+		{
+			Matrix Normalt = InverseWorld;
+			Normalt.Transpose();
+			Normal = Normalt;
+			IsNormalMatrixDirty = false;
+		}
+
+		return InverseWorld;
+	}
+
+
+	Matrix GetNormalMatrix()
+	{
+		UpdateTransformChain();
+
+		if (IsNormalMatrixDirty)
+		{
+			Normal = World.Inversed();
+			Normal.Transpose();
+			IsNormalMatrixDirty = false;
+		}
+
+		return Normal;
+	}
+
+
+	Vec3 GetWorldPosition()
+	{
+		Matrix world = this->GetWorldMatrix(); // walks full parent chain
+		return world.GetTranslation();
+	}
+
+
+	Vec3 GetWorldRotation()
+	{
+		Matrix m = this->GetWorldMatrix();
+		return m.ExtractEuler();
 	}
 
 
@@ -97,21 +191,6 @@ public:
 	}
 
 
-
-	Vec3 GetWorldPosition() const
-	{
-		Matrix world = GetWorldMatrix(); // walks full parent chain
-		return world.GetTranslation();
-	}
-
-
-	Vec3 GetWorldRotation() const
-	{
-		Matrix m = this->GetWorldMatrix();
-		return m.ExtractEuler();
-	}
-
-
 	void SetParent(ObjectTransform* NewParent)
 	{
 		// Remove from old parent
@@ -127,8 +206,9 @@ public:
 		if (Parent) Parent->Children.push_back(this);
 
 		Matrix invParent = Parent ? Parent->GetWorldMatrix().Inversed() : Matrix::CreateIdentity();
-		Local = invParent * worldBefore;
-		RecalculateLocalMatrix();
+		Matrix newLocal = invParent * worldBefore;
+
+		this->SetLocalMatrix(&newLocal);
 	}
 
 
@@ -138,21 +218,33 @@ public:
 	}
 
 
-	void WalkTransformChain()
+	// take const ref instead somehow
+	void SetLocalMatrix(Matrix* m)
 	{
-		this->World = this->Parent ? this->Parent->World * this->Local : this->Local;
-		for (auto* c : Children) c->WalkTransformChain();
+		// TODO make a decomposition step
+		LocalScale = m->ExtractScale();
+		LocalPosition = m->GetTranslation();
+		LocalEulerRotation = m->ExtractEuler();
+		//m.Decompose(LocalScale, LocalEulerRotation, LocalPosition);
+		RecalculateLocalMatrix();
 	}
 
-	Matrix* _GetWorldMatrixPtr()
-	{
-		this->WalkTransformChain();
-		return &this->World;
-	}
 
-	Matrix* _GetLocalMatrixPtr()
+	void UpdateTransformChain()
 	{
-		return &this->Local;
+		if (Parent)
+			this->Parent->UpdateTransformChain();
+
+		if (!this->IsWorldMatrixDirty)
+			return;
+
+		if (Parent)
+			this->World = Parent->World * Local;
+		else
+			this->World = Local;
+
+		this->IsWorldMatrixDirty = false;
+		this->IsInverseWorldDirty = true;
 	}
 
 
