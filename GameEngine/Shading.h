@@ -622,7 +622,7 @@ namespace TerraPGE
 			};
 
 
-		const auto Shader_Phong_LOW_LOD = [](ShaderArgs* Args)
+		static __inline void Shader_Phong_LOW_LOD(ShaderArgs* Args)
 			{
 				Triangle* Tri = Args->FindShaderResourcePtr<Triangle*>(TPGE_SHDR_TRI);
 				const size_t LightCount = Args->FindShaderResourceValue<size_t>(TPGE_SHDR_LIGHT_COUNT);
@@ -649,7 +649,7 @@ namespace TerraPGE
 			};
 
 
-		const auto Shader_Phong = [](ShaderArgs* Args)
+		static __inline void Shader_Phong(ShaderArgs* Args)
 			{
 				Triangle* Tri = Args->FindShaderResourcePtr<Triangle*>(TPGE_SHDR_TRI);
 				const size_t LightCount = Args->FindShaderResourceValue<size_t>(TPGE_SHDR_LIGHT_COUNT);
@@ -684,7 +684,7 @@ namespace TerraPGE
 
 
 		// Blinn Phong with extra stuff
-		const auto DefaultShader = [](ShaderArgs* Args)
+		static __inline void  DefaultShader(ShaderArgs* Args)
 			{
 				const Triangle* Tri = Args->FindShaderResourcePtr<Triangle*>(TPGE_SHDR_TRI);
 				const size_t LightCount = Args->FindShaderResourceValue<size_t>(TPGE_SHDR_LIGHT_COUNT);
@@ -771,7 +771,7 @@ namespace TerraPGE
 			};
 
 
-		const auto Shader_Frag_Phong_Shadows = [](ShaderArgs* Args)
+		static __inline void  Shader_Frag_Phong_Shadows(ShaderArgs* Args)
 			{
 				const Triangle* Tri = Args->FindShaderResourcePtr<Triangle*>(TPGE_SHDR_TRI);
 				const size_t LightCount = Args->FindShaderResourceValue<size_t>(TPGE_SHDR_LIGHT_COUNT);
@@ -846,7 +846,7 @@ namespace TerraPGE
 
 
 		
-		const auto Shader_Texture_Only = [](ShaderArgs* Args)
+		static __inline void Shader_Texture_Only(ShaderArgs* Args)
 			{
 				const Triangle* Tri = Args->FindShaderResourcePtr<Triangle*>(TPGE_SHDR_TRI);
 				TextureCoords* UVW = Args->FindShaderResourcePtr<TextureCoords*>(TPGE_SHDR_TEX_UVW);
@@ -872,7 +872,7 @@ namespace TerraPGE
 			};
 
 
-		const auto Shader_Sample_Texture = [](ShaderArgs* Args)
+		static __inline void Shader_Sample_Texture(ShaderArgs* Args)
 		{
 			const Triangle* Tri = Args->FindShaderResourcePtr<Triangle*>(TPGE_SHDR_TRI);
 			TextureCoords* UVW = Args->FindShaderResourcePtr<TextureCoords*>(TPGE_SHDR_TEX_UVW);

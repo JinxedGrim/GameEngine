@@ -31,6 +31,9 @@
     <Filter Include="Header Files\Core\Math">
       <UniqueIdentifier>{101519b7-5152-4313-b8b6-ce8742e3070f}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Header Files\EngineAPI\Objects">
+      <UniqueIdentifier>{20171a33-9252-4e49-9891-dddb11f96c6c}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="GameEngine.cpp">
@@ -68,9 +71,6 @@
     <ClInclude Include="Renderer.h">
       <Filter>Header Files\EngineAPI</Filter>
     </ClInclude>
-    <ClInclude Include="GameObject.h">
-      <Filter>Header Files\EngineAPI</Filter>
-    </ClInclude>
     <ClInclude Include="Renderable.h">
       <Filter>Header Files\EngineAPI</Filter>
     </ClInclude>
@@ -83,19 +83,10 @@
     <ClInclude Include="VectorMath.h">
       <Filter>Header Files\Core\Math</Filter>
     </ClInclude>
-    <ClInclude Include="Skybox.h">
-      <Filter>Header Files\EngineAPI</Filter>
-    </ClInclude>
-    <ClInclude Include="EnvironmentRenderable.h">
-      <Filter>Header Files\EngineAPI</Filter>
-    </ClInclude>
     <ClInclude Include="BufferUtils.h">
       <Filter>Header Files\Core\Math</Filter>
     </ClInclude>
     <ClInclude Include="Texture.h">
-      <Filter>Header Files\Core</Filter>
-    </ClInclude>
-    <ClInclude Include="Camera.h">
       <Filter>Header Files\Core</Filter>
     </ClInclude>
     <ClInclude Include="EngineCore.h">
@@ -119,9 +110,6 @@
     <ClInclude Include="ObjectTransform.h">
       <Filter>Header Files\Core</Filter>
     </ClInclude>
-    <ClInclude Include="Collider.h">
-      <Filter>Header Files\Core</Filter>
-    </ClInclude>
     <ClInclude Include="ParrallelPP.h">
       <Filter>Header Files\Core\Libs</Filter>
     </ClInclude>
@@ -133,6 +121,21 @@
     </ClInclude>
     <ClInclude Include="Physics.h">
       <Filter>Header Files\Core</Filter>
+    </ClInclude>
+    <ClInclude Include="EnvironmentRenderable.h">
+      <Filter>Header Files\EngineAPI\Objects</Filter>
+    </ClInclude>
+    <ClInclude Include="GameObject.h">
+      <Filter>Header Files\EngineAPI\Objects</Filter>
+    </ClInclude>
+    <ClInclude Include="Skybox.h">
+      <Filter>Header Files\EngineAPI\Objects</Filter>
+    </ClInclude>
+    <ClInclude Include="Camera.h">
+      <Filter>Header Files\EngineAPI\Objects</Filter>
+    </ClInclude>
+    <ClInclude Include="Collider.h">
+      <Filter>Header Files\EngineAPI\Objects</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

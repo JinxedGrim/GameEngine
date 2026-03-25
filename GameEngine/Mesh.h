@@ -22,6 +22,13 @@ struct ClipVertex
 	Vec3 Normal;
 };
 
+struct VertexBuffer
+{
+	std::vector<float> Positions;
+	std::vector<float> Normals;
+	std::vector<float> TexCoords;
+};
+
 class Triangle
 {
 	public:
@@ -85,6 +92,7 @@ class Triangle
 		this->Points.Points[2] *= Rot;
 	}
 
+
 	const void Rotated(Triangle* Out, const Matrix& Rot)
 	{
 		Out->Points.Points[0] = this->Points.Points[0] * Rot;
@@ -92,6 +100,7 @@ class Triangle
 		Out->Points.Points[2] = this->Points.Points[2] * Rot;
 	}
 
+	
 	void ApplyMatrix(const Matrix& MatToApply)
 	{
 		this->Points.Points[0] *= MatToApply;
@@ -711,6 +720,9 @@ class Mesh
 	std::vector<SIZE_T> TexCoordsIndices = {};
 	std::vector<Material*> Materials = {};
 
+	VertexBuffer _VertBuffer;
+	std::vector<uint32_t> MaterialIndices;
+
 	int VertexCount = 0;
 	int TriangleCount = 0;
 	int NormalCount = 0;
@@ -724,27 +736,21 @@ class Mesh
 
 const Mesh CubeMesh = Mesh(
 	{
-		//SOUTH SIDE OF CUBE
 		{ {0.0f, 0.0f, 0.0f}, {0.0f, 1.0f, 0.0f}, {1.0f, 1.0f, 0.0f} },
 		{ {0.0f, 0.0f, 0.0f}, {1.0f, 1.0f, 0.0f}, {1.0f, 0.0f, 0.0f} },
 
-		// EAST FACE
 		{ {1.0f, 0.0f, 0.0f}, {1.0f, 1.0f, 0.0f}, {1.0f, 1.0f, 1.0f} },
 		{ {1.0f, 0.0f, 0.0f}, {1.0f, 1.0f, 1.0f}, {1.0f, 0.0f, 1.0f} },
 
-		// NORTH FACE
 		{ {1.0f, 0.0f, 1.0f}, {1.0f, 1.0f, 1.0f}, {0.0f, 1.0f, 1.0f} },
 		{ {1.0f, 0.0f, 1.0f}, {0.0f, 1.0f, 1.0f}, {0.0f, 0.0f, 1.0f} },
 
-		// WEST FACE
 		{ {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f, 1.0f}, {0.0f, 1.0f, 0.0f} },
 		{ {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f, 0.0f} },
 
-		// TOP FACE
 		{ {0.0f, 1.0f, 0.0f}, {0.0f, 1.0f, 1.0f}, {1.0f, 1.0f, 1.0f} },
 		{ {0.0f, 1.0f, 0.0f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f, 0.0f} },
 
-		// BOTTOM FACE
 		{ {1.0f, 0.0f, 1.0f}, {0.0f, 0.0f, 1.0f}, {0.0f, 0.0f, 0.0f} },
 		{ {1.0f, 0.0f, 1.0f}, {0.0f, 0.0f, 0.0f}, {1.0f, 0.0f, 0.0f} },
 	},
