@@ -17,66 +17,139 @@
 // then an arg with the full data struct
 // 
 
-struct ShaderParam
+struct ShaderUniform
 {
 	void* Data;
-	uint64_t Sz;
 };
 
 
-class SA
+struct ShaderBuffers
 {
-	std::vector<ShaderParam> Uniforms;
-	std::vector<ShaderParam> Resources;
-
-	std::vector<ShaderParam> Mutables;
-
-	SA()
-	{
-
-	}
-
-	public:
-	static SA* Copy(const SA* In)
-	{
-		SA* out = new SA();
-		out->Uniforms = In->Uniforms;
-		out->Resources = In->Resources;
-	}
-
-	static SA* Create()
-	{
-		return new SA();
-	}
-
-	template<typename T>
-	void AddUniform(const T& Value)
-	{
-		ShaderParam Data = {};
-		Data.Data = Value;
-//		this->Uniforms.push_back();
-	}
-
-	template<typename T>
-	void AddUnique(T Data)
-	{
-
-	}
-
-	template<typename T>
-	T GetUniform()
-	{
-
-	}
-
-	template<typename T>
-	T GetUnique()
-	{
-
-	}
+	void* Data;
+	uint32_t stride;
+	uint32_t sz;
 };
 
 
+struct ShaderVarying
+{
+	void* Data;
+};
+
+
+template<typename T>
+struct Slot
+{
+	uint32_t index;
+};
+
+class ShaderArgs
+{
+	inline void EnsureSize(std::vector<void*>& vec, uint32_t index)
+	{
+		if (vec.size() <= index)
+			vec.resize(index + 1, nullptr);
+	}
+
+	inline void EnsureBufferSize(uint32_t index)
+	{
+		if (Buffers.size() <= index)
+			Buffers.resize(index + 1);
+	}
+
+public:
+	static __inline unsigned __int32 _AllocateUniformSlot()
+	{
+		static unsigned __int32 UniformCounter = 0;
+		return UniformCounter++;
+	}
+
+	static __inline unsigned __int32 _AllocateVaryingSlot()
+	{
+		static unsigned __int32 VaryingCounter = 0;
+		return VaryingCounter++;
+	}
+
+	static __inline unsigned __int32 _AllocateBufferSlot()
+	{
+		static unsigned __int32 BufferCounter = 0;
+		return BufferCounter++;
+	}
+
+
+	std::vector<ShaderUniform> Uniforms;
+	std::vector<ShaderVarying> Varyings;
+	std::vector<ShaderBuffers> Buffers;
+
+	template<typename T>
+	inline const T* GetUniform(Slot<T> slot)
+	{
+		void* ptr = Uniforms[slot.index];
+		assert(ptr != nullptr && "Uniform not bound");
+		return *(T*)ptr;
+	}
+
+	template<typename T>
+	inline T& GetVarying(Slot<T> slot)
+	{
+		void* ptr = Varyings[slot.index];
+		assert(ptr != nullptr && "Varying not bound");
+		return *(T*)ptr;
+	}
+
+	template<typename T>
+	inline T* GetBuffer(Slot<T> slot)
+	{
+		return (T*)Buffers[slot.index].data;
+	}
+
+	template<typename T>
+	__inline void BindUniform(Slot<T> slot, T* Data)
+	{
+		EnsureSize(Uniforms, slot.index);
+		Uniforms[slot.index] = (void*)Data;
+	}
+
+	template<typename T>
+	__inline void BindBuffer(Slot<T> slot, T* Data, unsigned __int32 Sz, unsigned __int32 Stride)
+	{
+		EnsureBufferSize(slot.index);
+
+		Buffers[slot.index].data = (void*)data;
+		Buffers[slot.index].size = sz;
+		Buffers[slot.index].stride = stride;
+	}
+
+	template<typename T>
+	__inline void BindVarying(Slot<T> slot, T* Data)
+	{
+		EnsureSize(Varyings, slot.index);
+		Varyings[slot.index] = (void*)Data;
+	}
+};
+
+#define DEFINE_UNIFORM(name, type) static Slot<type> name { ShaderArgs::_AllocateUniformSlot() }
+#define DEFINE_VARYING(name, type) static Slot<type> name { ShaderArgs::_AllocateVaryingSlot() }
+#define DEFINE_BUFFER(name, type) static Slot<type> name { ShaderArgs::_AllocateBufferSlot() }
+
+
+DEFINE_UNIFORM(TPGE_SHDR_TYPE_, int);
+DEFINE_UNIFORM(TPGE_SHDR_CAMERA_POS_, Vec3);
+DEFINE_UNIFORM(TPGE_SHDR_CAMERA_LDIR_, Vec3);
+DEFINE_UNIFORM(TPGE_SHDR_CAMERA_VIEW_MATRIX_, Matrix);
+DEFINE_UNIFORM(TPGE_SHDR_CAMERA_PROJ_MATRIX_, Matrix);
+DEFINE_UNIFORM(TPGE_SHDR_OBJ_MATRIX_, Matrix);
+DEFINE_UNIFORM(TPGE_SHDR_TRI_, Triangle);
+DEFINE_UNIFORM(TPGE_SHDR_LIGHT_COUNT_, size_t);
+DEFINE_UNIFORM(TPGE_SHDR_LIGHT_OBJECTS_, LightObject**);
+DEFINE_UNIFORM(TPGE_SHDR_FRAG_NORMAL_, Vec3);
+DEFINE_UNIFORM(TPGE_SHDR_FRAG_COLOR_, Color);
+DEFINE_UNIFORM(TPGE_SHDR_FRAG_POS_, Vec3);
+DEFINE_UNIFORM(TPGE_SHDR_IS_IN_SHADOW_, bool);
+DEFINE_UNIFORM(TPGE_SHDR_DEBUG_SHADOWS_, bool);
+DEFINE_UNIFORM(TPGE_SHDR_FRAG_BARY_COORDS_, Vec3);
+DEFINE_UNIFORM(TPGE_SHDR_PIXEL_COORDS_, Vec2);
+DEFINE_UNIFORM(TPGE_SHDR_TEX_UVW_, TextureCoords);
 
 
 enum class ShaderTypes
@@ -161,7 +234,7 @@ const ShaderName TPGE_SHDR_PIXEL_COORDS = "TpgeShdrPixelCoords";
 const ShaderName TPGE_SHDR_TEX_UVW = "TpgeShdrTexUvwPixelCoords";
 
 // Class for holding shader data you can add / get variables from it by using string name
-class ShaderArgs
+class ShaderArgss
 {
 	std::vector<ShaderData*> Payload = {};
 	int Parameters = 0;
@@ -495,7 +568,7 @@ namespace TerraPGE
 		{
 			const auto Shader_Gradient = [](ShaderArgs* Args)
 			{
-				const Triangle* Tri = Args->FindShaderResourcePtr<Triangle*>(TPGE_SHDR_TRI);
+				const Triangle* Tri = Args->GetUniform<Triangle*>(TPGE_SHDR_TRI_);
 				const size_t LightCount = Args->FindShaderResourceValue<size_t>(TPGE_SHDR_LIGHT_COUNT);
 				const Material* Mat = Tri->Material;
 				const Vec3* CamLookDir = Args->FindShaderResourcePtr<Vec3*>(TPGE_SHDR_CAMERA_LDIR);

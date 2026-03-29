@@ -14,6 +14,7 @@
 #include <limits.h>
 #include <intrin.h>
 #include <windows.h>
+
 typedef unsigned __int32  uint32_t;
 
 #else
@@ -22,56 +23,46 @@ typedef unsigned __int32  uint32_t;
 
 #define CalculateSimdLoopLimit(TotalElements) TotalElements & ~3
 
-class CodeTimer
-{
-	LARGE_INTEGER start;
-public:
-	inline void Start()
-	{
-		QueryPerformanceCounter(&start);
-	}
-
-	inline float Stop()
-	{
-		LARGE_INTEGER end;
-		QueryPerformanceCounter(&end);
-
-		static double invFreq = [] {
-			LARGE_INTEGER f;
-			QueryPerformanceFrequency(&f);
-			return 1000.0 / (double)f.QuadPart;
-		}();
-
-		return float((end.QuadPart - start.QuadPart) * invFreq);
-	}
-};
-
+// CPU Processing
 struct SupportedInstructions
 {
 	bool SSE = false;
-	bool SSE2 = false;
-	bool SSE3 = false;
-	bool SSSE3 = false;
-	bool SSE41 = false;
-	bool SSE42 = false;
+	int SSE_VER = 0;
 	bool AVX = false;
 	bool AVX2 = false;
 
 	std::string GetSupportString() const
 	{
-	    std::string out = "Suupported instructions:";
+		std::string out = "Suupported instructions:";
 
 		if (this->SSE) out += " [SSE] ";
-		if (this->SSE2) out += " [SSE2] ";
-		if (this->SSE3) out += " [SSE3] ";
-		if (this->SSSE3) out += " [SSSE3] ";
-		if (this->SSE41) out += " [SSE4.1] ";
-		if (this->SSE42) out += " [SSE4.2] ";
-		if (this->AVX) out += " [AVX] ";
 
+		switch(this->SSE_VER)
+		{
+		case 1:
+			out += "Version: 1]";
+			break;
+		case 2:
+			out += "Version: 2]";
+			break;
+		case 3:
+			out += "Version: 3]";
+			break;
+		case 41:
+			out += "Version: 4.1]";
+			break;
+		case 42:
+			out += "Version: 4.2]";
+			break;
+		}
+
+		if (this->AVX) out += " [AVX ";
+
+		if (this->AVX2) out += "Version: 1]";
+		else out += "Version: 2]";
+		
 		return out;
 	}
-
 };
 
 class CPUID
@@ -79,7 +70,7 @@ class CPUID
 	uint32_t regs[4];
 	unsigned int IdValue = 0;
 
-	public:
+public:
 	explicit CPUID(unsigned i) {
 		this->IdValue = i;
 #ifdef _WIN32
@@ -98,7 +89,7 @@ class CPUID
 
 	}
 
-	static std::string GetProcessorName() 
+	static std::string GetProcessorName()
 	{
 		char name[49] = { 0 }; // 48 chars + null terminator
 		uint32_t* ptr = reinterpret_cast<uint32_t*>(name);
@@ -125,11 +116,11 @@ class CPUID
 		}
 
 		if (CpuID.EDX() & (1 << 25)) Out.SSE = true;
-		if (CpuID.EDX() & (1 << 26)) Out.SSE2 = true;
-		if (CpuID.ECX() & (1 << 0)) Out.SSE3 = true;
-		if (CpuID.ECX() & (1 << 9)) Out.SSSE3 = true;
-		if (CpuID.ECX() & (1 << 19)) Out.SSE41 = true;
-		if (CpuID.ECX() & (1 << 20)) Out.SSE42 = true;
+		if (CpuID.EDX() & (1 << 26)) Out.SSE_VER = 1;
+		if (CpuID.ECX() & (1 << 0)) Out.SSE_VER = 2;
+		if (CpuID.ECX() & (1 << 9)) Out.SSE_VER = 3;
+		if (CpuID.ECX() & (1 << 19)) Out.SSE_VER = 41;
+		if (CpuID.ECX() & (1 << 20)) Out.SSE_VER = 42;
 		if (CpuID.ECX() & (1 << 28)) Out.AVX = true;
 
 		return Out;
@@ -151,6 +142,165 @@ class CPUID
 	const uint32_t& EBX() const { return regs[1]; }
 	const uint32_t& ECX() const { return regs[2]; }
 	const uint32_t& EDX() const { return regs[3]; }
+};
+
+
+class ThreadManager
+{
+	unsigned long long CoreCount;
+	std::atomic<bool> JoinThreads{ false };
+	std::vector<std::thread> ThreadPool;
+	std::mutex QueueMutex;
+	std::mutex ThreadMutex;
+	std::mutex CoutStream;
+	std::condition_variable TaskConditionVar;
+	std::condition_variable QueueSzConditionVar;
+	alignas(64) std::atomic<size_t> TasksInProgress{ 0 };
+
+	void WorkerLoop()
+	{
+		std::function<void()> Task = nullptr;
+
+		while (true)
+		{
+			Task = nullptr;
+
+			{
+				std::unique_lock<std::mutex> QueueLock(QueueMutex);
+
+				TaskConditionVar.wait(QueueLock, [this] {
+					return JoinThreads || !Queue.empty();
+					});
+
+				if (JoinThreads && Queue.empty())
+					return;
+
+				Task = std::move(Queue.front());
+				Queue.pop();
+
+				TasksInProgress.fetch_add(1, std::memory_order_relaxed);
+			}
+
+			if (this->JoinThreads)
+			{
+				return;
+			}
+
+			if (Task)
+			{
+				Task();
+
+				{
+					std::lock_guard<std::mutex> lock(QueueMutex);
+					TasksInProgress.fetch_sub(1, std::memory_order_relaxed);
+				}
+
+				QueueSzConditionVar.notify_all(); // notify WaitUntilAllTasksFinished
+			}
+		}
+	}
+
+
+public:
+	std::queue<std::function<void()>> Queue;
+
+	ThreadManager()
+	{
+		this->CoreCount = GetCpuCores();
+		this->ThreadMutex.lock();
+		this->ThreadPool.reserve(this->CoreCount);
+
+		for (int i = 0; i < this->CoreCount; i++)
+		{
+			auto BindedThread = [=]() mutable {this->WorkerLoop(); };
+			this->ThreadPool.push_back(std::thread(BindedThread));
+		}
+		this->ThreadMutex.unlock();
+	}
+
+	ThreadManager(size_t ThreadPoolSz)
+	{
+		this->CoreCount = ThreadPoolSz;
+		this->ThreadMutex.lock();
+		this->ThreadPool.reserve(this->CoreCount);
+
+		for (int i = 0; i < this->CoreCount; i++)
+		{
+			auto BindedThread = [=]() mutable {this->WorkerLoop(); };
+			this->ThreadPool.push_back(std::thread(BindedThread));
+		}
+		this->ThreadMutex.unlock();
+	}
+
+	static const int GetCpuCores()
+	{
+		return std::max(1u, std::thread::hardware_concurrency());
+	}
+
+	template<typename FunctionToCall, typename... Arguments>
+	void EnqueueTask(FunctionToCall&& Func, Arguments&&... Args)
+	{
+		if (JoinThreads)
+			return;
+
+		std::function<void()> task = std::bind(std::forward<FunctionToCall>(Func), std::forward<Arguments>(Args)...);
+
+		{
+			std::lock_guard<std::mutex> lock(QueueMutex);
+			Queue.emplace(std::move(task));
+		}
+
+		this->TaskConditionVar.notify_one();
+	}
+
+	void WaitUntilAllTasksFinished()
+	{
+		std::unique_lock<std::mutex> Lock(QueueMutex);
+
+		QueueSzConditionVar.wait(Lock, [this]() {
+			return Queue.empty() && TasksInProgress.load(std::memory_order_relaxed) == 0;
+			});
+	}
+
+	~ThreadManager()
+	{
+		this->JoinThreads = true;
+		this->TaskConditionVar.notify_all();
+
+		this->ThreadMutex.lock();
+		for (int i = 0; i < this->ThreadPool.size(); i++)
+		{
+			if (this->ThreadPool.at(i).joinable())
+			{
+				this->ThreadPool.at(i).join();
+			}
+		}
+		this->ThreadMutex.unlock();
+	}
+};
+
+class CodeTimer
+{
+	LARGE_INTEGER start;
+public:
+	inline void Start()
+	{
+		QueryPerformanceCounter(&start);
+	}
+
+	inline float Stop()
+	{
+		LARGE_INTEGER end;
+		QueryPerformanceCounter(&end);
+
+		static double invFreq = [] {
+			LARGE_INTEGER f;
+			QueryPerformanceFrequency(&f);
+			return 1000.0 / (double)f.QuadPart;
+		}();
+
+		return float((end.QuadPart - start.QuadPart) * invFreq);
+	}
 };
 
 namespace SIMDUtils
@@ -430,137 +580,3 @@ namespace SIMDUtils
 		}
 	}
 }
-
-class ThreadManager
-{
-	unsigned long long CoreCount;
-	std::atomic<bool> JoinThreads{ false };
-	std::vector<std::thread> ThreadPool;
-	std::mutex QueueMutex;
-	std::mutex ThreadMutex;
-	std::mutex CoutStream;
-	std::condition_variable TaskConditionVar;
-	std::condition_variable QueueSzConditionVar;
-	alignas(64) std::atomic<size_t> TasksInProgress{ 0 };
-
-	void WorkerLoop()
-	{
-		std::function<void()> Task = nullptr;
-
-		while (true)
-		{
-			Task = nullptr;
-
-			{
-				std::unique_lock<std::mutex> QueueLock(QueueMutex);
-
-				TaskConditionVar.wait(QueueLock, [this] {
-					return JoinThreads || !Queue.empty();
-					});
-
-				if (JoinThreads && Queue.empty())
-					return;
-
-				Task = std::move(Queue.front());
-				Queue.pop();	
-
-				TasksInProgress.fetch_add(1, std::memory_order_relaxed);
-			}
-
-			if (this->JoinThreads)
-			{
-				return;
-			}
-
-			if (Task)
-			{
-				Task();
-				
-				{
-					std::lock_guard<std::mutex> lock(QueueMutex);
-					TasksInProgress.fetch_sub(1, std::memory_order_relaxed);
-				}
-
-				QueueSzConditionVar.notify_all(); // notify WaitUntilAllTasksFinished
-			}
-		}
-	}
-
-
-	public:
-	std::queue<std::function<void()>> Queue;
-
-	ThreadManager()
-	{
-		this->CoreCount = GetCpuCores();
-		this->ThreadMutex.lock();
-		this->ThreadPool.reserve(this->CoreCount);
-
-		for (int i = 0; i < this->CoreCount; i++)
-		{
-			auto BindedThread = [=]() mutable {this->WorkerLoop(); };
-			this->ThreadPool.push_back(std::thread(BindedThread));
-		}
-		this->ThreadMutex.unlock();
-	}
-
-	ThreadManager(size_t ThreadPoolSz)
-	{
-		this->CoreCount = ThreadPoolSz;
-		this->ThreadMutex.lock();
-		this->ThreadPool.reserve(this->CoreCount);
-
-		for (int i = 0; i < this->CoreCount; i++)
-		{
-			auto BindedThread = [=]() mutable {this->WorkerLoop(); };
-			this->ThreadPool.push_back(std::thread(BindedThread));
-		}
-		this->ThreadMutex.unlock();
-	}
-
-	static const int GetCpuCores()
-	{
-		return std::max(1u, std::thread::hardware_concurrency());
-	}
-
-	template<typename FunctionToCall, typename... Arguments>
-	void EnqueueTask(FunctionToCall&& Func, Arguments&&... Args)
-	{
-		if (JoinThreads)
-			return;
-
-		std::function<void()> task = std::bind(std::forward<FunctionToCall>(Func), std::forward<Arguments>(Args)...);
-		
-		{
-			std::lock_guard<std::mutex> lock(QueueMutex);
-			Queue.emplace(std::move(task));
-		}
-
-		this->TaskConditionVar.notify_one();
-	}
-
-	void WaitUntilAllTasksFinished()
-	{
-		std::unique_lock<std::mutex> Lock(QueueMutex);
-
-		QueueSzConditionVar.wait(Lock, [this]() {
-			return Queue.empty() && TasksInProgress.load(std::memory_order_relaxed) == 0;
-			});
-	}
-
-	~ThreadManager()
-	{
-		this->JoinThreads = true;
-		this->TaskConditionVar.notify_all();
-
-		this->ThreadMutex.lock();
-		for (int i = 0; i < this->ThreadPool.size(); i++)
-		{
-			if (this->ThreadPool.at(i).joinable())
-			{
-				this->ThreadPool.at(i).join();
-			}
-		}
-		this->ThreadMutex.unlock();
-	}
-};

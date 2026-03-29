@@ -8,7 +8,7 @@
 //TODO
 // X. Add icons to text formatter
 // X. Add  fonts to format parser
-
+// X. Remove aspect from render calculation
 
 
 namespace TerraPGE::Renderer
@@ -283,7 +283,7 @@ namespace TerraPGE::Renderer
 			msg << "[CPU] Name: " << Renderer::RenderingUtils::Profiler::CpuName << std::endl << "[CPU] Cores: " << Renderer::CpuCores << std::endl << "[CPU] " << Renderer::SimdInfo.GetSupportString();
 			Core::LogInfo("[RENDERER]", msg.str());
 
-			if (Renderer::SimdInfo.SSE42)
+			if (Renderer::SimdInfo.SSE_VER >= 42)
 			{
 				Core::LogInfo("[RENDERER]", "Detected >= SSE 4.2 Activating SIMD Acceleration");
 				Core::SimdAcceleration = true;
@@ -746,18 +746,37 @@ namespace TerraPGE::Renderer
 			std::vector<Triangle> Clipped = Renderer::ClippingClipSpace(&ClipSpaceTri);
 
 			// initialize shader
-			ShaderArgs* Args = DEBUG_NEW ShaderArgs();
-			Args->AddShaderDataByValue(TPGE_SHDR_TYPE, Object->SHADER_TYPE, 0);
-			Args->AddShaderDataByValue<Vec3>(TPGE_SHDR_CAMERA_POS, Cam->Transform.GetWorldPosition(), 0);
-			Args->AddShaderDataByValue<Vec3>(TPGE_SHDR_CAMERA_LDIR, Cam->GetLookDirection(), 0);
-			Args->AddShaderDataPtr(TPGE_SHDR_CAMERA_VIEW_MATRIX, Cam->_GetViewMatrixPtr(), 0);
-			Args->AddShaderDataPtr(TPGE_SHDR_CAMERA_PROJ_MATRIX, Cam->_GetProjectionMatrixPtr(), 0);
-			Args->AddShaderDataPtr(TPGE_SHDR_OBJ_MATRIX, Object->Transform._GetWorldMatrixPtr(), 0);
-			Args->AddShaderDataPtr(TPGE_SHDR_LIGHT_OBJECTS, SceneLights, 0);
-			Args->AddShaderDataByValue<size_t>(TPGE_SHDR_LIGHT_COUNT, LightCount, 0);
-			Args->AddShaderDataByValue<bool>(TPGE_SHDR_DEBUG_SHADOWS, DebugShadows);
-			Args->AddShaderDataByValue<bool>(TPGE_SHDR_IS_IN_SHADOW, false);
-			Args->AddShaderDataPtr(TPGE_SHDR_TRI, nullptr, 0);
+			ShaderArgs Args = ShaderArgs();
+
+			Vec3 WorldPos = Cam->Transform.GetWorldPosition();
+			Vec3 LDir = Cam->GetLookDirection();
+			Matrix* ViewMat = Cam->_GetViewMatrixPtr();
+			Matrix* ProjMat = Cam->_GetProjectionMatrixPtr();
+			Matrix* WorldMat = Object->Transform._GetWorldMatrixPtr();
+
+
+			Args.BindUniform<int>(TPGE_SHDR_TYPE_, (int*)(&Object->SHADER_TYPE));
+			Args.BindUniform<Vec3>(TPGE_SHDR_CAMERA_POS_, &WorldPos);
+			Args.BindUniform<Vec3>(TPGE_SHDR_CAMERA_LDIR_, &LDir);
+			Args.BindUniform<Matrix>(TPGE_SHDR_CAMERA_VIEW_MATRIX_, ViewMat);
+			Args.BindUniform<Matrix>(TPGE_SHDR_CAMERA_PROJ_MATRIX_, ProjMat);
+			Args.BindUniform<Matrix>(TPGE_SHDR_OBJ_MATRIX_, WorldMat);
+			Args.BindUniform<LightObject**>(TPGE_SHDR_LIGHT_OBJECTS_, &SceneLights);
+			Args.BindUniform<size_t>(TPGE_SHDR_LIGHT_COUNT_, &LightCount);
+			Args.BindUniform<bool>(TPGE_SHDR_DEBUG_SHADOWS_, &TerraPGE::Renderer::DebugShadows);
+			//Args.BindUniform<Triangle>(TPGE_SHDR_TRI_, nullptr);
+
+			//Args->AddShaderDataByValue(TPGE_SHDR_TYPE, Object->SHADER_TYPE, 0);
+			//Args->AddShaderDataByValue<Vec3>(TPGE_SHDR_CAMERA_POS, Cam->Transform.GetWorldPosition(), 0);
+			//Args->AddShaderDataByValue<Vec3>(TPGE_SHDR_CAMERA_LDIR, Cam->GetLookDirection(), 0);
+			//Args->AddShaderDataPtr(TPGE_SHDR_CAMERA_VIEW_MATRIX, Cam->_GetViewMatrixPtr(), 0);
+			//Args->AddShaderDataPtr(TPGE_SHDR_CAMERA_PROJ_MATRIX, Cam->_GetProjectionMatrixPtr(), 0);
+			//Args->AddShaderDataPtr(TPGE_SHDR_OBJ_MATRIX, Object->Transform._GetWorldMatrixPtr(), 0);
+			//Args->AddShaderDataPtr(TPGE_SHDR_LIGHT_OBJECTS, SceneLights, 0);
+			//Args->AddShaderDataByValue<size_t>(TPGE_SHDR_LIGHT_COUNT, LightCount, 0);
+			//Args->AddShaderDataByValue<bool>(TPGE_SHDR_DEBUG_SHADOWS, DebugShadows);
+			//Args->AddShaderDataByValue<bool>(TPGE_SHDR_IS_IN_SHADOW, false);
+			//Args->AddShaderDataPtr(TPGE_SHDR_TRI, nullptr, 0);
 
 			// Draw each tri
 			for (Triangle& ToDraw : Clipped)
@@ -770,24 +789,24 @@ namespace TerraPGE::Renderer
 				ToDraw.Translate(Vec3((float)(Renderer::sx * 0.5f), (float)(Renderer::sy * 0.5f), 0.0f));
 
 				//SceneLights, LightCount
-				Args->EditShaderData(TPGE_SHDR_TRI, &ToDraw, 0);
-
+				//Args->EditShaderData(TPGE_SHDR_TRI, &ToDraw, 0);
+				Args.BindUniform<Triangle>(TPGE_SHDR_TRI_, nullptr);
 
 
 				// Calc lighting (only if lighting is applied at a tri level)
 				if ((Renderer::DoLighting) && Object->SHADER_TYPE == ShaderTypes::SHADER_TRIANGLE)
 				{
-					Object->Shader(Args);
+					Object->Shader(&Args);
 				}
 
 
 				if (Core::DoMultiThreading)
-					Renderer::BaryCentricRasterizer(Renderer::FrameBuffer, Renderer::DepthBuffer, Renderer::sx, Renderer::sy, Renderer::ShadowMap, Renderer::ShadowMapWidth, Renderer::ShadowMapHeight, Object->Shader, Args);
+					Renderer::BaryCentricRasterizer(Renderer::FrameBuffer, Renderer::DepthBuffer, Renderer::sx, Renderer::sy, Renderer::ShadowMap, Renderer::ShadowMapWidth, Renderer::ShadowMapHeight, Object->Shader, &Args);
 				else
-					Renderer::BaryCentricRasterizer(Renderer::FrameBuffer, Renderer::DepthBuffer, Renderer::sx, Renderer::sy, Renderer::ShadowMap, Renderer::ShadowMapWidth, Renderer::ShadowMapHeight, Object->Shader, Args);
+					Renderer::BaryCentricRasterizer(Renderer::FrameBuffer, Renderer::DepthBuffer, Renderer::sx, Renderer::sy, Renderer::ShadowMap, Renderer::ShadowMapWidth, Renderer::ShadowMapHeight, Object->Shader, &Args);
 			}
 
-			Args->Delete();
+			//Args->Delete();
 		}
 	}
 
@@ -809,8 +828,9 @@ namespace TerraPGE::Renderer
 	}
 
 
-	void RenderShadowMaps(Renderable** SceneObjects, LightObject** SceneLights, size_t ObjectCount, size_t LightCount, float* Buffer)
+	void RenderShadowMaps(Renderable** SceneObjects, LightObject** SceneLights, size_t ObjectCount, size_t LightCount, float* Buffer, Camera* Cam = nullptr)
 	{
+		// camptr is used for culling
 		bool HasLight = LightCount >= 1;
 
 		for (int objIdx = 0; objIdx < ObjectCount; objIdx++)
@@ -834,6 +854,10 @@ namespace TerraPGE::Renderer
 					// TODO Add more maps for supporting more lights
 					LightObject* Light = SceneLights[0];
 					// 3D Space -> Viewed Space -> Clipped Space
+
+					// TODO add normal calc or switch to vertex shading
+					if (Cam != nullptr && Renderer::ShouldCulltriangle(Proj.Points.Points[0], Proj.FaceNormal, Light->Transform.GetWorldPosition()))
+						continue;
 
 					if (Light->Type == LightTypes::DirectionalLight)
 					{
@@ -904,7 +928,7 @@ namespace TerraPGE::Renderer
 
 		// multithreaded version not worth it
 		Timer.Start();
-		Renderer::RenderShadowMaps(SceneObjects, SceneLights, ObjectCount, LightCount, Renderer::ShadowMap);
+		Renderer::RenderShadowMaps(SceneObjects, SceneLights, ObjectCount, LightCount, Renderer::ShadowMap, Cam);
 		t = Timer.Stop();
 		Renderer::RenderMeshDepthTime = t;
 
@@ -1144,6 +1168,7 @@ namespace TerraPGE::Renderer
 				B = _mm256_add_ps(B, _mm256_mul_ps(HdrMask, _mm256_sub_ps(_mm256_div_ps(B, _mm256_add_ps(one, B)), B)));
 			}
 
+
 			static __inline void ApplyGamma(__m256& R, __m256& G, __m256& B, const __m256& GammaMask)
 			{
 				__m256 Rgamma = R;
@@ -1158,6 +1183,7 @@ namespace TerraPGE::Renderer
 				G = _mm256_add_ps(G, _mm256_mul_ps(GammaMask, _mm256_sub_ps(Ggamma, G)));
 				B = _mm256_add_ps(B, _mm256_mul_ps(GammaMask, _mm256_sub_ps(Bgamma, B)));
 			}
+
 
 			void SwapFrameBuffer(float* Src, const int& Width, const int& Height, unsigned __int8* OutBuffer, const bool Hdr, const bool GammaCorrection)
 			{
@@ -1242,6 +1268,7 @@ namespace TerraPGE::Renderer
 				}
 			}
 		
+
 			void SwapFrameBufferByChunk(float* Frame, const unsigned __int32 width, const unsigned __int32  y0, const unsigned __int32 y1)
 			{
 				float hdrMask = Renderer::UseHDR ? 1.0f : 0.0f;
@@ -1326,6 +1353,7 @@ namespace TerraPGE::Renderer
 				}
 			}
 
+
 			void RenderSkyboxByChunk(EnvironmentRenderable* sky, const Camera* Cam, const uint64_t y0, const uint64_t y1, const uint64_t width, const uint64_t height, const float& Fov, const Matrix& Proj, const Matrix3x3& CamRot)
 			{
 				const float Aspect = Cam->GetAspectRatio();
@@ -1340,6 +1368,15 @@ namespace TerraPGE::Renderer
 					}
 				}
 			}
+		}
+
+
+		__inline void RenderSkyboxByChunk(EnvironmentRenderable* sky, const Camera* Cam, const uint64_t y0, const uint64_t y1, const uint64_t width, const uint64_t height, const float& Fov, const Matrix& Proj, const Matrix3x3& CamRot)
+		{
+			if (SimdInfo.AVX2)
+				AVX::RenderSkyboxByChunk(sky, Cam, y0, y1, width, height, Fov, Proj, CamRot);
+			else
+				SSE::RenderSkyboxByChunk(sky, Cam, y0, y1, width, height, Fov, Proj, CamRot);
 		}
 
 
@@ -1514,10 +1551,17 @@ namespace TerraPGE::Renderer
 				uint64_t y0 = y;
 				uint64_t y1 = std::min(y + ChunkSz, Height);
 
-				Core::ThreadPool.EnqueueTask([sky, Cam, y0, y1, Width, Height, &Fov, &Proj, &CamRot]()
-					{
-						RenderSkyboxByChunk(sky, Cam, y0, y1, Width, Height, Fov, Proj, CamRot);
-					});
+				if(Core::SimdAcceleration)
+					Core::ThreadPool.EnqueueTask([sky, Cam, y0, y1, Width, Height, &Fov, &Proj, &CamRot]()
+						{
+							// Fix SSE / AVX Ver
+							RenderSkyboxByChunk(sky, Cam, y0, y1, Width, Height, Fov, Proj, CamRot);
+						});
+				else
+					Core::ThreadPool.EnqueueTask([sky, Cam, y0, y1, Width, Height, &Fov, &Proj, &CamRot]()
+						{
+							RenderSkyboxByChunk(sky, Cam, y0, y1, Width, Height, Fov, Proj, CamRot);
+						});
 			}
 
 			Core::ThreadPool.WaitUntilAllTasksFinished();
@@ -1556,7 +1600,7 @@ namespace TerraPGE::Renderer
 							const Matrix VpMatrix = Light->VpMatrices[0];
 							Proj.ApplyMatrix(VpMatrix);
 
-							Multithreaded::BaryCentricRasterizerDepth(&Proj, Renderer::ShadowMap, (SIZE_T)Renderer::ShadowMapWidth, (SIZE_T)Renderer::ShadowMapHeight);
+							Renderer::BaryCentricRasterizerDepth(&Proj, Renderer::ShadowMap, (SIZE_T)Renderer::ShadowMapWidth, (SIZE_T)Renderer::ShadowMapHeight);
 						}
 						else if (Light->Type == LightTypes::PointLight)
 						{
@@ -1565,7 +1609,7 @@ namespace TerraPGE::Renderer
 								Matrix VpMatrix = SceneLights[0]->VpMatrices[face];
 								Proj.ApplyMatrix(VpMatrix);
 
-								Multithreaded::BaryCentricRasterizerDepth(&Proj, Renderer::ShadowMap, (SIZE_T)Renderer::ShadowMapWidth, (SIZE_T)Renderer::ShadowMapHeight);
+								Renderer::BaryCentricRasterizerDepth(&Proj, Renderer::ShadowMap, (SIZE_T)Renderer::ShadowMapWidth, (SIZE_T)Renderer::ShadowMapHeight);
 							}
 						}
 					}
@@ -1585,7 +1629,7 @@ namespace TerraPGE::Renderer
 
 			// multithreaded version not worth it
 			Timer.Start();
-			Renderer::RenderShadowMaps(SceneObjects, SceneLights, ObjectCount, LightCount, Renderer::ShadowMap);
+			Renderer::RenderShadowMaps(SceneObjects, SceneLights, ObjectCount, LightCount, Renderer::ShadowMap, Cam);
 			t = Timer.Stop();
 			Renderer::RenderMeshDepthTime = t;
 

@@ -344,12 +344,12 @@ namespace TerraPGE::Renderer
 
 
 	template<typename T>
-	void __fastcall BaryCentricRasterizer(float* FrameBuffer, float* DepthBuffer, const int ScreenWidth, const int ScreenHeight, float* ShadowMap, const int ShadowMapWidth, const int ShadowMapHeight, T&& Shader, ShaderArgs* BaseArgs1)
+	void __fastcall BaryCentricRasterizer(float* FrameBuffer, float* DepthBuffer, const int ScreenWidth, const int ScreenHeight, float* ShadowMap, const int ShadowMapWidth, const int ShadowMapHeight, T&& Shader, ShaderArgs* GlobalArgs)
 	{
-		ShaderArgs* BaseArgs = DEBUG_NEW ShaderArgs(BaseArgs1);
+		//ShaderArgs* BaseArgs = ShaderArgs(BaseArgs1);
 
 		// Allocating now reduces copying
-		BaseArgs->PrepareFragmentShader();
+		//BaseArgs->PrepareFragmentShader();
 
 		Triangle* ScreenSpaceTri = BaseArgs->FindShaderResourcePtr<Triangle*>(TPGE_SHDR_TRI);
 		//Matrix Vp = BaseArgs->FindShaderResourceValue<Matrix>(TPGE_SHDR_CAMERA_VIEW_MATRIX) * BaseArgs->FindShaderResourceValue<Matrix>(TPGE_SHDR_CAMERA_PROJ_MATRIX);
