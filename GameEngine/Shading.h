@@ -45,16 +45,21 @@ struct Slot
 
 class ShaderArgs
 {
+	std::vector<ShaderUniform> Uniforms;
+	std::vector<ShaderVarying> Varyings;
+	std::vector<ShaderBuffers> Buffers;
+
 	inline void EnsureSize(std::vector<void*>& vec, uint32_t index)
 	{
 		if (vec.size() <= index)
 			vec.resize(index + 1, nullptr);
 	}
 
+
 	inline void EnsureBufferSize(uint32_t index)
 	{
-		if (Buffers.size() <= index)
-			Buffers.resize(index + 1);
+		if (this->Buffers.size() <= index)
+			this->Buffers.resize(index + 1);
 	}
 
 public:
@@ -64,11 +69,13 @@ public:
 		return UniformCounter++;
 	}
 
+
 	static __inline unsigned __int32 _AllocateVaryingSlot()
 	{
 		static unsigned __int32 VaryingCounter = 0;
 		return VaryingCounter++;
 	}
+
 
 	static __inline unsigned __int32 _AllocateBufferSlot()
 	{
@@ -77,54 +84,85 @@ public:
 	}
 
 
-	std::vector<ShaderUniform> Uniforms;
-	std::vector<ShaderVarying> Varyings;
-	std::vector<ShaderBuffers> Buffers;
-
 	template<typename T>
-	inline const T* GetUniform(Slot<T> slot)
+	inline const T* GetUniformAsCopy(Slot<T> slot)
 	{
-		void* ptr = Uniforms[slot.index];
+		this->Uniforms[slot.index].Data = (void*)Data;
 		assert(ptr != nullptr && "Uniform not bound");
 		return *(T*)ptr;
 	}
 
+
 	template<typename T>
-	inline T& GetVarying(Slot<T> slot)
+	inline const T* GetUniformAsPtr(Slot<T> slot)
 	{
-		void* ptr = Varyings[slot.index];
-		assert(ptr != nullptr && "Varying not bound");
-		return *(T*)ptr;
+		const void* ptr = this->Uniforms[slot.index].Data;
+		assert(ptr != nullptr && "Uniform not bound");
+		return (const T*)ptr;
 	}
+
+
+	template<typename T>
+	inline const T& GetUniformAsRef(Slot<T> slot)
+	{
+		const void* ptr = this->Uniforms[slot.index].Data;
+		assert(ptr != nullptr && "Uniform not bound");
+		return *(const T*)ptr;
+	}
+
+
+	template<typename T>
+	inline T& GetVaryingAsRef(Slot<T> slot)
+	{
+		void* ptr = this->Varyings[slot.index].Data;
+		assert(ptr != nullptr && "Varying not bound");
+		return *(const T*)ptr;
+	}
+
+
+	template<typename T>
+	inline T* GetVaryingAsPtr(Slot<T> slot)
+	{
+		void* ptr = this->Varyings[slot.index].Data;
+		assert(ptr != nullptr && "Varying not bound");
+		return (T*)ptr;
+	}
+
 
 	template<typename T>
 	inline T* GetBuffer(Slot<T> slot)
 	{
-		return (T*)Buffers[slot.index].data;
+		return (T*)this->Buffers[slot.index].data;
 	}
 
+
+	// Bound data must stay alive for duration of object lifetime!
 	template<typename T>
 	__inline void BindUniform(Slot<T> slot, T* Data)
 	{
-		EnsureSize(Uniforms, slot.index);
-		Uniforms[slot.index] = (void*)Data;
+		this->EnsureSize(this->Uniforms, slot.index);
+		this->Uniforms[slot.index].Data = (void*)Data;
 	}
 
+
+	// Bound data must stay alive for duration of object lifetime!
 	template<typename T>
 	__inline void BindBuffer(Slot<T> slot, T* Data, unsigned __int32 Sz, unsigned __int32 Stride)
 	{
-		EnsureBufferSize(slot.index);
+		this->EnsureBufferSize(slot.index);
 
-		Buffers[slot.index].data = (void*)data;
-		Buffers[slot.index].size = sz;
-		Buffers[slot.index].stride = stride;
+		this->Buffers[slot.index].data = (void*)data;
+		this->Buffers[slot.index].size = sz;
+		this->Buffers[slot.index].stride = stride;
 	}
 
+
+	// Bound data must stay alive for duration of object lifetime!
 	template<typename T>
 	__inline void BindVarying(Slot<T> slot, T* Data)
 	{
-		EnsureSize(Varyings, slot.index);
-		Varyings[slot.index] = (void*)Data;
+		this->EnsureSize(this->Varyings, slot.index);
+		this->Varyings[slot.index].Data = (void*)Data;
 	}
 };
 
@@ -142,14 +180,15 @@ DEFINE_UNIFORM(TPGE_SHDR_OBJ_MATRIX_, Matrix);
 DEFINE_UNIFORM(TPGE_SHDR_TRI_, Triangle);
 DEFINE_UNIFORM(TPGE_SHDR_LIGHT_COUNT_, size_t);
 DEFINE_UNIFORM(TPGE_SHDR_LIGHT_OBJECTS_, LightObject**);
-DEFINE_UNIFORM(TPGE_SHDR_FRAG_NORMAL_, Vec3);
-DEFINE_UNIFORM(TPGE_SHDR_FRAG_COLOR_, Color);
-DEFINE_UNIFORM(TPGE_SHDR_FRAG_POS_, Vec3);
-DEFINE_UNIFORM(TPGE_SHDR_IS_IN_SHADOW_, bool);
 DEFINE_UNIFORM(TPGE_SHDR_DEBUG_SHADOWS_, bool);
-DEFINE_UNIFORM(TPGE_SHDR_FRAG_BARY_COORDS_, Vec3);
-DEFINE_UNIFORM(TPGE_SHDR_PIXEL_COORDS_, Vec2);
-DEFINE_UNIFORM(TPGE_SHDR_TEX_UVW_, TextureCoords);
+
+DEFINE_VARYING(TPGE_SHDR_FRAG_NORMAL_, Vec3);
+DEFINE_VARYING(TPGE_SHDR_FRAG_COLOR_, Color);
+DEFINE_VARYING(TPGE_SHDR_FRAG_POS_, Vec3);
+DEFINE_VARYING(TPGE_SHDR_IS_IN_SHADOW_, bool);
+DEFINE_VARYING(TPGE_SHDR_FRAG_BARY_COORDS_, Vec3);
+DEFINE_VARYING(TPGE_SHDR_PIXEL_COORDS_, Vec2);
+DEFINE_VARYING(TPGE_SHDR_TEX_UVW_, TextureCoords);
 
 
 enum class ShaderTypes
@@ -241,12 +280,12 @@ class ShaderArgss
 
 	public:
 
-	ShaderArgs()
+	ShaderArgss()
 	{
 
 	}
 
-	ShaderArgs(const ShaderArgs* B)
+	ShaderArgss(const ShaderArgss* B)
 	{
 		Payload.reserve(B->Payload.size());
 
@@ -475,7 +514,7 @@ class ShaderArgss
 	}
 
 
-	~ShaderArgs()
+	~ShaderArgss()
 	{
 		for (ShaderData* Data : this->Payload)
 		{
@@ -568,23 +607,24 @@ namespace TerraPGE
 		{
 			const auto Shader_Gradient = [](ShaderArgs* Args)
 			{
-				const Triangle* Tri = Args->GetUniform<Triangle*>(TPGE_SHDR_TRI_);
-				const size_t LightCount = Args->FindShaderResourceValue<size_t>(TPGE_SHDR_LIGHT_COUNT);
+				const Triangle* Tri = Args->GetUniformAsPtr<Triangle>(TPGE_SHDR_TRI_);
+				const size_t LightCount = *(Args->GetUniformAsPtr<size_t>(TPGE_SHDR_LIGHT_COUNT_));
 				const Material* Mat = Tri->Material;
-				const Vec3* CamLookDir = Args->FindShaderResourcePtr<Vec3*>(TPGE_SHDR_CAMERA_LDIR);
-				const Vec3* FragNormal = Args->FindShaderResourcePtr<Vec3*>(TPGE_SHDR_FRAG_NORMAL);
-				const Vec3* BaryCoords = Args->FindShaderResourcePtr<Vec3*>(TPGE_SHDR_FRAG_BARY_COORDS);
-				Color* FragColor = Args->FindShaderResourcePtr<Color*>(TPGE_SHDR_FRAG_COLOR);
+				const Vec3* CamLookDir = Args->GetUniformAsPtr<Vec3>(TPGE_SHDR_CAMERA_LDIR_);
+				LightObject** Light = *Args->GetUniformAsPtr<LightObject**>(TPGE_SHDR_LIGHT_OBJECTS_);
 
+				// Varyings
+				const Vec3* FragNormal = Args->GetVaryingAsPtr<Vec3>(TPGE_SHDR_FRAG_NORMAL_);
+				const Vec3* BaryCoords = Args->GetVaryingAsPtr<Vec3>(TPGE_SHDR_FRAG_BARY_COORDS_);
+				Color* FragColor = Args->GetVaryingAsPtr<Color>(TPGE_SHDR_FRAG_COLOR_);
 				LightObject* Light = nullptr;
+
 				if (LightCount <= 0)
 				{
 					return;
 				}
 
-				Light = *Args->FindShaderResourcePtr<LightObject**>(TPGE_SHDR_LIGHT_OBJECTS);
-
-				Vec3 LDir = Light->GetLightDirection();
+				Vec3 LDir = (*Light)->GetLightDirection();
 				float Li = FragNormal->Dot(LDir);
 
 				float Intensity = std::max<float>(0.0f, Li);
@@ -592,11 +632,15 @@ namespace TerraPGE
 				FragColor->R = std::clamp<float>(((255.0f * BaryCoords->x) * Intensity), 0.0f, 255.0f);
 				FragColor->G = std::clamp<float>(((255.0f * BaryCoords->y) * Intensity), 0.0f, 255.0f);
 				FragColor->B = std::clamp<float>(((255.0f * BaryCoords->z) * Intensity), 0.0f, 255.0f);
-				FragColor->A = 255.0f;			const auto Shader_Normal = [](ShaderArgs* Args)
+				FragColor->A = 255.0f;			
+			};
+
+				
+			const auto Shader_Normal = [](ShaderArgs* Args)
 			{
-				const Triangle* Tri = Args->FindShaderResourcePtr<Triangle*>(TPGE_SHDR_TRI);
-				const Vec3* FragNormal = Args->FindShaderResourcePtr<Vec3*>(TPGE_SHDR_FRAG_NORMAL);
-				Color* FragColor = Args->FindShaderResourcePtr<Color*>(TPGE_SHDR_FRAG_COLOR);
+				const Triangle* Tri = Args->GetUniformAsPtr<Triangle>(TPGE_SHDR_TRI_);
+				const Vec3* FragNormal = Args->GetVaryingAsPtr<Vec3>(TPGE_SHDR_FRAG_NORMAL_);
+				Color* FragColor = Args->GetVaryingAsPtr<Color>(TPGE_SHDR_FRAG_COLOR_);
 
 				Vec3 n = FragNormal->Normalized();
 
@@ -605,13 +649,11 @@ namespace TerraPGE
 				FragColor->B = std::clamp<float>((n.z * 0.5f + 0.5f) * 255.0f, 0.0f, 255.0f);
 				FragColor->A = 255.0f;
 			};
-			};
-
 
 			const auto Shader_WireFrame = [](ShaderArgs* Args)
 			{
-				const Vec3* BaryCoords = Args->FindShaderResourcePtr<Vec3*>(TPGE_SHDR_FRAG_BARY_COORDS);
-				Color* FragColor = Args->FindShaderResourcePtr<Color*>(TPGE_SHDR_FRAG_COLOR);
+				const Vec3* BaryCoords = Args->GetVaryingAsPtr<Vec3>(TPGE_SHDR_FRAG_BARY_COORDS_);
+				Color* FragColor = Args->GetVaryingAsPtr<Color>(TPGE_SHDR_FRAG_COLOR_);
 
 				//TODO:
 				//add these to shader system
@@ -638,19 +680,22 @@ namespace TerraPGE
 
 			const auto Shader_Gradient_Centroid = [](ShaderArgs* Args)
 			{
-				const Triangle* Tri = Args->FindShaderResourcePtr<Triangle*>(TPGE_SHDR_TRI);
-				const size_t LightCount = Args->FindShaderResourceValue<size_t>(TPGE_SHDR_LIGHT_COUNT);
-				const Vec3* FragPos = Args->FindShaderResourcePtr<Vec3*>(TPGE_SHDR_FRAG_POS);
-				const Vec3* FragNormal = Args->FindShaderResourcePtr<Vec3*>(TPGE_SHDR_FRAG_NORMAL);
-				Color* FragColor = Args->FindShaderResourcePtr<Color*>(TPGE_SHDR_FRAG_COLOR);
-				Vec2* PixelCoords = Args->FindShaderResourcePtr<Vec2*>(TPGE_SHDR_PIXEL_COORDS);
+				const size_t LightCount = *(Args->GetUniformAsPtr<size_t>(TPGE_SHDR_LIGHT_COUNT_));
+				LightObject** Lights = *Args->GetUniformAsPtr<LightObject**>(TPGE_SHDR_LIGHT_OBJECTS_);
+
+				const Triangle* Tri = Args->GetUniformAsPtr<Triangle>(TPGE_SHDR_TRI_);
+				const Vec3* FragPos = Args->GetVaryingAsPtr<Vec3>(TPGE_SHDR_FRAG_POS_);
+				const Vec3* FragNormal = Args->GetVaryingAsPtr<Vec3>(TPGE_SHDR_FRAG_NORMAL_);
+				Color* FragColor = Args->GetVaryingAsPtr<Color>(TPGE_SHDR_FRAG_COLOR_);
+				const Vec2* PixelCoords = Args->GetVaryingAsPtr<Vec2>(TPGE_SHDR_PIXEL_COORDS_);
 				LightObject* Light = nullptr;
+				
 				if (LightCount <= 0)
 				{
 					return;
 				}
 
-				Light = *Args->FindShaderResourcePtr<LightObject**>(TPGE_SHDR_LIGHT_OBJECTS);
+				Light = *Lights;
 
 				Vec3 Centroid = ((Tri->Points.Points[0] + Tri->Points.Points[1] + Tri->Points.Points[2]) / 3.0f);
 				Vec3 BaryCoords = CalculateBarycentricCoordinatesScreenSpace(*PixelCoords, Vec2(Centroid.x, Centroid.y), Vec2(Tri->Points.Points[1].x, Tri->Points.Points[1].y), Vec2(Tri->Points.Points[2].x, Tri->Points.Points[2].y));
@@ -670,110 +715,124 @@ namespace TerraPGE
 
 		}
 
+
 		const auto WHACK_SHADER = [](ShaderArgs* Args)
+		{
+			const Triangle* Tri = Args->GetUniformAsPtr<Triangle>(TPGE_SHDR_TRI_);
+			Material* Mat = Tri->Material;
+			LightObject** Lights = *Args->GetUniformAsPtr<LightObject**>(TPGE_SHDR_LIGHT_OBJECTS_);
+			Color* FragColor = Args->GetVaryingAsPtr<Color>(TPGE_SHDR_FRAG_COLOR_);
+			const size_t LightCount = *(Args->GetUniformAsPtr<size_t>(TPGE_SHDR_LIGHT_COUNT_));
+
+			LightObject* Light = nullptr;
+			if (LightCount <= 0)
 			{
-				Triangle* Tri = Args->FindShaderResourcePtr<Triangle*>(TPGE_SHDR_TRI);
-				const size_t LightCount = Args->FindShaderResourceValue<size_t>(TPGE_SHDR_LIGHT_COUNT);
-				Material* Mat = Tri->Material;
+				return;
+			}
 
-				LightObject* Light = nullptr;
-				if (LightCount <= 0)
-				{
-					return;
-				}
+			Light = *Lights;
 
-				Light = *Args->FindShaderResourcePtr<LightObject**>(TPGE_SHDR_LIGHT_OBJECTS);
+			Vec3 LDir = (Light->Transform.GetLocalPosition() - ((Tri->Points.Points[0] + Tri->Points.Points[1] + Tri->Points.Points[2]) / 3.0f)).Normalized();
 
-				Vec3 LDir = (Light->Transform.GetLocalPosition() - ((Tri->Points.Points[0] + Tri->Points.Points[1] + Tri->Points.Points[2]) / 3.0f)).Normalized();
+			float Li = std::max<float>(0.0f, Tri->FaceNormal.Dot(LDir));
 
-				float Li = std::max<float>(0.0f, Tri->FaceNormal.Dot(LDir));
+			Vec3 AmbientCol = Mat->AmbientColor * Light->AmbientCoeff;
+			Vec3 DiffuseCol = Mat->DiffuseColor * Li;
 
-				Vec3 AmbientCol = Mat->AmbientColor * Light->AmbientCoeff;
-				Vec3 DiffuseCol = Mat->DiffuseColor * Li;
+			Vec3 Col = (AmbientCol + DiffuseCol) * Light->Color;
 
-				Tri->Col = (AmbientCol + DiffuseCol) * Light->Color;
-			};
+			FragColor->R = Col.x;
+			FragColor->G = Col.y;
+			FragColor->B = Col.z;
+		};
 
 
 		static __inline void Shader_Phong_LOW_LOD(ShaderArgs* Args)
+		{
+			Color* FragColor = Args->GetVaryingAsPtr<Color>(TPGE_SHDR_FRAG_COLOR_);
+
+			const Triangle* Tri = Args->GetUniformAsPtr<Triangle>(TPGE_SHDR_TRI_);
+			const size_t LightCount = *(Args->GetUniformAsPtr<size_t>(TPGE_SHDR_LIGHT_COUNT_));
+			Material* Mat = Tri->Material;
+			LightObject** Lights = *Args->GetUniformAsPtr<LightObject**>(TPGE_SHDR_LIGHT_OBJECTS_);
+
+			LightObject* Light = nullptr;
+			if (LightCount <= 0)
 			{
-				Triangle* Tri = Args->FindShaderResourcePtr<Triangle*>(TPGE_SHDR_TRI);
-				const size_t LightCount = Args->FindShaderResourceValue<size_t>(TPGE_SHDR_LIGHT_COUNT);
-				Material* Mat = Tri->Material;
+				return;
+			}
 
-				LightObject* Light = nullptr;
-				if (LightCount <= 0)
-				{
-					return;
-				}
+			Light = *Lights;
 
-				Light = *Args->FindShaderResourcePtr<LightObject**>(TPGE_SHDR_LIGHT_OBJECTS);
+			Vec3 LDir = (Light->Transform.GetLocalPosition() - ((Tri->Points.Points[0] + Tri->Points.Points[1] + Tri->Points.Points[2]) / 3.0f)).Normalized();
 
-				Vec3 LDir = (Light->Transform.GetLocalPosition() - ((Tri->Points.Points[0] + Tri->Points.Points[1] + Tri->Points.Points[2]) / 3.0f)).Normalized();
+			float Li = std::max<float>(0.0f, Tri->FaceNormal.Dot(LDir));
 
-				float Li = std::max<float>(0.0f, Tri->FaceNormal.Dot(LDir));
+			Vec3 AmbientCol = (Mat->AmbientColor * Light->AmbientCoeff);
+			Vec3 DiffuseCol = ((Light->Color * Li) + (Mat->DiffuseColor * Li)) * Light->DiffuseCoeff;
 
-				Vec3 AmbientCol = (Mat->AmbientColor * Light->AmbientCoeff);
-				Vec3 DiffuseCol = ((Light->Color * Li) + (Mat->DiffuseColor * Li)) * Light->DiffuseCoeff;
-
-				Tri->Col.x = std::clamp<float>((AmbientCol.x + DiffuseCol.x), 0.0f, 255.0f);
-				Tri->Col.y = std::clamp<float>((AmbientCol.y + DiffuseCol.y), 0.0f, 255.0f);
-				Tri->Col.z = std::clamp<float>((AmbientCol.z + DiffuseCol.z), 0.0f, 255.0f);
-			};
+			FragColor->R = std::clamp<float>((AmbientCol.x + DiffuseCol.x), 0.0f, 255.0f);
+			FragColor->G = std::clamp<float>((AmbientCol.y + DiffuseCol.y), 0.0f, 255.0f);
+			FragColor->B = std::clamp<float>((AmbientCol.z + DiffuseCol.z), 0.0f, 255.0f);
+		};
 
 
 		static __inline void Shader_Phong(ShaderArgs* Args)
+		{
+			const Triangle* Tri = Args->GetUniformAsPtr<Triangle>(TPGE_SHDR_TRI_);
+			const size_t LightCount = *(Args->GetUniformAsPtr<size_t>(TPGE_SHDR_LIGHT_COUNT_));
+			Material* Mat = Tri->Material;
+			const Vec3* LookDir = Args->GetUniformAsPtr<Vec3>(TPGE_SHDR_CAMERA_LDIR_);
+			LightObject** Lights = *Args->GetUniformAsPtr<LightObject**>(TPGE_SHDR_LIGHT_OBJECTS_);
+			Color* FragColor = Args->GetVaryingAsPtr<Color>(TPGE_SHDR_FRAG_COLOR_);
+
+			LightObject* Light = nullptr;
+			if (LightCount <= 0)
 			{
-				Triangle* Tri = Args->FindShaderResourcePtr<Triangle*>(TPGE_SHDR_TRI);
-				const size_t LightCount = Args->FindShaderResourceValue<size_t>(TPGE_SHDR_LIGHT_COUNT);
-				Material* Mat = Tri->Material;
-				Vec3* LookDir = Args->FindShaderResourcePtr<Vec3*>(TPGE_SHDR_CAMERA_LDIR);
+				return;
+			}
 
-				LightObject* Light = nullptr;
-				if (LightCount <= 0)
-				{
-					return;
-				}
+			Light = *Lights;
 
-				Light = *Args->FindShaderResourcePtr<LightObject**>(TPGE_SHDR_LIGHT_OBJECTS);
+			float Intensity = 1.0f;
+			Vec3 LDir = (Light->Transform.GetLocalPosition() - ((Tri->Points.Points[0] + Tri->Points.Points[1] + Tri->Points.Points[2]) / 3.0f)).Normalized();
+			float Li = Tri->FaceNormal.Dot(LDir);
 
-				float Intensity = 1.0f;
-				Vec3 LDir = (Light->Transform.GetLocalPosition() - ((Tri->Points.Points[0] + Tri->Points.Points[1] + Tri->Points.Points[2]) / 3.0f)).Normalized();
-				float Li = Tri->FaceNormal.Dot(LDir);
+			Intensity = std::max<float>(0.0f, Li);
+			Vec3 RDir = LDir - Tri->FaceNormal * 2.0f * Li;
 
-				Intensity = std::max<float>(0.0f, Li);
-				Vec3 RDir = LDir - Tri->FaceNormal * 2.0f * Li;
+			float SpecularIntensity = pow(std::max<float>(0.0f, RDir.Dot(*LookDir)), Mat->Shininess);
 
-				float SpecularIntensity = pow(std::max<float>(0.0f, RDir.Dot(*LookDir)), Mat->Shininess);
+			Vec3 AmbientCol = (Mat->AmbientColor) * Light->AmbientCoeff;
+			Vec3 DiffuseCol = ((Light->Color * Intensity) + (Mat->DiffuseColor * Intensity)) * Light->DiffuseCoeff;
+			Vec3 SpecularClr = ((Light->Color * Light->SpecularCoeff) + (Mat->SpecularColor * Light->SpecularCoeff)) * SpecularIntensity;
 
-				Vec3 AmbientCol = (Mat->AmbientColor) * Light->AmbientCoeff;
-				Vec3 DiffuseCol = ((Light->Color * Intensity) + (Mat->DiffuseColor * Intensity)) * Light->DiffuseCoeff;
-				Vec3 SpecularClr = ((Light->Color * Light->SpecularCoeff) + (Mat->SpecularColor * Light->SpecularCoeff)) * SpecularIntensity;
-
-				Tri->Col.x = std::clamp<float>((AmbientCol.x + DiffuseCol.x + SpecularClr.x), 0.0f, 255.0f);
-				Tri->Col.y = std::clamp<float>((AmbientCol.y + DiffuseCol.y + SpecularClr.y), 0.0f, 255.0f);
-				Tri->Col.z = std::clamp<float>((AmbientCol.z + DiffuseCol.z + SpecularClr.z), 0.0f, 255.0f);
-			};
+			FragColor->R = std::clamp<float>((AmbientCol.x + DiffuseCol.x + SpecularClr.x), 0.0f, 255.0f);
+			FragColor->G = std::clamp<float>((AmbientCol.y + DiffuseCol.y + SpecularClr.y), 0.0f, 255.0f);
+			FragColor->B = std::clamp<float>((AmbientCol.z + DiffuseCol.z + SpecularClr.z), 0.0f, 255.0f);
+		};
 
 
 		// Blinn Phong with extra stuff
 		static __inline void  DefaultShader(ShaderArgs* Args)
-			{
-				const Triangle* Tri = Args->FindShaderResourcePtr<Triangle*>(TPGE_SHDR_TRI);
-				const size_t LightCount = Args->FindShaderResourceValue<size_t>(TPGE_SHDR_LIGHT_COUNT);
-				const Material* Mat = Tri->Material;
-				const Vec3* CamLookDir = Args->FindShaderResourcePtr<Vec3*>(TPGE_SHDR_CAMERA_LDIR);
-				Vec3* FragPos = Args->FindShaderResourcePtr<Vec3*>(TPGE_SHDR_FRAG_POS);
-				Vec3* FragNormal = Args->FindShaderResourcePtr<Vec3*>(TPGE_SHDR_FRAG_NORMAL);
-				Color* FragColor = Args->FindShaderResourcePtr<Color*>(TPGE_SHDR_FRAG_COLOR);
-				bool IsInShadow = Args->FindShaderResourceValue<bool>(TPGE_SHDR_IS_IN_SHADOW);
-				float shadowMul = 1.0f - IsInShadow * (1.0f - 0.5f);
-				const Vec3* CamPos = Args->FindShaderResourcePtr<Vec3*>(TPGE_SHDR_CAMERA_POS);
-				TextureCoords* UVW = Args->FindShaderResourcePtr<TextureCoords*>(TPGE_SHDR_TEX_UVW);
-				FragNormal->Normalize();
-				Vec3 TexturCol = Vec3(1.0f, 1.0f, 1.0f);
-				Vec3 TexColor = Vec3(1.0f, 1.0f, 1.0f); // default white (no effect)
-				TexColor *= (Tri->Material->HasUsableTexture()) ? Tri->Material->Textures.at(0)->GetPixelColor(UVW->u, 1.0f - UVW->v).GetRGB() / 255.0f : Vec3(1.0f, 1.0f, 1.0f);
+		{
+			const Triangle* Tri = Args->GetUniformAsPtr<Triangle>(TPGE_SHDR_TRI_);
+			const size_t LightCount = *(Args->GetUniformAsPtr<size_t>(TPGE_SHDR_LIGHT_COUNT_));
+			const Material* Mat = Tri->Material;
+			const Vec3* LookDir = Args->GetUniformAsPtr<Vec3>(TPGE_SHDR_CAMERA_LDIR_);
+			const Vec3* CamPos = Args->GetUniformAsPtr<Vec3>(TPGE_SHDR_CAMERA_POS_);
+\
+			Vec3* FragPos = Args->FindShaderResourcePtr<Vec3*>(TPGE_SHDR_FRAG_POS);
+			Vec3* FragNormal = Args->FindShaderResourcePtr<Vec3*>(TPGE_SHDR_FRAG_NORMAL);
+			Color* FragColor = Args->FindShaderResourcePtr<Color*>(TPGE_SHDR_FRAG_COLOR);
+			bool IsInShadow = Args->FindShaderResourceValue<bool>(TPGE_SHDR_IS_IN_SHADOW);
+			float shadowMul = 1.0f - IsInShadow * (1.0f - 0.5f);
+			TextureCoords* UVW = Args->FindShaderResourcePtr<TextureCoords*>(TPGE_SHDR_TEX_UVW);
+			FragNormal->Normalize();
+			
+			Vec3 TexturCol = Vec3(1.0f, 1.0f, 1.0f);
+			Vec3 TexColor = Vec3(1.0f, 1.0f, 1.0f); // default white (no effect)
+			TexColor *= (Tri->Material->HasUsableTexture()) ? Tri->Material->Textures.at(0)->GetPixelColor(UVW->u, 1.0f - UVW->v).GetRGB() / 255.0f : Vec3(1.0f, 1.0f, 1.0f);
 				
 				Vec3 BaseDiffuse = (Mat->DiffuseColor / 255.0f) * TexColor;
 
