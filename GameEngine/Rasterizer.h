@@ -351,13 +351,13 @@ namespace TerraPGE::Renderer
 		// Allocating now reduces copying
 		//BaseArgs->PrepareFragmentShader();
 
-		Triangle* ScreenSpaceTri = BaseArgs->FindShaderResourcePtr<Triangle*>(TPGE_SHDR_TRI);
+		Triangle* ScreenSpaceTri = GlobalArgs->GetUniformAsPtr<Triangle*>(TPGE_SHDR_TRI);
 		//Matrix Vp = BaseArgs->FindShaderResourceValue<Matrix>(TPGE_SHDR_CAMERA_VIEW_MATRIX) * BaseArgs->FindShaderResourceValue<Matrix>(TPGE_SHDR_CAMERA_PROJ_MATRIX);
-		LightObject** Lights = BaseArgs->FindShaderResourcePtr<LightObject**>(TPGE_SHDR_LIGHT_OBJECTS);
-		ShaderTypes* ShaderType = BaseArgs->FindShaderResourcePtr<ShaderTypes*>(TPGE_SHDR_TYPE);
-		size_t LightCount = BaseArgs->FindShaderResourceValue<size_t>(TPGE_SHDR_LIGHT_COUNT);
+		LightObject** Lights = GlobalArgs->GetUniformAsPtr<LightObject**>(TPGE_SHDR_LIGHT_OBJECTS);
+		ShaderTypes* ShaderType = GlobalArgs->GetUniformAsPtr<ShaderTypes*>(TPGE_SHDR_TYPE);
+		size_t LightCount = GlobalArgs->GetUniformAsPtr<size_t>(TPGE_SHDR_LIGHT_COUNT);
 		bool HasLight = LightCount > 0;
-		Color* FragmentColor = BaseArgs->FindShaderResourcePtr<Color*>(TPGE_SHDR_FRAG_COLOR);
+		Color* FragmentColor = GlobalArgs->GetVaryingAsPtr<Color*>(TPGE_SHDR_FRAG_COLOR_);
 
 		bool MidPixel = false;
 
@@ -476,10 +476,10 @@ namespace TerraPGE::Renderer
 							Renderer::RenderingCore::SetPixelFrameBuffer(FrameBuffer, x, y, ScreenWidth, ColorVal, ColorVal, ColorVal);
 							continue;
 						}
-
+						bool* IsInShdow = GlobalArgs->GetVaryingAsPtr(TPGE_SHDR_IS_IN_SHADOW_);
 						if (isInShadow)
 						{
-							BaseArgs->EditShaderDataValue(TPGE_SHDR_IS_IN_SHADOW, true);
+							*IsInShdow = true;
 
 							if (DebugShadows)
 							{
@@ -489,15 +489,15 @@ namespace TerraPGE::Renderer
 						}
 						else
 						{
-							BaseArgs->EditShaderDataValue(TPGE_SHDR_IS_IN_SHADOW, false);
+							*IsInShdow = false;
 						}
 					}
 
 					if (WireFrame)
 					{
 						Vec3 BaryCoords = Vec3(alpha, beta, gamma);
-						BaseArgs->EditShaderDataValue<Vec3>(TPGE_SHDR_FRAG_BARY_COORDS, BaryCoords);
-						TerraPGE::EngineShaders::DebugShaders::Shader_WireFrame(BaseArgs);
+						GlobalArgs->EditShaderDataValue<Vec3>(TPGE_SHDR_FRAG_BARY_COORDS, BaryCoords);
+						TerraPGE::EngineShaders::DebugShaders::Shader_WireFrame(GlobalArgs);
 						Renderer::RenderingCore::SetPixelFrameBuffer(FrameBuffer, x, y, ScreenWidth, FragmentColor->R, FragmentColor->G, FragmentColor->B);
 						continue;
 					}
@@ -507,7 +507,7 @@ namespace TerraPGE::Renderer
 						// Debug dispatching
 						if (ScreenSpaceTri->OverrideTextureColor)
 						{
-							BaseArgs->EditShaderDataValue<Color>(TPGE_SHDR_FRAG_COLOR, Color(ScreenSpaceTri->Col.x, ScreenSpaceTri->Col.y, ScreenSpaceTri->Col.z));
+							GlobalArgs->EditShaderDataValue<Color>(TPGE_SHDR_FRAG_COLOR, Color(ScreenSpaceTri->Col.x, ScreenSpaceTri->Col.y, ScreenSpaceTri->Col.z));
 						}
 						else if (ScreenSpaceTri->Material->HasUsableTexture())
 						{
@@ -516,14 +516,14 @@ namespace TerraPGE::Renderer
 							uvw.y = Interp.PerspectiveCorrectInterpolate(uvw0.y, uvw1.y, uvw2.y, v0.w, v1.w, v2.w);
 							uvw.z = Interp.PerspectiveCorrectInterpolate(uvw0.z, uvw1.z, uvw2.z, v0.w, v1.w, v2.w);
 
-							BaseArgs->EditShaderDataValue<TextureCoords>(TPGE_SHDR_TEX_UVW, { uvw.x / uvw.z, uvw.y / uvw.z, uvw.z });
-							EngineShaders::Shader_Sample_Texture(BaseArgs);
+							GlobalArgs->EditShaderDataValue<TextureCoords>(TPGE_SHDR_TEX_UVW, { uvw.x / uvw.z, uvw.y / uvw.z, uvw.z });
+							EngineShaders::Shader_Sample_Texture(GlobalArgs);
 							Renderer::RenderingCore::SetPixelFrameBuffer(FrameBuffer, x, y, ScreenWidth, FragmentColor->R, FragmentColor->G, FragmentColor->B);
 							continue;
 						}
 						else
 						{
-							BaseArgs->EditShaderDataValue<Color>(TPGE_SHDR_FRAG_COLOR, Color(ScreenSpaceTri->Material->AmbientColor.x, ScreenSpaceTri->Material->AmbientColor.y, ScreenSpaceTri->Material->AmbientColor.z));
+							GlobalArgs->EditShaderDataValue<Color>(TPGE_SHDR_FRAG_COLOR, Color(ScreenSpaceTri->Material->AmbientColor.x, ScreenSpaceTri->Material->AmbientColor.y, ScreenSpaceTri->Material->AmbientColor.z));
 						}
 					}
 					else
@@ -537,12 +537,12 @@ namespace TerraPGE::Renderer
 
 						// Set up some shader args and call fragment shader
 						Vec3 BaryCoords = Vec3(alpha, beta, gamma);
-						BaseArgs->EditShaderDataValue<Vec3>(TPGE_SHDR_FRAG_POS, InterpolatedWorldPos);
-						BaseArgs->EditShaderDataValue<Vec3>(TPGE_SHDR_FRAG_NORMAL, ScreenSpaceTri->FaceNormal);
-						BaseArgs->EditShaderDataValue<TextureCoords>(TPGE_SHDR_TEX_UVW, { uvw.x / uvw.z, uvw.y / uvw.z, uvw.z });
-						BaseArgs->EditShaderDataValue<Vec3>(TPGE_SHDR_FRAG_BARY_COORDS, BaryCoords);
-						BaseArgs->EditShaderDataValue<Vec2>(TPGE_SHDR_PIXEL_COORDS, Vec2((float)x, (float)y));
-						Shader(BaseArgs);
+						GlobalArgs->EditShaderDataValue<Vec3>(TPGE_SHDR_FRAG_POS, InterpolatedWorldPos);
+						GlobalArgs->EditShaderDataValue<Vec3>(TPGE_SHDR_FRAG_NORMAL, ScreenSpaceTri->FaceNormal);
+						GlobalArgs->EditShaderDataValue<TextureCoords>(TPGE_SHDR_TEX_UVW, { uvw.x / uvw.z, uvw.y / uvw.z, uvw.z });
+						GlobalArgs->EditShaderDataValue<Vec3>(TPGE_SHDR_FRAG_BARY_COORDS, BaryCoords);
+						GlobalArgs->EditShaderDataValue<Vec2>(TPGE_SHDR_PIXEL_COORDS, Vec2((float)x, (float)y));
+						Shader(GlobalArgs);
 					}
 
 					// Set pixel in pixel buffer
@@ -561,7 +561,7 @@ namespace TerraPGE::Renderer
 			}
 		}
 
-		BaseArgs->Delete();
+		//BaseArgs->Delete();
 	}
 
 
