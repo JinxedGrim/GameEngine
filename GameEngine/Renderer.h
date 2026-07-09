@@ -7,7 +7,7 @@
 
 //TODO
 // X. Add icons to text formatter
-// X. Add  fonts to format parser
+// X. Add fonts to format parser
 // X. Remove aspect from render calculation
 
 
@@ -755,7 +755,7 @@ namespace TerraPGE::Renderer
 			Matrix* WorldMat = Object->Transform._GetWorldMatrixPtr();
 
 
-			Args.BindUniform<int>(TPGE_SHDR_TYPE_, (int*)(&Object->SHADER_TYPE));
+			Args.BindUniform<ShaderTypes>(TPGE_SHDR_TYPE_, (ShaderTypes*)(&Object->SHADER_TYPE));
 			Args.BindUniform<Vec3>(TPGE_SHDR_CAMERA_POS_, &WorldPos);
 			Args.BindUniform<Vec3>(TPGE_SHDR_CAMERA_LDIR_, &LDir);
 			Args.BindUniform<Matrix>(TPGE_SHDR_CAMERA_VIEW_MATRIX_, ViewMat);
@@ -764,19 +764,6 @@ namespace TerraPGE::Renderer
 			Args.BindUniform<LightObject**>(TPGE_SHDR_LIGHT_OBJECTS_, &SceneLights);
 			Args.BindUniform<size_t>(TPGE_SHDR_LIGHT_COUNT_, &LightCount);
 			Args.BindUniform<bool>(TPGE_SHDR_DEBUG_SHADOWS_, &TerraPGE::Renderer::DebugShadows);
-			//Args.BindUniform<Triangle>(TPGE_SHDR_TRI_, nullptr);
-
-			//Args->AddShaderDataByValue(TPGE_SHDR_TYPE, Object->SHADER_TYPE, 0);
-			//Args->AddShaderDataByValue<Vec3>(TPGE_SHDR_CAMERA_POS, Cam->Transform.GetWorldPosition(), 0);
-			//Args->AddShaderDataByValue<Vec3>(TPGE_SHDR_CAMERA_LDIR, Cam->GetLookDirection(), 0);
-			//Args->AddShaderDataPtr(TPGE_SHDR_CAMERA_VIEW_MATRIX, Cam->_GetViewMatrixPtr(), 0);
-			//Args->AddShaderDataPtr(TPGE_SHDR_CAMERA_PROJ_MATRIX, Cam->_GetProjectionMatrixPtr(), 0);
-			//Args->AddShaderDataPtr(TPGE_SHDR_OBJ_MATRIX, Object->Transform._GetWorldMatrixPtr(), 0);
-			//Args->AddShaderDataPtr(TPGE_SHDR_LIGHT_OBJECTS, SceneLights, 0);
-			//Args->AddShaderDataByValue<size_t>(TPGE_SHDR_LIGHT_COUNT, LightCount, 0);
-			//Args->AddShaderDataByValue<bool>(TPGE_SHDR_DEBUG_SHADOWS, DebugShadows);
-			//Args->AddShaderDataByValue<bool>(TPGE_SHDR_IS_IN_SHADOW, false);
-			//Args->AddShaderDataPtr(TPGE_SHDR_TRI, nullptr, 0);
 
 			// Draw each tri
 			for (Triangle& ToDraw : Clipped)
@@ -789,8 +776,7 @@ namespace TerraPGE::Renderer
 				ToDraw.Translate(Vec3((float)(Renderer::sx * 0.5f), (float)(Renderer::sy * 0.5f), 0.0f));
 
 				//SceneLights, LightCount
-				//Args->EditShaderData(TPGE_SHDR_TRI, &ToDraw, 0);
-				Args.BindUniform<Triangle>(TPGE_SHDR_TRI_, nullptr);
+				Args.BindUniform<Triangle>(TPGE_SHDR_TRI_, &ToDraw);
 
 
 				// Calc lighting (only if lighting is applied at a tri level)
@@ -799,14 +785,9 @@ namespace TerraPGE::Renderer
 					Object->Shader(&Args);
 				}
 
-
-				if (Core::DoMultiThreading)
-					Renderer::BaryCentricRasterizer(Renderer::FrameBuffer, Renderer::DepthBuffer, Renderer::sx, Renderer::sy, Renderer::ShadowMap, Renderer::ShadowMapWidth, Renderer::ShadowMapHeight, Object->Shader, &Args);
-				else
-					Renderer::BaryCentricRasterizer(Renderer::FrameBuffer, Renderer::DepthBuffer, Renderer::sx, Renderer::sy, Renderer::ShadowMap, Renderer::ShadowMapWidth, Renderer::ShadowMapHeight, Object->Shader, &Args);
+				Renderer::BaryCentricRasterizer(Renderer::FrameBuffer, Renderer::DepthBuffer, Renderer::sx, Renderer::sy, Renderer::ShadowMap, Renderer::ShadowMapWidth, Renderer::ShadowMapHeight, Object->Shader, &Args);
+				Args.DeleteData();
 			}
-
-			//Args->Delete();
 		}
 	}
 
@@ -907,10 +888,10 @@ namespace TerraPGE::Renderer
 		{
 			for (int x = 0; x < W; ++x)
 			{
-				// skyboox render
 				Color skyColor = sky->Render(x, y, (1.0f / W), (1.0f / H), Fov, Aspect, CamRot);
 
-				// 5. Write color
+
+
 				Renderer::RenderingCore::SetPixelFrameBuffer(Renderer::FrameBuffer, x, y, Renderer::sx, skyColor.R, skyColor.G, skyColor.B);
 			}
 		}
@@ -936,7 +917,6 @@ namespace TerraPGE::Renderer
 		Renderer::RenderMeshes(Cam, SceneObjects, SceneLights, ObjectCount, LightCount);
 		t = Timer.Stop();
 		Renderer::RenderMeshTime = t;
-		//Renderer::RenderEnvironment();
 
 		Timer.Start();
 		Renderer::SwapFrameBuffer(Renderer::UseHDR, Renderer::DoGammaCorrection);
@@ -956,6 +936,7 @@ namespace TerraPGE::Renderer
 				G = _mm_add_ps(G, _mm_mul_ps(HdrMask, _mm_sub_ps(_mm_div_ps(G, _mm_add_ps(one, G)), G)));
 				B = _mm_add_ps(B, _mm_mul_ps(HdrMask, _mm_sub_ps(_mm_div_ps(B, _mm_add_ps(one, B)), B)));
 			}
+
 
 			static __inline void ApplyGamma(__m128& R, __m128& G, __m128& B, const __m128& GammaMask)
 			{
@@ -1064,7 +1045,7 @@ namespace TerraPGE::Renderer
 
 				for (uint64_t y = y0; y < y1; ++y)
 				{
-					for (uint64_t x = 0; x + 3 < width; x+=3)
+					for (uint64_t x = 0; x + 4 <= width; x += 4) 
 					{
 						Color skyColor = sky->Render(x, y, (1.0f / width), (1.0f / height), Fov, Aspect, CamRot);
 
@@ -1379,6 +1360,28 @@ namespace TerraPGE::Renderer
 				SSE::RenderSkyboxByChunk(sky, Cam, y0, y1, width, height, Fov, Proj, CamRot);
 		}
 
+		inline void RenderSkybox(EnvironmentRenderable* sky, Camera* Cam, const uint64_t width, const uint64_t height)
+		{
+			const float Fov = Cam->GetFov();
+			const Matrix Proj = Cam->GetProjectionMatrix();
+			const Matrix3x3 CamRot = Cam->GetRotationMatrix();
+
+			// for loop
+			const uint64_t chunkCount = std::thread::hardware_concurrency();
+			const uint64_t rowsPerChunk = (height + chunkCount - 1) / chunkCount;
+
+			for (uint64_t chunk = 0; chunk < chunkCount; ++chunk)
+			{
+				const uint64_t y0 = chunk * rowsPerChunk;
+				const uint64_t y1 = std::min<uint64_t>(y0 + rowsPerChunk, height);
+
+				if (y0 >= y1)
+					continue;
+
+				SIMD::RenderSkyboxByChunk(sky, Cam, y0, y1, width, height, Fov, Proj, CamRot);
+			}
+		}
+
 
 		void RenderScene(Camera* Cam, Renderable** SceneObjects, LightObject** SceneLights, size_t ObjectCount, size_t LightCount, EnvironmentRenderable* Skybox = nullptr)
 		{
@@ -1401,7 +1404,6 @@ namespace TerraPGE::Renderer
 				Renderer::RenderMeshes(Cam, SceneObjects, SceneLights, ObjectCount, LightCount);
 				t = Timer.Stop();
 				Renderer::RenderMeshTime = t;
-				//Renderer::RenderEnvironment();
 
 				Timer.Start();
 				Renderer::SIMD::AVX::SwapFrameBuffer(Renderer::FrameBuffer, Renderer::sx, Renderer::sy, Renderer::EngineGdi->GetPixelBuffer(), Renderer::UseHDR, Renderer::DoGammaCorrection);

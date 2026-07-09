@@ -278,7 +278,7 @@ class TextureCoords
 		return result;
 	}
 
-	__inline Vec3 AsVec3()
+	__inline Vec3 AsVec3() const
 	{
 		return
 		{
