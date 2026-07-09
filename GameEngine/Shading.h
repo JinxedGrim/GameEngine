@@ -17,42 +17,64 @@
 // then an arg with the full data struct
 // 
 
+enum class ShaderTypes
+{
+	SHADER_TRIANGLE = 0,
+	SHADER_FRAGMENT = 1,
+};
+
 struct ShaderUniform
 {
-	void* Data;
+	const void* Data = nullptr;
 };
 
 
 struct ShaderBuffers
 {
-	void* Data;
-	uint32_t stride;
-	uint32_t sz;
+	void* Data = nullptr;
+	uint32_t stride = 0;
+	uint32_t sz = 0;
 };
 
 
 struct ShaderVarying
 {
-	void* Data;
+	void* Data = nullptr;
+};
+
+
+struct OwnedPtr
+{
+	void* Ptr = nullptr;
+	void (*Delete)() = nullptr;
 };
 
 
 template<typename T>
 struct Slot
 {
-	uint32_t index;
+	uint32_t index = 0;
 };
+
 
 class ShaderArgs
 {
 	std::vector<ShaderUniform> Uniforms;
 	std::vector<ShaderVarying> Varyings;
 	std::vector<ShaderBuffers> Buffers;
+	std::vector<OwnedPtr> DeleteList;
+	
 
-	inline void EnsureSize(std::vector<void*>& vec, uint32_t index)
+
+	inline static uint32_t UniformCounter = 0;
+	inline static uint32_t VaryingCounter = 0;
+	inline static uint32_t BufferCounter = 0;
+
+	template<typename T>
+	inline void EnsureSize(std::vector<T>& vec, uint32_t index)
 	{
 		if (vec.size() <= index)
-			vec.resize(index + 1, nullptr);
+			vec.resize(index + 1);
 	}
 
 
@@ -63,24 +85,47 @@ class ShaderArgs
 	}
 
 public:
-	static __inline unsigned __int32 _AllocateUniformSlot()
+
+	template<typename T>
+	static __inline uint32_t& GetTypedUniformCounter()
 	{
-		static unsigned __int32 UniformCounter = 0;
-		return UniformCounter++;
+		static uint32_t counter = 0;
+		return counter;
 	}
 
-
-	static __inline unsigned __int32 _AllocateVaryingSlot()
+	template<typename T>
+	static __inline uint32_t& GetTypedVaryingCounter()
 	{
-		static unsigned __int32 VaryingCounter = 0;
-		return VaryingCounter++;
+		static uint32_t counter = 0;
+		return counter;
 	}
 
-
-	static __inline unsigned __int32 _AllocateBufferSlot()
+	template<typename T>
+	static __inline uint32_t& GetTypedBufferCounter()
 	{
-		static unsigned __int32 BufferCounter = 0;
-		return BufferCounter++;
+		static uint32_t counter = 0;
+		return counter;
+	}
+
+	template<typename T>
+	static __inline Slot<T> _AllocateUniformSlot()
+	{
+		(GetTypedUniformCounter<T>())++;
+		return { UniformCounter++ };
+	}
+
+	template<typename T>
+	static __inline Slot<T> _AllocateVaryingSlot()
+	{
+		GetTypedVaryingCounter<T>()++;
+		return { VaryingCounter++ };
+	}
+
+	template<typename T>
+	static __inline Slot<T> _AllocateBufferSlot()
+	{
+		GetTypedBufferCounter<T>()++;
+		return { BufferCounter++ };
 	}
 
 
@@ -128,7 +173,6 @@ public:
 		return (T*)ptr;
 	}
 
-
 	template<typename T>
 	inline T* GetBuffer(Slot<T> slot)
 	{
@@ -138,7 +182,7 @@ public:
 
 	// Bound data must stay alive for duration of object lifetime!
 	template<typename T>
-	__inline void BindUniform(Slot<T> slot, T* Data)
+	__inline void BindUniform(Slot<T> slot, const T* Data)
 	{
 		this->EnsureSize(this->Uniforms, slot.index);
 		this->Uniforms[slot.index].Data = (void*)Data;
@@ -159,19 +203,72 @@ public:
 
 	// Bound data must stay alive for duration of object lifetime!
 	template<typename T>
-	__inline void BindVarying(Slot<T> slot, T* Data)
+	void BindVarying(Slot<T> slot, T* Data)
 	{
 		this->EnsureSize(this->Varyings, slot.index);
 		this->Varyings[slot.index].Data = (void*)Data;
 	}
+
+
+	template<typename T>
+	__inline void BindOwnedUniform(Slot<T> slot, const T* Data, void(*Deleter)() = nullptr)
+	{
+		this->EnsureSize(this->Uniforms, slot.index);
+		this->Uniforms[slot.index].Data = (void*)Data;
+		OwnedPtr op = { (void*)Data, Deleter };
+		this->DeleteList.push_back(op);
+	}
+
+
+	template<typename T>
+	__inline void BindOwnedBuffer(Slot<T> slot, T* Data, unsigned __int32 Sz, unsigned __int32 Stride, void(*Deleter)() = nullptr)
+	{
+		this->EnsureBufferSize(slot.index);
+
+		this->Buffers[slot.index].data = (void*)Data;
+		this->Buffers[slot.index].size = Sz;
+		this->Buffers[slot.index].stride = Stride;
+
+		OwnedPtr op = { Data, Deleter };
+		this->DeleteList.push_back(op);
+	}
+
+
+	template<typename T>
+	__inline void BindOwnedVarying(Slot<T> slot, T* Data, void(*Deleter)() = nullptr)
+	{
+		this->EnsureSize(this->Varyings, slot.index);
+		this->Varyings[slot.index].Data = (void*)Data;
+
+		OwnedPtr op = { Data, Deleter };
+		this->DeleteList.push_back(op);
+	}
+
+
+	__inline void DeleteData()
+	{
+		for (OwnedPtr& ptr : this->DeleteList)
+		{
+			if (ptr.Delete != nullptr)
+				ptr.Delete();
+			else
+				delete ptr.Ptr;
+		}
+
+		this->DeleteList.clear();
+	}
+
+	~ShaderArgs()
+	{
+		this->DeleteData();
+	}
 };
 
-#define DEFINE_UNIFORM(name, type) static Slot<type> name { ShaderArgs::_AllocateUniformSlot() }
-#define DEFINE_VARYING(name, type) static Slot<type> name { ShaderArgs::_AllocateVaryingSlot() }
-#define DEFINE_BUFFER(name, type) static Slot<type> name { ShaderArgs::_AllocateBufferSlot() }
+#define DEFINE_UNIFORM(name, type) static Slot<type> name { ShaderArgs::_AllocateUniformSlot<type>() }
+#define DEFINE_VARYING(name, type) static Slot<type> name { ShaderArgs::_AllocateVaryingSlot<type>() }
+#define DEFINE_BUFFER(name, type) static Slot<type> name { ShaderArgs::_AllocateBufferSlot<type>() }
 
-
-DEFINE_UNIFORM(TPGE_SHDR_TYPE_, int);
+DEFINE_UNIFORM(TPGE_SHDR_TYPE_, ShaderTypes);
 DEFINE_UNIFORM(TPGE_SHDR_CAMERA_POS_, Vec3);
 DEFINE_UNIFORM(TPGE_SHDR_CAMERA_LDIR_, Vec3);
 DEFINE_UNIFORM(TPGE_SHDR_CAMERA_VIEW_MATRIX_, Matrix);
@@ -190,414 +287,40 @@ DEFINE_VARYING(TPGE_SHDR_FRAG_BARY_COORDS_, Vec3);
 DEFINE_VARYING(TPGE_SHDR_PIXEL_COORDS_, Vec2);
 DEFINE_VARYING(TPGE_SHDR_TEX_UVW_, TextureCoords);
 
-
-enum class ShaderTypes
-{
-	SHADER_TRIANGLE = 0,
-	SHADER_FRAGMENT = 1,
-};
-
-struct ShaderData
-{
-	void* Data = nullptr;
-	__int32 DataSz = 0;
-	bool FreeOnDelete = false;
-	std::string Name = "";
-	size_t StoredHash = 0;
-
-	ShaderData()
-	{
-		this->Data = nullptr;
-		this->DataSz = 0;
-		this->FreeOnDelete = false;
-		this->StoredHash = 0;
-	}
-
-	ShaderData(const ShaderData* Data)
-	{
-		this->Data = Data->Data;
-		this->DataSz = Data->DataSz;
-		this->Name = Data->Name;
-		this->StoredHash = Data->StoredHash;
-		this->FreeOnDelete = false;
-	}
-
-	static __inline size_t GetHash(const std::string_view& Name)
-	{
-		return ShaderData::hash_fn(Name);
-	}
-
-	static const std::hash<std::string_view> hash_fn;
-};
-
-const std::hash<std::string_view> ShaderData::hash_fn;
-
-// ShaderName class
-class ShaderName
-{
-	size_t hash;
-
-	public:
-	ShaderName(const char* name)
-		: hash(ShaderData::hash_fn(std::string_view(name))) {}
-
-	// Getter for the hash value
-	size_t getHash() const 
-	{
-		return hash;
-	}
-
-	constexpr operator unsigned long long() const 
-	{
-		return hash;
-	}
-};
-
-
-const ShaderName TPGE_SHDR_TYPE = "TpgeShdrType";
-const ShaderName TPGE_SHDR_CAMERA_POS = "TpgeShdrCamPos";
-const ShaderName TPGE_SHDR_CAMERA_LDIR = "TpgeShdrCamLdir";
-const ShaderName TPGE_SHDR_CAMERA_VIEW_MATRIX = "TpgeShdrCamViewMat";
-const ShaderName TPGE_SHDR_CAMERA_PROJ_MATRIX = "TpgeShdrCamProjMat";
-const ShaderName TPGE_SHDR_OBJ_MATRIX = "TpgeShdrObjMat";
-const ShaderName TPGE_SHDR_TRI = "TpgeShdrTri";
-const ShaderName TPGE_SHDR_LIGHT_COUNT = "TpgeShdrLightCount";
-const ShaderName TPGE_SHDR_LIGHT_OBJECTS = "TpgeShdrLightObjects";
-const ShaderName TPGE_SHDR_FRAG_NORMAL = "TpgeShdrFragNormal";
-const ShaderName TPGE_SHDR_FRAG_COLOR = "TpgeShdrFragColor";
-const ShaderName TPGE_SHDR_FRAG_POS = "TpgeShdrFragPos";
-const ShaderName TPGE_SHDR_IS_IN_SHADOW = "TpgeShdrIsInShadow";
-const ShaderName TPGE_SHDR_DEBUG_SHADOWS = "TpgeShdrDebugShadows";
-const ShaderName TPGE_SHDR_FRAG_BARY_COORDS = "TpgeShdrFragBaryCoords";
-const ShaderName TPGE_SHDR_PIXEL_COORDS = "TpgeShdrPixelCoords";
-const ShaderName TPGE_SHDR_TEX_UVW = "TpgeShdrTexUvwPixelCoords";
-
-// Class for holding shader data you can add / get variables from it by using string name
-class ShaderArgss
-{
-	std::vector<ShaderData*> Payload = {};
-	int Parameters = 0;
-
-	public:
-
-	ShaderArgss()
-	{
-
-	}
-
-	ShaderArgss(const ShaderArgss* B)
-	{
-		Payload.reserve(B->Payload.size());
-
-		// Iterate through the hash table
-		for (const ShaderData* BData : B->Payload)
-		{
-			ShaderData* AData = DEBUG_NEW ShaderData(BData); // copy constructor  
-			AData->FreeOnDelete = false; // Set this because we are a child of the original args and it will do cleanup / the user will
-
-			this->Payload.push_back(AData);
-		}
-
-		this->Parameters = this->Payload.size();
-	}
-
-
-	const size_t __inline FindHash(const std::string_view& Name)
-	{
-		return ShaderData::GetHash(Name);
-
-
-		//const auto &it = this->Hashes.find(Name);
-		//if (it != this->Hashes.end())
-		//{
-		//	return it->second;
-		//}
-		//else
-		//{
-		//	return 0;
-		//}
-	}
-
-
-	__inline ShaderData* FindDataPtr(const size_t& Hash)
-	{
-		for (ShaderData* Data : this->Payload)
-		{
-			if (Data->StoredHash == Hash)
-			{
-				return Data;
-			}
-		}
-
-		return nullptr;
-	}
-
-
-	template<typename T>
-	T FindShaderResourcePtr(const ShaderName& Hash)
-	{
-		ShaderData* ShdrData = this->FindDataPtr(Hash);
-
-		if (ShdrData == nullptr)
-		{
-			throw;
-		}
-
-		return (T)ShdrData->Data;
-	}
-
-
-	template<typename T>
-	T FindShaderResourceValue(const size_t& Hash)
-	{
-		const ShaderData* ShdrData = this->FindDataPtr(Hash);
-
-		if (ShdrData == nullptr)
-		{
-			if constexpr (std::is_fundamental<T>::value)
-			{
-				return NULL;
-			}
-			else
-			{
-				return T();
-			}
-		}
-		
-		if (ShdrData->Data == nullptr)
-		{
-			throw;
-		}
-
-		return *(T*)ShdrData->Data;
-	}
-
-
-	ShaderData* FindShaderResourceEdit(const size_t& Hash)
-	{
-		ShaderData* ShadrData = this->FindDataPtr(Hash);
-
-		return ShadrData;
-	}
-
-
-	void AddShaderDataPtr(size_t Hash, void* Data, __int32 Sz = sizeof(void*), bool FreeOnDelete = false)
-	{
-		ShaderData* ShadrData = this->FindDataPtr(Hash);
-
-		if (ShadrData == nullptr)
-		{
-			ShadrData = new ShaderData();
-		}
-
-		ShadrData->StoredHash = Hash;
-		ShadrData->DataSz = Sz;
-		ShadrData->Data = Data;
-		ShadrData->FreeOnDelete = FreeOnDelete;
-
-		this->Payload.push_back(ShadrData);
-
-		Parameters++;
-	}
-
-
-	// Primitives work all around here 
-	// for a class it must have a ctor with the sig ctor(*B) as this function will attempt to instantiate a copy of the object
-	template <typename T>
-	void AddShaderDataByValue(const size_t& Hash, const T& Data, const __int32& Sz = sizeof(T))
-	{
-		ShaderData* ShadrData = this->FindDataPtr(Hash);
-
-		if (ShadrData == nullptr)
-		{
-			ShadrData = DEBUG_NEW ShaderData();
-		}
-
-		ShadrData->StoredHash = Hash;
-		ShadrData->DataSz = Sz;
-
-
-		if constexpr (std::is_fundamental<T>::value)
-		{
-			ShadrData->Data = DEBUG_NEW T;
-			*(T*)(ShadrData->Data) = Data;
-		}
-		else
-		{
-			ShadrData->Data = DEBUG_NEW T();
-
-			assert(ShadrData != nullptr);
-
-			*(T*)(ShadrData->Data) = Data;
-		}
-
-		ShadrData->FreeOnDelete = true;
-
-		this->Payload.push_back(ShadrData);
-
-		Parameters++;
-	}
-
-
-	void EditShaderData(const size_t& Hash, void* Data, const __int32& Sz = sizeof(void*))
-	{
-		ShaderData* ShadrData = this->FindDataPtr(Hash);
-
-		if (ShadrData != nullptr)
-		{
-			ShadrData->DataSz = Sz;
-			ShadrData->Data = Data;
-		}
-		else
-		{
-			throw;
-		}
-	}
-
-
-	template<typename T>
-	void EditShaderDataValue(const size_t& Hash, const T& Data)
-	{
-		ShaderData* ShadrData = this->FindShaderResourceEdit(Hash);
-
-		if (ShadrData != nullptr && ShadrData->Data != nullptr)
-		{
-			*((T*)ShadrData->Data) = Data;
-		}
-		else
-		{
-			throw;	
-		}
-	}
-
-
-	bool DoesArgExist(const size_t& Hash)
-	{
-		const ShaderData* Data = this->FindDataPtr(Hash);
-
-		if (Data == nullptr)
-		{
-			return false;
-		}
-
-		return true;
-	}
-
-
-	void __inline PrepareFragmentShader()
-	{
-		this->AddShaderDataByValue<Color>(TPGE_SHDR_FRAG_COLOR, Color(0, 0, 0), 0);
-		this->AddShaderDataByValue<Vec3>(TPGE_SHDR_FRAG_POS, Vec3(), sizeof(void*));
-		this->AddShaderDataByValue<Vec3>(TPGE_SHDR_FRAG_NORMAL, Vec3(), sizeof(void*));
-		this->AddShaderDataByValue<TextureCoords>(TPGE_SHDR_TEX_UVW, TextureCoords(), sizeof(void*));
-		this->AddShaderDataByValue<Vec3>(TPGE_SHDR_FRAG_BARY_COORDS, Vec3(), sizeof(void*));
-		this->AddShaderDataByValue<Vec2>(TPGE_SHDR_PIXEL_COORDS, Vec2(), sizeof(void*));
-	}
-
-
-	void Delete()
-	{
-		delete this;
-		//for (const auto& pair : this->Payload)
-		//{
-		//	ShaderData* Data = pair.second;
-
-		//	if (Data->Data != nullptr && Data->FreeOnDelete)
-		//	{
-		//		delete Data->Data;
-		//	}
-
-		//	delete Data;
-		//}
-
-		//this->Payload.clear();
-	}
-
-
-	~ShaderArgss()
-	{
-		for (ShaderData* Data : this->Payload)
-		{
-			if (Data->Data != nullptr && Data->FreeOnDelete)
-			{
-				delete Data->Data;
-			}
-
-			delete Data;
-		}
-
-		this->Payload.clear();
-	}
-};
-
-//struct BaseShaderArgs
+//struct ShaderData
 //{
-//	ShaderTypes ShaderType = ShaderTypes::SHADER_TRIANGLE;
-//	LightTypes LightType = LightTypes::DirectionalLight;
+//	void* Data = nullptr;
+//	__int32 DataSz = 0;
+//	bool FreeOnDelete = false;
+//	std::string Name = "";
+//	size_t StoredHash = 0;
 //
-//	// Triangle Info (ALL SHADERS)
-//	Triangle* Tri = nullptr;
-//	const Material* Mat = nullptr;
-//
-//	//Camera Info (ALL SHADERS)
-//	Matrix ModelMat;00
-//	Matrix ViewMat;
-//	Matrix ProjectionMat;
-//	Vec3 CamPos = Vec3(0, 0, 0);
-//	Vec3 CamLookDir = Vec3(0, 0, 0);
-//
-//	// Light Info (ALL SHADERS)
-//	LightObject** Lights;
-//	size_t LightCount;
-//
-//	// Fragment Info (SHADER_TYPE == SHADER_FRAGMENT)
-//	Vec3* FragPos = nullptr;
-//	Vec3 FragNormal = Vec3(0.0f, 0.0f, 0.0f);
-//	Vec3 BaryCoords = Vec3(0, 0, 0);
-//	Color FragColor = Color(0.0f, 0.0f, 0.0f);
-//	Vec2 PixelCoords = Vec2(0, 0);
-//	TextureCoords UVW = { 0.0f, 0.0f, 0.0f };
-//
-//	// ShadowInfo
-//	Vec3 LightSpacePos;
-//	bool IsInShadow = false;
-//	bool DebugShadows = false;
-//	bool DebugShadowmap = false;
-//
-//	BaseShaderArgs()
+//	ShaderData()
 //	{
-//
+//		this->Data = nullptr;
+//		this->DataSz = 0;
+//		this->FreeOnDelete = false;
+//		this->StoredHash = 0;
 //	}
 //
-//	BaseShaderArgs(Triangle* Tri, const Material* Mat, const Vec3& CamPos, const Vec3& CamLookDir, const Matrix& ModelMatrix, const Matrix& ViewMatrix, const Matrix& ProjMatrix, LightObject** Lights, const size_t LightCount, const ShaderTypes SHADER_TYPE)
+//	ShaderData(const ShaderData* Data)
 //	{
-//		this->Tri = Tri;
-//		this->Mat = Mat;
-//		this->CamPos = CamPos;
-//		this->CamLookDir = CamLookDir;
-//		this->Lights = Lights;
-//		this->LightCount = LightCount;
-//		this->ShaderType = SHADER_TYPE;
-//		this->ModelMat = ModelMatrix;
-//		this->ViewMat = ViewMatrix;
-//		this->ProjectionMat = ProjMatrix;
+//		this->Data = Data->Data;
+//		this->DataSz = Data->DataSz;
+//		this->Name = Data->Name;
+//		this->StoredHash = Data->StoredHash;
+//		this->FreeOnDelete = false;
 //	}
-//};
-//};
 //
-//template<typename ArgsT>
-//struct Shader
-//{
-//	inline void operator()(ArgsT* args) const
+//	static __inline size_t GetHash(const std::string_view& Name)
 //	{
-//
+//		return ShaderData::hash_fn(Name);
 //	}
+//
+//	static const std::hash<std::string_view> hash_fn;
 //};
 //
-//
-//
-
-
+//const std::hash<std::string_view> ShaderData::hash_fn;
 
 namespace TerraPGE
 {
@@ -634,7 +357,7 @@ namespace TerraPGE
 				FragColor->R = std::clamp<float>(((255.0f * BaryCoords->x) * Intensity), 0.0f, 255.0f);
 				FragColor->G = std::clamp<float>(((255.0f * BaryCoords->y) * Intensity), 0.0f, 255.0f);
 				FragColor->B = std::clamp<float>(((255.0f * BaryCoords->z) * Intensity), 0.0f, 255.0f);
-				FragColor->A = 255.0f;			
+				FragColor->A = 255.0f;
 			};
 
 				
