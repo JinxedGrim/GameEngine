@@ -26,7 +26,7 @@
 // X. Clear coat layers
 // X. Sub surface scattering
 // X. GGX 
-// X. IBL || IBL approxZ
+// X. IBL || IBL approx Z
 // X. experiment with terrain deformations
 // X. Unify logging
 // X. More UI
@@ -75,7 +75,8 @@ namespace TerraPGE
 			CurrScene = FirstScene;
 		}
 
-		public:
+		
+	public:
 		static SceneManager* GetInstance()
 		{
 			if (Instance == nullptr)
@@ -86,10 +87,12 @@ namespace TerraPGE
 			return Instance;
 		}
 
+		
 		static SceneManager* Create(Scene* FirstScene)
 		{
 			return new SceneManager(FirstScene);
 		}
+
 
 		void UpdateScene(WndCreator& Wnd, double ElapsedTime)
 		{

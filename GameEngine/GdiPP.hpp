@@ -1,5 +1,4 @@
 #include <iostream>
-#include <iostream>
 #include <windows.h>
 #include <memory>
 
@@ -384,7 +383,7 @@ public:
 
             if (!MemDC || !MemBM || !OldBM)
             {
-                ErrorHandler("[GdiPP]  Failed to initialize DoubleBuffering");
+                ErrorHandler("[GdiPP]  Failed to initialize DoubleBuffering: " + std::to_string(GetLastError()) + "{MemDC, MemBM, OldBM}: " + std::to_string((uint64_t)MemDC) + ", " + std::to_string((uint64_t)MemBM) + ", " + std::to_string((uint64_t)OldBM));
                 SafeReleaseDC(Wnd, ScreenDC);
                 SafeDeleteDC(MemDC);
                 SafeDeleteObject(MemBM);
@@ -1189,7 +1188,21 @@ public:
     // Returns true if successful
     bool UpdateClientRgn()
     {
+        if (!IsWindow(Wnd))
+        {
+            ErrorHandler("[GdiPP]  Invalid window handle");
+			return false;
+        }
+
         bool Stat = GetClientRect(Wnd, &this->ClientRect);
+
+
+        if(!Stat)
+        {
+            ErrorHandler("[GdiPP]  Failed to get client rect");
+            return false;
+		}
+
         int bytesPerPixel = 3; // 24-bit RGB image
 
         this->ScreenSz.x = ClientRect.right - ClientRect.left;
@@ -1199,12 +1212,22 @@ public:
         bi.bmiHeader.biWidth = this->ScreenSz.x;
         bi.bmiHeader.biHeight = -this->ScreenSz.y;
 
+        if (this->ScreenSz.x <= 0 || this->ScreenSz.y <= 0)
+        {
+            LogError("Invalid client size: " +
+                std::to_string(this->ScreenSz.x) + "x" +
+                std::to_string(this->ScreenSz.y));
+            return false;
+        }
+
         MemBM = CreateDIBSection(this->ScreenDC, &bi, DIB_RGB_COLORS, (void**)&PixelBuffer, NULL, 0);
 
         if (!MemBM)
+        {
+            LogError("Failed to initialize MemBM! " + std::to_string(GetLastError()));
             return false;
+        }
 
-        std::string str = std::to_string(GetLastError());
         OldBM = (HBITMAP)SelectObject(MemDC, MemBM);
 
         return Stat;
