@@ -1,6 +1,49 @@
 #define _CRT_SECURE_NO_WARNINGS
-#include "ExampleScene.h"
 
+// If exporting as dll
+#define TPGE_EXPORTS
+
+#ifdef TPGE_EXPORTS
+#include "Exports.h"
+
+BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserved)
+{
+    switch (ul_reason_for_call)
+    {
+    case DLL_PROCESS_ATTACH:
+    {
+        // DLL loaded into a process.
+        // Good place for very small initialization only.
+
+        DisableThreadLibraryCalls(hModule);
+        break;
+    }
+
+    case DLL_PROCESS_DETACH:
+    {
+        // DLL unloaded from a process.
+        // Good place for very small cleanup only.
+        break;
+    }
+
+    case DLL_THREAD_ATTACH:
+    {
+        // New thread created in this process.
+        break;
+    }
+
+    case DLL_THREAD_DETACH:
+    {
+        // Thread exiting.
+        break;
+    }
+    }
+
+    return TRUE;
+}
+
+#else
+#include "ExampleScene.h"
 
 int APIENTRY WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _In_ LPSTR lpCmdLine, _In_ int nShowCmd)
 {
@@ -28,3 +71,5 @@ int APIENTRY WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance,
 	system("timeout \t 8");
 #endif
 }
+
+#endif

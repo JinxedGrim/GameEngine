@@ -59,7 +59,7 @@ struct Slot
 
 class ShaderArgs
 {
-	std::vector<ShaderUniform> Uniforms;
+	inline static std::vector<ShaderUniform> Uniforms;
 	std::vector<ShaderVarying> Varyings;
 	std::vector<ShaderBuffers> Buffers;
 	std::vector<OwnedPtr> DeleteList;
@@ -264,66 +264,46 @@ public:
 	}
 };
 
-#define DEFINE_UNIFORM(name, type) static Slot<type> name { ShaderArgs::_AllocateUniformSlot<type>() }
-#define DEFINE_VARYING(name, type) static Slot<type> name { ShaderArgs::_AllocateVaryingSlot<type>() }
-#define DEFINE_BUFFER(name, type) static Slot<type> name { ShaderArgs::_AllocateBufferSlot<type>() }
+#define DEFINE_UNIFORM(name, type) const inline static Slot<type> name { ShaderArgs::_AllocateUniformSlot<type>() }
+#define DEFINE_VARYING(name, type) const inline static Slot<type> name { ShaderArgs::_AllocateVaryingSlot<type>() }
+#define DEFINE_BUFFER(name, type) const inline static Slot<type> name { ShaderArgs::_AllocateBufferSlot<type>() }
 
-DEFINE_UNIFORM(TPGE_SHDR_TYPE_, ShaderTypes);
-DEFINE_UNIFORM(TPGE_SHDR_CAMERA_POS_, Vec3);
-DEFINE_UNIFORM(TPGE_SHDR_CAMERA_LDIR_, Vec3);
-DEFINE_UNIFORM(TPGE_SHDR_CAMERA_VIEW_MATRIX_, Matrix);
-DEFINE_UNIFORM(TPGE_SHDR_CAMERA_PROJ_MATRIX_, Matrix);
-DEFINE_UNIFORM(TPGE_SHDR_OBJ_MATRIX_, Matrix);
-DEFINE_UNIFORM(TPGE_SHDR_TRI_, Triangle);
-DEFINE_UNIFORM(TPGE_SHDR_LIGHT_COUNT_, size_t);
-DEFINE_UNIFORM(TPGE_SHDR_LIGHT_OBJECTS_, LightObject**);
-DEFINE_UNIFORM(TPGE_SHDR_DEBUG_SHADOWS_, bool);
 
-DEFINE_VARYING(TPGE_SHDR_FRAG_NORMAL_, Vec3);
-DEFINE_VARYING(TPGE_SHDR_FRAG_COLOR_, Color);
-DEFINE_VARYING(TPGE_SHDR_FRAG_POS_, Vec3);
-DEFINE_VARYING(TPGE_SHDR_IS_IN_SHADOW_, bool);
-DEFINE_VARYING(TPGE_SHDR_FRAG_BARY_COORDS_, Vec3);
-DEFINE_VARYING(TPGE_SHDR_PIXEL_COORDS_, Vec2);
-DEFINE_VARYING(TPGE_SHDR_TEX_UVW_, TextureCoords);
+enum SHADER_MODES
+{
+	CPU_SHADER = 0,
+	GPU_SHADER = 1
+};
 
-//struct ShaderData
-//{
-//	void* Data = nullptr;
-//	__int32 DataSz = 0;
-//	bool FreeOnDelete = false;
-//	std::string Name = "";
-//	size_t StoredHash = 0;
-//
-//	ShaderData()
-//	{
-//		this->Data = nullptr;
-//		this->DataSz = 0;
-//		this->FreeOnDelete = false;
-//		this->StoredHash = 0;
-//	}
-//
-//	ShaderData(const ShaderData* Data)
-//	{
-//		this->Data = Data->Data;
-//		this->DataSz = Data->DataSz;
-//		this->Name = Data->Name;
-//		this->StoredHash = Data->StoredHash;
-//		this->FreeOnDelete = false;
-//	}
-//
-//	static __inline size_t GetHash(const std::string_view& Name)
-//	{
-//		return ShaderData::hash_fn(Name);
-//	}
-//
-//	static const std::hash<std::string_view> hash_fn;
-//};
-//
-//const std::hash<std::string_view> ShaderData::hash_fn;
+class BaseShader
+{
+public:
+
+	SHADER_MODES Mode = SHADER_MODES::CPU_SHADER;
+	virtual __inline void Run(ShaderArgs* Args) = 0;
+};
 
 namespace TerraPGE
 {
+	DEFINE_UNIFORM(TPGE_SHDR_TYPE_, ShaderTypes);
+	DEFINE_UNIFORM(TPGE_SHDR_CAMERA_POS_, Vec3);
+	DEFINE_UNIFORM(TPGE_SHDR_CAMERA_LDIR_, Vec3);
+	DEFINE_UNIFORM(TPGE_SHDR_CAMERA_VIEW_MATRIX_, Matrix);
+	DEFINE_UNIFORM(TPGE_SHDR_CAMERA_PROJ_MATRIX_, Matrix);
+	DEFINE_UNIFORM(TPGE_SHDR_OBJ_MATRIX_, Matrix);
+	DEFINE_UNIFORM(TPGE_SHDR_TRI_, Triangle);
+	DEFINE_UNIFORM(TPGE_SHDR_LIGHT_COUNT_, size_t);
+	DEFINE_UNIFORM(TPGE_SHDR_LIGHT_OBJECTS_, LightObject**);
+	DEFINE_UNIFORM(TPGE_SHDR_DEBUG_SHADOWS_, bool);
+
+	DEFINE_VARYING(TPGE_SHDR_FRAG_NORMAL_, Vec3);
+	DEFINE_VARYING(TPGE_SHDR_FRAG_COLOR_, Color);
+	DEFINE_VARYING(TPGE_SHDR_FRAG_POS_, Vec3);
+	DEFINE_VARYING(TPGE_SHDR_IS_IN_SHADOW_, bool);
+	DEFINE_VARYING(TPGE_SHDR_FRAG_BARY_COORDS_, Vec3);
+	DEFINE_VARYING(TPGE_SHDR_PIXEL_COORDS_, Vec2);
+	DEFINE_VARYING(TPGE_SHDR_TEX_UVW_, TextureCoords);
+
 	namespace EngineShaders
 	{
 		namespace DebugShaders
@@ -374,6 +354,7 @@ namespace TerraPGE
 				FragColor->B = std::clamp<float>((n.z * 0.5f + 0.5f) * 255.0f, 0.0f, 255.0f);
 				FragColor->A = 255.0f;
 			};
+
 
 			const auto Shader_WireFrame = [](ShaderArgs* Args)
 			{
@@ -705,7 +686,6 @@ namespace TerraPGE
 			FragColor->B = std::clamp(FinalColor.z, 0.0f, 255.0f);
 			FragColor->A = 255.0f;
 		};
-
 
 		
 		static __inline void Shader_Texture_Only(ShaderArgs* Args)
