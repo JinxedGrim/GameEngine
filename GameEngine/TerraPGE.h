@@ -129,7 +129,7 @@ namespace TerraPGE
 	static bool ApplyGravity = true;
 	static float FrameTime = 0.0f;
 	static float PhysTime = 0.0f;
-	static bool DebugColliders = true;
+	static bool DebugColliders = false;
 
 
 
@@ -371,12 +371,16 @@ namespace TerraPGE
 			PhysTime = Timer.Stop();
 
 			Timer.Start();
+
 			if (!Core::DoMultiThreading && !Core::SimdAcceleration)
 				Renderer::RenderScene(CurrScene->MainCamera, RenderQueue, LightsToRender, SceneRenderQueue->size(), SceneLights->size(), CurrScene->SkyboxToRender);
+			
 			else if (!Core::DoMultiThreading && Core::SimdAcceleration)
 				Renderer::SIMD::RenderScene(CurrScene->MainCamera, RenderQueue, LightsToRender, SceneRenderQueue->size(), SceneLights->size(), CurrScene->SkyboxToRender);
+			
 			else
 				Renderer::Multithreaded::RenderScene(CurrScene->MainCamera, RenderQueue, LightsToRender, SceneRenderQueue->size(), SceneLights->size(), CurrScene->SkyboxToRender);
+			
 			FrameTime = Timer.Stop();
 
 			CurrScene->DrawSceneGUI(Renderer::EngineGdi,  (float)ElapsedTime);
