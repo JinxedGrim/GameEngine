@@ -64,6 +64,7 @@ class ExampleScene : public TerraPGE::Scene
 		this->SkyboxToRender = Skybox::Create(this->MainCamera, CubeMap::LoadCubemapFromDirectory("Skybox_Sky\\"));
 		Vec3 SunDir = ((Skybox*)this->SkyboxToRender)->SampleForSunDirection();
 
+		this->SkyboxToRender = nullptr;
 
 		Dl = DirectionalLight(SunDir, 50.0f, Vec3(253, 251, 211), 0.15f, 0.4f, 0.2f);
 		Dl.CastsShadows = true;
@@ -760,7 +761,7 @@ class ExampleScene : public TerraPGE::Scene
 				static bool ca = false;
 
 				if (!ca)
-					Scene->Txt->Delete();
+					Texture::Delete(Scene->Txt);
 				ca = true;
 			}
 			std::this_thread::sleep_for(std::chrono::milliseconds(300));

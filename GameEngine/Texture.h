@@ -29,6 +29,69 @@
 #define CUBEMAP_NY 4
 #define CUBEMAP_NZ 5
 
+
+class TextureCoords
+{
+public:
+
+	TextureCoords()
+	{
+		u = 0;
+		v = 0;
+		w = 1.0f;
+	}
+
+	TextureCoords(float _u, float _v, float _w = 1.0f)
+	{
+		u = _u;
+		v = _v;
+		w = _w;
+	}
+
+	float u = 0;
+	float v = 0;
+	float w = 1.0f;
+
+	void __inline CorrectPerspective(float _w)
+	{
+		if (_w != 0)
+		{
+			this->u = this->u / _w;
+			this->v = this->v / _w;
+			this->w = 1.0f / _w;
+		}
+	}
+
+	TextureCoords Lerp(const TextureCoords& end, float t) const
+	{
+		TextureCoords result;
+
+		result.u = this->u + (end.u - this->u) * t;
+		result.v = this->v + (end.v - this->v) * t;
+		result.w = this->w + (end.w - this->w) * t;
+
+		return result;
+	}
+
+	__inline Vec3 AsVec3() const
+	{
+		return
+		{
+			this->u,
+			this->v,
+			this->w,
+		};
+	}
+
+	void Lerped(const TextureCoords& end, float t)
+	{
+		this->u = this->u + (end.u - this->u) * t;
+		this->v = this->v + (end.v - this->v) * t;
+		this->w = this->w + (end.w - this->w) * t;
+	}
+};
+
+
 class Image2D
 {
 	std::vector<unsigned char> PixelData = {};
@@ -235,68 +298,6 @@ class Image2D
 };
 
 
-class TextureCoords
-{
-	public:
-
-	TextureCoords()
-	{
-		u = 0;
-		v = 0;
-		w = 1.0f;
-	}
-
-	TextureCoords(float _u, float _v, float _w = 1.0f)
-	{
-		u = _u;
-		v = _v;
-		w = _w;
-	}
-
-	float u = 0;
-	float v = 0;
-	float w = 1.0f;
-
-	void __inline CorrectPerspective(float _w)
-	{
-		if (_w != 0)
-		{
-			this->u = this->u / _w;
-			this->v = this->v / _w;
-			this->w = 1.0f / _w;
-		}
-	}
-
-	TextureCoords Lerp(const TextureCoords& end, float t) const
-	{
-		TextureCoords result;
-
-		result.u = this->u + (end.u - this->u) * t;
-		result.v = this->v + (end.v - this->v) * t;
-		result.w = this->w + (end.w - this->w) * t;
-
-		return result;
-	}
-
-	__inline Vec3 AsVec3() const
-	{
-		return
-		{
-			this->u,
-			this->v,
-			this->w,
-		};
-	}
-
-	void Lerped(const TextureCoords& end, float t)
-	{
-		this->u = this->u + (end.u - this->u) * t;
-		this->v = this->v + (end.v - this->v) * t;
-		this->w = this->w + (end.w - this->w) * t;
-	}
-};
-
-
 class Texture
 {
 	public:
@@ -314,20 +315,22 @@ class Texture
 		Bilinear
 	};
 
-	private:
-
 	static inline std::vector<Texture*> LoadedTextures = {};
+
+	private:
 
 	WrappingMode WrapMode;
 	Image2D* Image = nullptr;
 
 	~Texture()
 	{
-		auto it = std::find(LoadedTextures.begin(), LoadedTextures.end(), this);
-
-		if (it != LoadedTextures.end())
+		if (Image != nullptr)
 		{
-			this->LoadedTextures.erase(it);
+			if (Image != nullptr)
+			{
+				Image->Delete();
+				Image = nullptr;
+			}
 		}
 	}
 
@@ -345,9 +348,11 @@ class Texture
 		this->Image = Image2D::Load(Prefix + Filename);
 
 		this->Used = (this->Image != nullptr && this->Image->IsLoaded());
-		this->Name = Filename;
+		this->Name = std::to_string(Prefix.length()) + Filename + std::to_string((int)this->WrapMode);
 		this->WrapMode = Mode;
-		LoadedTextures.push_back(this);
+
+		if (this->Used)
+			LoadedTextures.push_back(this);
 	}
 
 	public:
@@ -423,24 +428,30 @@ class Texture
 	}
 
 
-	void Delete()
+	static void Delete(Texture*& texture)
 	{
-		this->Image->Delete();
-		this->Image = nullptr;
+		if (texture == nullptr)
+		{
+			return;
+		}
 
-		auto it = std::find(LoadedTextures.begin(), LoadedTextures.end(), this);
+		auto it = std::find(LoadedTextures.begin(), LoadedTextures.end(), texture);
 
 		if (it != LoadedTextures.end())
 		{
-			this->LoadedTextures.erase(it);
+			texture->LoadedTextures.erase(it);
 		}
+
+		delete texture;
+		texture = nullptr;
 	}
+
 
 	static void DeleteAllTextures()
 	{
 		for (Texture* T : LoadedTextures)
 		{
-			T->Delete();
+			Texture::Delete(T);
 		}
 
 		LoadedTextures.clear();

@@ -302,9 +302,11 @@ class Triangle
 				return pos;
 		};
 
-		std::vector<Vec4> outPos;
-		std::vector<Vec4> outWorld;
-		std::vector<Vec3> outNormal;
+		Vec4 outPos[4];
+		Vec4 outWorld[4];
+		Vec3 outNormal[4];
+
+		int outCount = 0;
 
 		for (int i = 0; i < 3; i++)
 		{
@@ -312,21 +314,23 @@ class Triangle
 
 			if (inside[i])
 			{
-				outPos.push_back(in[i]);
-				outWorld.push_back(world[i]);
-				outNormal.push_back(Normals[i]);
+				outPos[outCount] = in[i];
+				outWorld[outCount] = world[i];
+				outNormal[outCount] = Normals[i];
+				outCount++;
 			}
 
 			if (inside[i] ^ inside[j])
 			{
 				float t = IntersectPos(i, j);
-				outPos.push_back(InterpolatePos(i, j, in, t));
-				outWorld.push_back(InterpolatePos(i, j, world, t));
-				outNormal.push_back(InterpolateVec3(i, j, Normals, t));
+				outPos[outCount] = InterpolatePos(i, j, in, t);
+				outWorld[outCount] = InterpolatePos(i, j, world, t);
+				outNormal[outCount] = InterpolateVec3(i, j, Normals, t);
+				outCount++;
 			}
 		}
 
-		if (outPos.size() == 3)
+		if (outCount == 3)
 		{
 			Out1 = *this;
 			Out1.Points.Points[0] = outPos[0];
@@ -362,7 +366,7 @@ class Triangle
 			return 1;
 		}
 
-		if (outPos.size() == 4)
+		if (outCount == 4)
 		{
 			Out1 = *this;
 			Out1.Points.Points[0] = outPos[0];
@@ -376,15 +380,15 @@ class Triangle
 			Out1.WorldSpaceVerts.Points[2] = outWorld[2];
 
 			Out2 = *this;
-			Out1.Points.Points[0] = outPos[0];
-			Out1.Points.Points[1] = outPos[2];
-			Out1.Points.Points[2] = outPos[3];
-			Out1.Points.Normals[0] = outNormal[0];
-			Out1.Points.Normals[1] = outNormal[2];
-			Out1.Points.Normals[2] = outNormal[3];
-			Out1.WorldSpaceVerts.Points[0] = outWorld[0];
-			Out1.WorldSpaceVerts.Points[1] = outWorld[2];
-			Out1.WorldSpaceVerts.Points[2] = outWorld[3];
+			Out2.Points.Points[0] = outPos[0];
+			Out2.Points.Points[1] = outPos[2];
+			Out2.Points.Points[2] = outPos[3];
+			Out2.Points.Normals[0] = outNormal[0];
+			Out2.Points.Normals[1] = outNormal[2];
+			Out2.Points.Normals[2] = outNormal[3];
+			Out2.WorldSpaceVerts.Points[0] = outWorld[0];
+			Out2.WorldSpaceVerts.Points[1] = outWorld[2];
+			Out2.WorldSpaceVerts.Points[2] = outWorld[3];
 
 			if (DebugClip)
 			{

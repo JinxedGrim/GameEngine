@@ -35,6 +35,7 @@ public:
 	Texture* EmissiveMap = nullptr;
 	Texture* RoughnessMap = nullptr;
 	Texture* MetallicMap = nullptr;
+	Texture* AmbientMap = nullptr;
 	Texture* AOMap = nullptr;
 	Texture* HeightMap = nullptr; // (for parallax/displacement)
 
@@ -135,7 +136,9 @@ public:
 							if (textureFilePath != "")
 							{
 								TerraPGE::Core::LogInfo("[MATERIAL]", "Loading Texture (ka): " + textureFilePath);
-								Mat->Textures.push_back(Texture::Create(textureFilePath));
+								Texture* txt = Texture::Create(textureFilePath);
+								Mat->Textures.push_back(txt);
+								Mat->AmbientMap = txt;
 							}
 						}
 						else if (propKeyword == "map_Kd")
@@ -147,7 +150,9 @@ public:
 #ifdef _DEBUG
 								TerraPGE::Core::LogInfo("[MATERIAL]", "Loading Texture (kd): " + textureFilePath);
 #endif
-								Mat->Textures.push_back(Texture::Create(textureFilePath));
+								Texture* txt = Texture::Create(textureFilePath);
+								Mat->Textures.push_back(txt);
+								Mat->DiffuseMap = txt;
 							}
 						}
 
@@ -230,7 +235,7 @@ public:
 
 		for (Texture* T : Textures)
 		{
-			T->Delete();
+			Texture::Delete(T);
 		}
 
 		delete this;
