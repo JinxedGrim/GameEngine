@@ -13,7 +13,7 @@
 //     TO DO 
 // X. Edge funcs on rasterizer
 // X. Anisotropics
-// X. Fix texture interpolation in clipper 
+// X. Fix texture interpolation in clipper
 // X. Redesign multithreading
 // X. implement a prefab system
 // X. Bloom

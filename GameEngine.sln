@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio Version 16
-VisualStudioVersion = 16.0.32802.440
+# Visual Studio Version 17
+VisualStudioVersion = 17.14.37411.7 d17.14
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "GameEngine", "GameEngine\GameEngine.vcxproj", "{DDD6A649-78B3-4265-9E4F-432660FE5149}"
 EndProject
@@ -9,6 +9,10 @@ Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
 		Debug|x86 = Debug|x86
+		DllDebug|x64 = DllDebug|x64
+		DllDebug|x86 = DllDebug|x86
+		DllRelease|x64 = DllRelease|x64
+		DllRelease|x86 = DllRelease|x86
 		Release|x64 = Release|x64
 		Release|x86 = Release|x86
 	EndGlobalSection
@@ -17,6 +21,14 @@ Global
 		{DDD6A649-78B3-4265-9E4F-432660FE5149}.Debug|x64.Build.0 = Debug|x64
 		{DDD6A649-78B3-4265-9E4F-432660FE5149}.Debug|x86.ActiveCfg = Debug|Win32
 		{DDD6A649-78B3-4265-9E4F-432660FE5149}.Debug|x86.Build.0 = Debug|Win32
+		{DDD6A649-78B3-4265-9E4F-432660FE5149}.DllDebug|x64.ActiveCfg = DllDebug|x64
+		{DDD6A649-78B3-4265-9E4F-432660FE5149}.DllDebug|x64.Build.0 = DllDebug|x64
+		{DDD6A649-78B3-4265-9E4F-432660FE5149}.DllDebug|x86.ActiveCfg = DllDebug|Win32
+		{DDD6A649-78B3-4265-9E4F-432660FE5149}.DllDebug|x86.Build.0 = DllDebug|Win32
+		{DDD6A649-78B3-4265-9E4F-432660FE5149}.DllRelease|x64.ActiveCfg = DllRelease|x64
+		{DDD6A649-78B3-4265-9E4F-432660FE5149}.DllRelease|x64.Build.0 = DllRelease|x64
+		{DDD6A649-78B3-4265-9E4F-432660FE5149}.DllRelease|x86.ActiveCfg = DllRelease|Win32
+		{DDD6A649-78B3-4265-9E4F-432660FE5149}.DllRelease|x86.Build.0 = DllRelease|Win32
 		{DDD6A649-78B3-4265-9E4F-432660FE5149}.Release|x64.ActiveCfg = Release|x64
 		{DDD6A649-78B3-4265-9E4F-432660FE5149}.Release|x64.Build.0 = Release|x64
 		{DDD6A649-78B3-4265-9E4F-432660FE5149}.Release|x86.ActiveCfg = Release|Win32

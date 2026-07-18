@@ -5,7 +5,6 @@
 #define TPGE_API 
 #endif
 #include "ExampleScene.h"
-#include "Texture.h"
 
 namespace TerraPGE
 {
@@ -17,11 +16,53 @@ namespace TerraPGE
 			WndCreatorW Wnd = WndCreatorW(CS_OWNDC, L"GameEngine", L"Game Engine", LoadCursorW(NULL, IDC_ARROW), NULL, ClearBrush, (DWORD)WndExModes::BorderLessEx, (DWORD)WndModes::BorderLess | (DWORD)WndModes::ClipChildren, 0, 0, TerraPGE::Renderer::sx, TerraPGE::Renderer::sy);
 		}
 
+		namespace _Engine
+		{
+			struct GraphicsSettings
+			{
+				bool UseHDR;
+				bool DoGammaCorrection;
+				bool DebugClip;
+				bool DebugShadowMap;
+				bool DebugColliders;
+				bool DebugDepthBuffer;
+				bool DoLighting;
+				int shadowMapWidth;
+				int shadowMapHeight;
+			};
+
+			TPGE_API void SetGraphicsSettings(GraphicsSettings settings)
+			{
+				TerraPGE::Renderer::UseHDR = settings.UseHDR;
+				TerraPGE::Renderer::DoGammaCorrection = settings.DoGammaCorrection;
+				TerraPGE::Renderer::DebugClip = settings.DebugClip;
+				TerraPGE::Renderer::DebugShadowMap = settings.DebugShadowMap;
+				TerraPGE::DebugColliders = settings.DebugColliders;
+				TerraPGE::Renderer::DebugDepthBuffer = settings.DebugDepthBuffer;
+				TerraPGE::Renderer::DoLighting = settings.DoLighting;
+				TerraPGE::Renderer::ShadowMapWidth = settings.shadowMapWidth;
+				TerraPGE::Renderer::ShadowMapHeight = settings.shadowMapHeight;
+			}
+
+			TPGE_API GraphicsSettings GetGraphicsSettings()
+			{
+				GraphicsSettings settings;
+				settings.UseHDR = TerraPGE::Renderer::UseHDR;
+				settings.DoGammaCorrection = TerraPGE::Renderer::DoGammaCorrection;
+				settings.DebugClip = TerraPGE::Renderer::DebugClip;
+				settings.DebugShadowMap = TerraPGE::Renderer::DebugShadowMap;
+				settings.DebugColliders = TerraPGE::DebugColliders;
+				settings.DebugDepthBuffer = TerraPGE::Renderer::DebugDepthBuffer;
+				settings.DoLighting = TerraPGE::Renderer::DoLighting;
+				settings.shadowMapWidth = TerraPGE::Renderer::ShadowMapWidth;
+				settings.shadowMapHeight = TerraPGE::Renderer::ShadowMapHeight;
+				return settings;
+			}
+		}
+
 
 		namespace _Scene
 		{
-
-
 			TPGE_API void DestroyScene(void* scene)
 			{
 				ExampleScene* exScene = static_cast<ExampleScene*>(scene);
@@ -30,12 +71,11 @@ namespace TerraPGE
 					delete exScene;
 				}
 			}
-		}
 
-
-		TPGE_API void* GetCurrentScene()
-		{
-			return TerraPGE::CurrScene;
+			TPGE_API void* GetCurrentScene()
+			{
+				return TerraPGE::CurrScene;
+			}
 		}
 
 
@@ -80,7 +120,37 @@ namespace TerraPGE
 				char* MaterialName;
 			};
 
+			namespace Material
+			{
+				TPGE_API void* CreateMaterial(MaterialInfo info)
+				{
+					return ::Material::CreateMaterial(Vec3(info.ACr, info.ACg, info.ACb), Vec3(info.DCr, info.DCg, info.DCb), Vec3(info.SCr, info.SCg, info.SCb), info.Es, std::string(info.MaterialName));
+				}
 
+				TPGE_API void** GetAllLoadedMaterials()
+				{
+					return (void**)(::Material::LoadedMaterials.data());
+				}
+
+				TPGE_API void** SetMaterialInfo(MaterialInfo Info, void* Material)
+				{
+					return nullptr;
+				}
+
+				namespace Texture
+				{
+					TPGE_API void* CreateTexture()
+					{
+//						return ::Texture::Create(Vec3(info.ACr, info.ACg, info.ACb), Vec3(info.DCr, info.DCg, info.DCb), Vec3(info.SCr, info.SCg, info.SCb), info.Es, std::string(info.MaterialName));
+						return nullptr;
+					}
+
+					TPGE_API void** GetAllLoadedTextures()
+					{
+						return (void**)(::Texture::LoadedTextures.data());
+					}
+				}
+			}
 
 			TPGE_API size_t GetObjectCount(void* scene)
 			{
@@ -141,7 +211,7 @@ namespace TerraPGE
 			{
 				TerraPGE::Renderable* rend = static_cast<TerraPGE::Renderable*>(object);
 
-				Material* mat = rend->mesh->Materials[mIdx];
+				::Material* mat = rend->mesh->Materials[mIdx];
 
 				MaterialInfo info;
 
@@ -175,19 +245,16 @@ namespace TerraPGE
 			}
 
 			
-			TPGE_API void SetMaterialInfo(void* object, __int32 mIdx, MaterialInfo& info)
+			TPGE_API void SetObjectMaterial(void* object, __int32 mIdx, void* Material)
 			{
 				TerraPGE::Renderable* rend = static_cast<TerraPGE::Renderable*>(object);
-				Material* mat = rend->mesh->Materials[mIdx];
+				::Material* mat = rend->mesh->Materials[mIdx];
 
 				mat->AmbientColor = Vec3(info.ACr, info.ACg, info.ACb);
 				mat->DiffuseColor = Vec3(info.DCr, info.DCg, info.DCb);
 				mat->SpecularColor = Vec3(info.SCr, info.SCg, info.SCb);
 				mat->EmissiveColor = Vec3(info.ECr, info.ECg, info.ECb);
 				mat->EmissiveStrength = info.Es;
-				mat->DiffuseMap->Name = std::string(info.DiffuseMapName);
-				mat->SpecularMap->Name = std::string(info.SpecularMapName);
-				mat->EmissiveMap->Name = std::string(info.EmmissiveMapName);
 				mat->MaterialName = std::string(info.MaterialName);
 			}
 		}
