@@ -424,7 +424,7 @@ class Texture
 		x = std::clamp<int>(x, 0, (Width - 1));
 		y = std::clamp<int>(y, 0, (Height - 1));
 
-		return this->Image->GetColorAtPixel(x, y).Denormalized();
+		return this->Image->GetColorAtPixel(x, y).Normalized();
 	}
 
 

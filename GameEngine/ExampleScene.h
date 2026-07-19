@@ -64,8 +64,6 @@ class ExampleScene : public TerraPGE::Scene
 		this->SkyboxToRender = Skybox::Create(this->MainCamera, CubeMap::LoadCubemapFromDirectory("Skybox_Sky\\"));
 		Vec3 SunDir = ((Skybox*)this->SkyboxToRender)->SampleForSunDirection();
 
-		this->SkyboxToRender = nullptr;
-
 		Dl = DirectionalLight(SunDir, 50.0f, Vec3(253, 251, 211), 0.15f, 0.4f, 0.2f);
 		Dl.CastsShadows = true;
 
@@ -81,7 +79,7 @@ class ExampleScene : public TerraPGE::Scene
 		this->Plane = DEBUG_NEW Mesh("FlatTerrain.obj");
 		this->WorldBlockMat = Material::CreateMaterial(SoftUnlitMatAmbient, SoftUnlitMatDiffuse, SoftUnlitMatSpecular, 32.0f, "Unlit");
 		this->CubeMat = Material::CreateMaterial(SoftUnlitMatAmbient, SoftUnlitMatDiffuse, SoftUnlitMatSpecular, 32.0f, "SmileCubemat");
-		CubeMat->Textures.push_back(Txt);
+		CubeMat->AddTexture(Txt);
 		this->CubeMsh = DEBUG_NEW Cube(1, 1, 1, CubeMat);
 		this->CubeMesh2 = DEBUG_NEW Cube(1, 1, 1, WorldBlockMat);
 		this->LoadingMode++;
@@ -98,7 +96,6 @@ class ExampleScene : public TerraPGE::Scene
 		Ak47Render = DEBUG_NEW TerraPGE::Renderable(CubeMesh2, this->MainCamera, Vec3(1.0f, 1.0f, 1.0f), Vec3(0.0f, 0.0f, 0.0f), Vec3(0.0f, 6.f, 4.0f), TerraPGE::EngineShaders::DefaultShader);
 		PlaneRender = DEBUG_NEW TerraPGE::Renderable(Plane, this->MainCamera, Vec3(2.0f, 1.0f, 2.0f), Vec3(0.0f, 0.0f, 0.0f), Vec3(0.0f, 0.0f, 0.0f), TerraPGE::EngineShaders::DefaultShader);
 		//TerraPGE::EngineShaders::Shader_Frag_Phong         Shader_Texture_Only
-		CubeRender->mesh->MeshName = "SmileCube";
 		AABBColliderParams params = Collider::CalculateAABB(Ak47Render->mesh->Triangles);
 		Ak47Render->AddAABBCollider(params, 1.0f, 0.2f, DEFAULT_LAYER, COLLISION_MASK_EVERYTHING, InitialVelocity);
 		Ak47Render->collider.body.KineticFriction = ICE_KINETIC_FRICTION;
@@ -702,24 +699,9 @@ class ExampleScene : public TerraPGE::Scene
 				if (HoveredRend->mesh->Materials.size() == 1)
 				{
 					str << HoveredRend->mesh->Materials[0]->MaterialName << " }\n";
-					if (HoveredRend->mesh->Materials[0]->Textures.size() != 0)
+					if (HoveredRend->mesh->Materials[0]->DiffuseMap != nullptr)
 					{
-						if (HoveredRend->mesh->Materials[0]->Textures.size() == 1)
-							str << HoveredRend->mesh->Materials[0]->Textures[0]->Name << "\n";
-						else
-						{
-							int i = 0;
-							for (; i < HoveredRend->mesh->Materials[0]->Textures.size() - 1; i++)
-							{
-								str << HoveredRend->mesh->Materials[0]->Textures[i]->Name << ", ";
-
-								if (i % 4 == 0.0f)
-								{
-									str << "\n";
-								}
-							}
-							str << HoveredRend->mesh->Materials[0]->Textures[i++]->Name << ", ";
-						}
+						str << HoveredRend->mesh->Materials[0]->DiffuseMap->Name << "\n";
 					}
 					else
 						str << "No Texture\n";

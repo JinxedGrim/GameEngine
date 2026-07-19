@@ -531,14 +531,13 @@ namespace TerraPGE
 			Vec3* FragPos = Args->GetVaryingAsPtr<Vec3>(TPGE_SHDR_FRAG_POS_);
 			Vec3* FragNormal = Args->GetVaryingAsPtr<Vec3>(TPGE_SHDR_FRAG_NORMAL_);
 			Color* FragColor = Args->GetVaryingAsPtr<Color>(TPGE_SHDR_FRAG_COLOR_);
-			bool IsInShadow = Args->GetVaryingAsPtr<bool>(TPGE_SHDR_IS_IN_SHADOW_);
-			float shadowMul = 1.0f - IsInShadow * (1.0f - 0.5f);
+			bool IsInShadow = *Args->GetVaryingAsPtr<bool>(TPGE_SHDR_IS_IN_SHADOW_);
+			const float shadowMul = IsInShadow ? 0.5f : 1.0f;			
 			TextureCoords* UVW = Args->GetVaryingAsPtr<TextureCoords>(TPGE_SHDR_TEX_UVW_);
 			FragNormal->Normalize();
 			
-			Vec3 TexturCol = Vec3(1.0f, 1.0f, 1.0f);
 			Vec3 TexColor = Vec3(1.0f, 1.0f, 1.0f); // default white (no effect)
-			TexColor *= (Tri->Material->HasUsableTexture()) ? Tri->Material->Textures.at(0)->GetPixelColor(UVW->u, 1.0f - UVW->v).GetRGB() / 255.0f : Vec3(1.0f, 1.0f, 1.0f);
+			TexColor *= (Mat->DiffuseMap != nullptr) ? Mat->DiffuseMap->GetPixelColor(UVW->u, 1.0f - UVW->v).GetRGB() : Vec3(1.0f, 1.0f, 1.0f);
 				
 			Vec3 BaseDiffuse = (Mat->DiffuseColor / 255.0f) * TexColor;
 
@@ -550,12 +549,17 @@ namespace TerraPGE
 			FragColor->G = 0.0f;
 			FragColor->B = 0.0f;
 
-			if (LightCount <= 0)
-			{
-				return;
-			}
-
 			LightObject** Lights = Args->GetUniformAsRef<LightObject**>(TPGE_SHDR_LIGHT_OBJECTS_);
+			Vec3 V = (*CamPos - *FragPos).Normalized();
+			float NdotV = std::max(0.0f, FragNormal->Dot(V));
+
+			// Fresnel effect
+			// with schlick approximation
+			//https://en.wikipedia.org/wiki/Fresnel_equations
+			//https://en.wikipedia.org/wiki/Schlick%27s_approximation
+			//Vec3 F0 = Mat->SpecularColor / 255.0f; // or ~0.04 for non-metals
+			Vec3 F0 = Vec3(0.04f, 0.04f, 0.04f); // or ~0.04 for non-metals
+			Vec3 Fresnel = F0 + (Vec3(1.0f, 1.0f, 1.0f) - F0) * pow(1.0f - NdotV, 5.0f); // Schlick
 
 			for (int i = 0; i < LightCount; i++)
 			{
@@ -565,40 +569,32 @@ namespace TerraPGE
 
 				// Blinn specular math
 				//https://en.wikipedia.org/wiki/Blinn–Phong_reflection_model
-				Vec3 V = (*CamPos - *FragPos).Normalized();
 				Vec3 H = (LightDir + V).Normalized();
 				float Hdot = FragNormal->Dot(H);
-				float AO = 0.7f + 0.3f * FragNormal->y;
-
-				// Fresnel effect
-				// with schlick approximation
-				//https://en.wikipedia.org/wiki/Fresnel_equations
-				//https://en.wikipedia.org/wiki/Schlick%27s_approximation
-				float NdotV = std::max(0.0f, FragNormal->Dot(V));
-				Vec3 F0 = Mat->SpecularColor / 255.0f; // or ~0.04 for non-metals
-				Vec3 Fresnel = F0 + (Vec3(1.0f, 1.0f, 1.0f) - F0) * pow(1.0f - NdotV, 5.0f); // Schlick
+				//float AO = 0.7f + 0.3f * FragNormal->y;
+				float AO = 1.0f; // TODO: add AO map support
 
 				float Li = FragNormal->Dot(LightDir); // Light intensity
 				float Intensity = std::max<float>(0.0f, Li);
-				float SpecularIntensity = pow(std::max(0.0f, Hdot), Mat->Shininess);
+				const float SpecularIntensity =
+					std::pow(Hdot, Mat->Shininess) *
+					static_cast<float>(NdotV > 0.0f);
 
 				// Standard phong:
 				//https://en.wikipedia.org/wiki/Phong_reflection_model
-				Vec3 AmbientCol = (Mat->AmbientColor / 255.0f) * Light->AmbientCoeff * AO;
+				Vec3 AmbientCol = BaseDiffuse * (Mat->AmbientColor / 255.0f) * Light->AmbientCoeff * AO;
 				Vec3 DiffuseCol = ((((Light->Color / 255.0f) * Light->DiffuseCoeff) * BaseDiffuse) * Intensity);
-				Vec3 SpecularClr = ((((Light->Color / 255.0f) * Light->SpecularCoeff) * (Mat->SpecularColor / 255.0f)) * SpecularIntensity);
+				Vec3 SpecularClr = ((((Light->Color / 255.0f) * Light->SpecularCoeff) * (Fresnel)) * SpecularIntensity);
 
 				DiffuseCol *= (Vec3(1.0f, 1.0f, 1.0f) - Fresnel);
-				SpecularClr *= Fresnel;
+//				SpecularClr *= Fresnel;
 
-				FinalColor += AmbientCol + ((DiffuseCol + SpecularClr) * shadowMul);
+				FinalColor += AmbientCol + ((DiffuseCol + SpecularClr)) * shadowMul;
 
 				// for point light
 				//Vec3 LDir = Light->Transform.Ge
 				//LocalPosition().GetDirectionToVector(*FragPos);
 			}
-
-			FinalColor = FinalColor;
 				
 			float glow = Mat->EmissiveStrength; /* * pow(1.0 - FragNormal->Dot(*CamLookDir), 4.0f)*/;
 			Vec3 EmissiveCol = (Mat->EmissiveColor / 255.0f) * glow;
@@ -696,9 +692,9 @@ namespace TerraPGE
 
 				Vec3 TexturCol = Vec3();
 
-				if (Tri->Material->HasUsableTexture())
+				if (Tri->Material->DiffuseMap != nullptr)
 				{
-					TexturCol = Tri->Material->Textures.at(0)->GetPixelColor(UVW->u, 1.0f - UVW->v).GetRGB();
+					TexturCol = Tri->Material->DiffuseMap->GetPixelColor(UVW->u, 1.0f - UVW->v).GetRGB();
 					FragColor->R = std::clamp<float>(TexturCol.x, 0.0f, 255.0f);
 					FragColor->G = std::clamp<float>(TexturCol.y, 0.0f, 255.0f);
 					FragColor->B = std::clamp<float>(TexturCol.z, 0.0f, 255.0f);
@@ -722,9 +718,9 @@ namespace TerraPGE
 
 			Vec3 TexturCol = Vec3();
 
-			if (Tri->Material->HasUsableTexture())
+			if (Tri->Material->DiffuseMap != nullptr)
 			{
-				TexturCol = Tri->Material->Textures.at(0)->GetPixelColor(UVW->u, 1.0f - UVW->v).GetRGB();
+				TexturCol = Tri->Material->DiffuseMap->GetPixelColor(UVW->u, 1.0f - UVW->v).GetRGB();
 				FragColor->R = std::clamp<float>(TexturCol.x, 0.0f, 255.0f);
 				FragColor->G = std::clamp<float>(TexturCol.y, 0.0f, 255.0f);
 				FragColor->B = std::clamp<float>(TexturCol.z, 0.0f, 255.0f);

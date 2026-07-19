@@ -837,8 +837,8 @@ namespace TerraPGE::Renderer
 					// 3D Space -> Viewed Space -> Clipped Space
 
 					// TODO add normal calc or switch to vertex shading
-					if (Cam != nullptr && Renderer::ShouldCulltriangle(Proj.Points.Points[0], Proj.FaceNormal, Light->Transform.GetWorldPosition()))
-						continue;
+					//if (Cam != nullptr && Renderer::ShouldCulltriangle(Proj.Points.Points[0], Proj.FaceNormal, Light->Transform.GetWorldPosition()))
+					//	continue;
 
 					if (Light->Type == LightTypes::DirectionalLight)
 					{

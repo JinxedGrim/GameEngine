@@ -10,10 +10,12 @@ struct Vertex
 	Vec3 Normals[3];
 };
 
+
 struct VertexAttributes
 {
 	Vec3 Attribute[3];
 };
+
 
 struct ClipVertex
 {
@@ -22,12 +24,22 @@ struct ClipVertex
 	Vec3 Normal;
 };
 
+
 struct VertexBuffer
 {
 	std::vector<float> Positions;
 	std::vector<float> Normals;
 	std::vector<float> TexCoords;
 };
+
+
+struct SubMesh
+{
+	Material* material = nullptr;
+	uint32_t StartIndex = 0;
+	uint32_t Length = 0;
+};
+
 
 class Triangle
 {
@@ -421,6 +433,21 @@ class Triangle
 	bool OverrideTextureColor = false;
 };
 
+class ObjectLoader
+{
+	std::string FilePath = "";
+
+public:
+	ObjectLoader(std::string File)
+	{
+		this->FilePath = File;
+	}
+
+	bool Load()
+	{
+
+	}
+};
 
 class Mesh
 {
@@ -439,7 +466,7 @@ class Mesh
 		this->TriangleCount = (int)Triangles.size();
 		this->NormalCount = 0;
 		this->VertexCount = 0;
-		this->ChangeMatInfo(Material::GetNullMaterial());
+		this->ForceMatInfo(Material::GetNullMaterial());
 		this->CalculateNormals();
 	}
 
@@ -458,7 +485,7 @@ class Mesh
 			this->CalculateNormals();
 		}
 
-		this->ChangeMatInfo(Mat);
+		this->ForceMatInfo(Mat);
 	}
 
 
@@ -494,16 +521,20 @@ class Mesh
 	}
 
 
-	void ChangeMatInfo(Material* MatToApply)
+	void ForceMatInfo(Material* MatToApply)
 	{
+		this->Materials.clear();
 		this->Materials.push_back(MatToApply);
+		this->SubMeshes.clear();
+
+		SubMesh sub = SubMesh();
+		sub.material = MatToApply;
+		sub.StartIndex = 0;
+		sub.Length = this->Triangles.size();
 
 		for (auto& Tri : this->Triangles)
 		{
 			Tri.Material = MatToApply;
-
-			if (Tri.Material->Textures.size() > 0 && Tri.Material->Textures.at(0)->Used)
-				Tri.HasTexture = true;
 		}
 	}
 
@@ -518,9 +549,20 @@ class Mesh
 		std::vector<Vec3> VertCache;
 		std::vector<Vec3> NormalCache;
 		std::vector<TextureCoords> TexCache;
+		std::vector<SubMesh> SubMeshCache;
 
 		std::string MtlLibFn = "";
 		Material* CurrMat = nullptr;
+		SubMesh* CurrSubMesh = nullptr;
+
+		if (CurrSubMesh == nullptr)
+		{
+			SubMesh sub = SubMesh();
+			SubMeshCache.push_back(sub);
+
+			CurrSubMesh = &SubMeshCache.back();
+			CurrSubMesh->StartIndex = 0;
+		}
 
 		TerraPGE::Core::LogInfo("[MATERIAL]", "Loading Mesh: " + Prefix + FnPath);
 
@@ -542,10 +584,20 @@ class Mesh
 			}
 			else if (Str.find("usemtl ") != std::string::npos)
 			{
-				//char Prefix[7];
-				std::string MaterialFn;
-				SS >> Unused >> Unused >> Unused >> Unused >> Unused >> Unused >> MaterialFn;
-				CurrMat = Material::LoadMaterialFile(MtlLibFn, MaterialFn, Prefix);
+				std::string MaterialName;
+				SS >> Unused >> Unused >> Unused >> Unused >> Unused >> Unused >> MaterialName;
+				CurrSubMesh->Length = (int)Triangles.size() - CurrSubMesh->StartIndex;
+
+				if (CurrSubMesh->Length > 0)
+				{
+					TerraPGE::Core::LogInfo("[MATERIAL]", "Created new SubMesh for material: " + MaterialName + " Previous length: " + std::to_string(CurrSubMesh->Length));
+					SubMesh sub = SubMesh();
+					SubMeshCache.push_back(sub);
+
+					CurrSubMesh = &SubMeshCache.back();
+				}
+
+				CurrMat = Material::LoadMaterialFile(MtlLibFn, MaterialName, Prefix);
 				this->MatCount++;
 				this->Materials.push_back(CurrMat);
 			}
@@ -659,7 +711,7 @@ class Mesh
 					}
 
 					Tmp.Material = CurrMat; 
-					Tmp.HasTexture = (Tmp.Material != nullptr && Tmp.Material->Textures.size() > 0 && Tmp.Material->Textures.at(0) != nullptr);
+					Tmp.HasTexture = (Tmp.Material != nullptr && Tmp.Material->DiffuseMap != nullptr);
 
 					this->Triangles.push_back(Tmp);
 				}
@@ -679,14 +731,16 @@ class Mesh
 		this->TexCoordsCount = (int)TexCache.size();
 		this->VertexCount = (int)VertCache.size();
 		this->TriangleCount = (int)Triangles.size();
+		this->SubMeshes = SubMeshCache;
 
 		if (Normals.size() == 0)
 			this->CalculateNormals();
 
 #ifdef _DEBUG
-		std::cout << VertexCache.size() << "   Normals:   ";
+		TerraPGE::Core::LogInfo("[Mesh]", "Mesh Name: " + this->MeshName);
+		std::cout << "Vertices: " << VertexCache.size() << "   Normals:   ";
 		std::cout << Normals.size() << "   TexturedCahce:   " << TexCache.size();
-		std::cout << "   Faces:   " << Triangles.size() << "\n\n";
+		std::cout << "   Faces:   " << Triangles.size() << "   SubMeshes:   " << SubMeshes.size() << "\n\n";
 #endif
 
 		return true;
@@ -716,6 +770,7 @@ class Mesh
 	std::vector<Vec3> Normals = {};
 
 	std::string MeshName = "";
+
 	std::vector<Vec3> VertexCache = {};
 	std::vector<SIZE_T> VertexIndices = {};
 	std::vector<Vec3> NormalCache = {};
@@ -726,6 +781,8 @@ class Mesh
 
 	VertexBuffer _VertBuffer;
 	std::vector<uint32_t> MaterialIndices;
+
+	std::vector<SubMesh> SubMeshes;
 
 	int VertexCount = 0;
 	int TriangleCount = 0;
@@ -845,6 +902,6 @@ class Sphere : public Mesh
 
 		this->MeshName = "Sphere";
 		this->CalculateNormals();
-		this->ChangeMatInfo(Mat);
+		this->ForceMatInfo(Mat);
 	}
 };

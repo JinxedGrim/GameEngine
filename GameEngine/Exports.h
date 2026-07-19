@@ -244,8 +244,18 @@ namespace TerraPGE
 				return info;
 			}
 
+
+			TPGE_API void SetObjectMaterial(void* object, void* material)
+			{
+				TerraPGE::Renderable* rend = static_cast<TerraPGE::Renderable*>(object);
+				::Material* mat = static_cast<::Material*>(material);
+				if (rend && mat)
+				{
+					rend->mesh->ForceMatInfo((::Material*)material);
+				}
+			}
 			
-			TPGE_API void SetObjectMaterial(void* object, __int32 mIdx, void* Material)
+			TPGE_API void SetObjectMaterialInfo(void* object, __int32 mIdx, MaterialInfo& info)
 			{
 				TerraPGE::Renderable* rend = static_cast<TerraPGE::Renderable*>(object);
 				::Material* mat = rend->mesh->Materials[mIdx];
