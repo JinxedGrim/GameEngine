@@ -293,6 +293,8 @@ namespace TerraPGE::Renderer
 
 		static const float INV_3 = 1.0f / 3.0f;
 
+
+
 		for (const Triangle& Tri : Object->mesh->Triangles)
 		{
 			// 3D Space / World Space
@@ -526,7 +528,7 @@ namespace TerraPGE::Renderer
 						{
 							*FragmentColor = Color(ScreenSpaceTri->Col.x, ScreenSpaceTri->Col.y, ScreenSpaceTri->Col.z);
 						}
-						else if (ScreenSpaceTri->Material->HasUsableTexture())
+						else if (ScreenSpaceTri->Material->DiffuseMap != nullptr)
 						{
 							Vec3 uvw;
 							uvw.x = Interp.PerspectiveCorrectInterpolate(uvw0.x, uvw1.x, uvw2.x, v0.w, v1.w, v2.w);

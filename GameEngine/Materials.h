@@ -6,7 +6,7 @@
 #define NULL_MATERIAL_COLOR_VEC3 Vec3(_NULL_MATERIAL_VALUES)
 
 #define SoftUnlitMatAmbient Vec3(0.15f * 255.0f, 0.15f * 255.0f, 0.15f * 255.0f)
-#define SoftUnlitMatDiffuse Vec3(0.45f * 255.0f, 0.45f * 255.0f, 0.45f * 255.0f)
+#define SoftUnlitMatDiffuse Vec3(0.25f * 255.0f, 0.25f * 255.0f, 0.25f * 255.0f)
 #define SoftUnlitMatSpecular Vec3(0.1f * 255.0f, 0.1f * 255.0f, 0.1f * 255.0f)
 
 class Material
@@ -29,21 +29,22 @@ public:
 	float Roughness = 0.5f;         // Microfacet roughness
 	float AO = 1.0f;                // Ambient occlusion multiplier
 
+	Texture* AmbientMap = nullptr;
 	Texture* DiffuseMap = nullptr;
 	Texture* SpecularMap = nullptr;
-	Texture* NormalMap = nullptr;
 	Texture* EmissiveMap = nullptr;
-	Texture* RoughnessMap = nullptr;
+
+	Texture* RoughnessMap = nullptr; // used as shininess map in blinn-phong, roughness map in pbr
 	Texture* MetallicMap = nullptr;
-	Texture* AmbientMap = nullptr;
-	Texture* AOMap = nullptr;
+
+	Texture* NormalMap = nullptr;
 	Texture* HeightMap = nullptr; // (for parallax/displacement)
+
+	Texture* AOMap = nullptr;
 
 	// add more properties TODO
 	// ALSO TEXTURE MAPS (::
 
-
-	std::vector<Texture*> Textures = {};
 	std::string MaterialName = "NullMat";
 
 	static inline std::vector<Material*> LoadedMaterials = {};
@@ -79,14 +80,18 @@ public:
 		std::ifstream mtlFile(Prefix + MtlFn);
 		if (!mtlFile.is_open())
 		{
+#ifdef _DEBUG
 			TerraPGE::Core::LogError("[MATERIAL]", "Failed to load: " + Prefix + MtlFn, 0);
+#endif
 			delete Mat;
 			Mat = GetNullMaterial();
 			return Mat;
 		}
 
 		std::string line;
+#ifdef _DEBUG
 		TerraPGE::Core::LogInfo("[MATERIAL]", "Loading Material: " + Prefix + MtlFn);
+#endif
 		while (std::getline(mtlFile, line))
 		{
 			std::stringstream ss(line);
@@ -135,10 +140,11 @@ public:
 							ssProp >> textureFilePath;
 							if (textureFilePath != "")
 							{
+#ifdef _DEBUG
 								TerraPGE::Core::LogInfo("[MATERIAL]", "Loading Texture (ka): " + textureFilePath);
+#endif
 								Texture* txt = Texture::Create(textureFilePath);
-								Mat->Textures.push_back(txt);
-								Mat->AmbientMap = txt;
+								Mat->AddAmbientMap((txt));
 							}
 						}
 						else if (propKeyword == "map_Kd")
@@ -151,8 +157,7 @@ public:
 								TerraPGE::Core::LogInfo("[MATERIAL]", "Loading Texture (kd): " + textureFilePath);
 #endif
 								Texture* txt = Texture::Create(textureFilePath);
-								Mat->Textures.push_back(txt);
-								Mat->DiffuseMap = txt;
+								Mat->AddTexture(txt);
 							}
 						}
 
@@ -213,17 +218,6 @@ public:
 	}
 
 
-	bool HasUsableTexture()
-	{
-		if (this->Textures.size() > 0 && this->Textures.at(0)->Used)
-		{
-			return true;
-		}
-
-		return false;
-	}
-
-
 	void Delete()
 	{
 		auto it = std::find(LoadedMaterials.begin(), LoadedMaterials.end(), this);
@@ -233,13 +227,11 @@ public:
 			this->LoadedMaterials.erase(it);
 		}
 
-		for (Texture* T : Textures)
-		{
-			Texture::Delete(T);
-		}
+		// TODO delete textures associated with this material if needed
 
 		delete this;
 	}
+
 
 	static void DeleteAllMaterials()
 	{
@@ -249,6 +241,54 @@ public:
 		}
 
 		LoadedMaterials.clear();
+	}
+
+	
+	void AddAmbientMap(Texture* Tex)
+	{
+		this->AmbientMap = Tex;
+	}
+
+
+	void AddSpecularMap(Texture* Tex)
+	{
+		this->SpecularMap = Tex;
+	}
+
+	void AddNormalMap(Texture* Tex)
+	{
+		this->NormalMap = Tex;
+	}
+
+	void AddEmissiveMap(Texture* Tex)
+	{
+		this->EmissiveMap = Tex;
+	}
+
+	void AddRoughnessMap(Texture* Tex)
+	{
+		this->RoughnessMap = Tex;
+	}
+
+	void AddMetallicMap(Texture* Tex)
+	{
+		this->MetallicMap = Tex;
+	}
+
+	void AddAOMap(Texture* Tex)
+	{
+		this->AOMap = Tex;
+	}
+
+	void AddHeightMap(Texture* Tex)
+	{
+		this->HeightMap = Tex;
+	}
+
+
+	void AddTexture(Texture* Tex)
+	{
+		this->DiffuseMap = Tex;
 	}
 
 private:
@@ -262,7 +302,7 @@ private:
 
 		//Core Blinn Phong
 		this->Shininess = 32.0f;
-		this->EmissiveStrength = 1.0f;
+		this->EmissiveStrength = 0.0f;
 		this->Reflectivity = 0.0f;     // For mirror/reflection intensity TODO
 		this->Opacity = 1.0f;          // For transparency or alpha blending
 		this->RefractiveIndex = 1.0f;  // For refraction (TODO)
@@ -293,6 +333,11 @@ private:
 
 		this->EmissiveColor = Vec3(0.0f, 0.0f, 0.0f);
 		this->EmissiveStrength = 0.0f;
+
+		this->Shininess = 32.0f;
+		this->Reflectivity = 0.0f;     // For mirror/reflection intensity TODO
+		this->Opacity = 1.0f;          // For transparency or alpha blending
+		this->RefractiveIndex = 1.0f;  // For refraction (TODO)
 
 		this->MaterialName = Uri;
 

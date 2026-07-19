@@ -18,7 +18,7 @@ class LightObject : public GameObject
 {
 public:
 
-	float ShadowMapBias = 0.0000005f;
+	float ShadowMapBias = 0.005f;
 
 	LightObject() = delete;
 
@@ -285,8 +285,8 @@ public:
 		int MapIdx = ContIdx(ShadowX, ShadowY, W);
 
 		// TODO BAD INTERP     Renderer::ShadowMap[MapIdx]
-		*ShadowMapDepth = ShadowMap[MapIdx];
-		*ShadowDepth = ShadowUV.z + ShadowMapBias;
+		*ShadowMapDepth = ShadowMap[MapIdx] + ShadowMapBias;
+		*ShadowDepth = ShadowUV.z;
 
 		return *ShadowDepth > *ShadowMapDepth;
 	}
