@@ -120,6 +120,13 @@ namespace TerraPGE
 				char* MaterialName;
 			};
 
+
+			struct MeshInfo
+			{
+
+			};
+
+
 			namespace Material
 			{
 				TPGE_API void* CreateMaterial(MaterialInfo info)
@@ -151,6 +158,7 @@ namespace TerraPGE
 					}
 				}
 			}
+
 
 			TPGE_API size_t GetObjectCount(void* scene)
 			{
@@ -255,6 +263,7 @@ namespace TerraPGE
 				}
 			}
 			
+
 			TPGE_API void SetObjectMaterialInfo(void* object, __int32 mIdx, MaterialInfo& info)
 			{
 				TerraPGE::Renderable* rend = static_cast<TerraPGE::Renderable*>(object);
@@ -266,6 +275,18 @@ namespace TerraPGE
 				mat->EmissiveColor = Vec3(info.ECr, info.ECg, info.ECb);
 				mat->EmissiveStrength = info.Es;
 				mat->MaterialName = std::string(info.MaterialName);
+			}
+
+
+			TPGE_API void GetMeshInfo()
+			{
+
+			}
+
+
+			TPGE_API void GetRootObject()
+			{
+
 			}
 		}
 	}

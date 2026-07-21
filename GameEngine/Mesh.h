@@ -8,6 +8,9 @@ struct Vertex
 {
 	Vec4 Points[3];
 	Vec3 Normals[3];
+	Vec3 VertexNormals[3] = {};
+	TextureCoords TexCoords[3] = {};
+	Vec3 Col = Vec3(255, 0, 0);
 };
 
 
@@ -123,9 +126,9 @@ class Triangle
 
 	void ApplyPerspectiveDivide()
 	{
-		this->TexCoords[0].CorrectPerspective(this->Points.Points[0].w);
-		this->TexCoords[1].CorrectPerspective(this->Points.Points[1].w);
-		this->TexCoords[2].CorrectPerspective(this->Points.Points[2].w);
+		this->Points.TexCoords[0].CorrectPerspective(this->Points.Points[0].w);
+		this->Points.TexCoords[1].CorrectPerspective(this->Points.Points[1].w);
+		this->Points.TexCoords[2].CorrectPerspective(this->Points.Points[2].w);
 
 		this->Points.Points[0].CorrectPerspective();
 		this->Points.Points[1].CorrectPerspective();
@@ -151,9 +154,9 @@ class Triangle
 		Vec4 p1 = this->Points.Points[1];
 		Vec4 p2 = this->Points.Points[2];
 
-		TextureCoords& t0 = this->TexCoords[0];
-		TextureCoords& t1 = this->TexCoords[1];
-		TextureCoords& t2 = this->TexCoords[2];
+		TextureCoords& t0 = this->Points.TexCoords[0];
+		TextureCoords& t1 = this->Points.TexCoords[1];
+		TextureCoords& t2 = this->Points.TexCoords[2];
 		//
 
 		// Attribute storage
@@ -218,19 +221,19 @@ class Triangle
 
 			if (DebugClip)
 			{
-				Out1.Col = Vec3(0, 0, 255);
+				Out1.Points.Col = Vec3(0, 0, 255);
 				Out1.OverrideTextureColor = true;
 			}
 
 			Out1.Points.Points[0] = *InsidePoints[0];
-			Out1.TexCoords[0] = *InsideTex[0];
+			Out1.Points.TexCoords[0] = *InsideTex[0];
 
 			float t = 0.0f;
 			Out1.Points.Points[1] = InsidePoints[0]->CalculateIntersectionPoint(*OutsidePoints[0], PointOnPlane, PlaneNormalized, &t);
-			Out1.TexCoords[1] = InsideTex[0]->Lerp(*OutsideTex[0], t);
+			Out1.Points.TexCoords[1] = InsideTex[0]->Lerp(*OutsideTex[0], t);
 
 			Out1.Points.Points[2] = InsidePoints[0]->CalculateIntersectionPoint(*OutsidePoints[1], PointOnPlane, PlaneNormalized, &t);
-			Out1.TexCoords[2] = InsideTex[0]->Lerp(*OutsideTex[1], t);
+			Out1.Points.TexCoords[2] = InsideTex[0]->Lerp(*OutsideTex[1], t);
 
 			Count = 1;
 		}
@@ -241,29 +244,29 @@ class Triangle
 
 			if (DebugClip)
 			{
-				Out1.Col = Vec3(0, 255, 0);
+				Out1.Points.Col = Vec3(0, 255, 0);
 				Out1.OverrideTextureColor = true;
-				Out2.Col = Vec3(255, 0, 0);
+				Out2.Points.Col = Vec3(255, 0, 0);
 				Out2.OverrideTextureColor = true;
 			}
 
 
 			Out1.Points.Points[0] = *InsidePoints[0];
 			Out1.Points.Points[1] = *InsidePoints[1];
-			Out1.TexCoords[0] = *InsideTex[0];
-			Out1.TexCoords[1] = *InsideTex[1];
+			Out1.Points.TexCoords[0] = *InsideTex[0];
+			Out1.Points.TexCoords[1] = *InsideTex[1];
 
 			float t = 0.0f;
 			Out1.Points.Points[2] = InsidePoints[0]->CalculateIntersectionPoint(*OutsidePoints[0], PointOnPlane, PlaneNormalized, &t);
-			Out1.TexCoords[2] = InsideTex[0]->Lerp(*OutsideTex[0], t);
+			Out1.Points.TexCoords[2] = InsideTex[0]->Lerp(*OutsideTex[0], t);
 
 			Out2.Points.Points[0] = *InsidePoints[1];
 			Out2.Points.Points[1] = Out1.Points.Points[2];
-			Out2.TexCoords[0] = *InsideTex[1];
-			Out2.TexCoords[1] = Out1.TexCoords[2];
+			Out2.Points.TexCoords[0] = *InsideTex[1];
+			Out2.Points.TexCoords[1] = Out1.Points.TexCoords[2];
 
 			Out2.Points.Points[2] = InsidePoints[1]->CalculateIntersectionPoint(*OutsidePoints[0], PointOnPlane, PlaneNormalized, &t);
-			Out2.TexCoords[2] = InsideTex[1]->Lerp(*OutsideTex[0], t);
+			Out2.Points.TexCoords[2] = InsideTex[1]->Lerp(*OutsideTex[0], t);
 
 			Count = 2;
 		}
@@ -277,7 +280,7 @@ class Triangle
 		// Attributes to interp
 		Vec4 in[3] = { Points.Points[0], Points.Points[1], Points.Points[2] };
 		Vec4 world[3] = { WorldSpaceVerts.Points[0], WorldSpaceVerts.Points[1], WorldSpaceVerts.Points[2] };
-		Vec3 Normals[3] = { VertexNormals[0], VertexNormals[1], VertexNormals[2] };
+		Vec3 Normals[3] = { Points.VertexNormals[0], Points.VertexNormals[1], Points.VertexNormals[2] };
 
 		float w[3] = { Points.Points[0].w, Points.Points[1].w, Points.Points[2].w }; // store original w
 		float d[3];
@@ -370,7 +373,7 @@ class Triangle
 
 				if (!Same)
 				{
-					Out1.Col = Vec3(0, 255, 0);
+					Out1.Points.Col = Vec3(0, 255, 0);
 					Out1.OverrideTextureColor = true;
 				}
 			}
@@ -404,9 +407,9 @@ class Triangle
 
 			if (DebugClip)
 			{
-				Out1.Col = Vec3(255, 0, 0);
+				Out1.Points.Col = Vec3(255, 0, 0);
 				Out1.OverrideTextureColor = true;
-				Out2.Col = Vec3(0, 0, 255);
+				Out2.Points.Col = Vec3(0, 0, 255);
 				Out2.OverrideTextureColor = true;
 			}
 
@@ -419,19 +422,14 @@ class Triangle
 
 	Vertex Points;
 	Vertex WorldSpaceVerts = {};
+
 	Vec3 FaceNormal = Vec3();
-	Vec3 VertexNormals[3] = {};
-	Vec3 NormalPositions[4] = {};
-	Vec3 NormDirections[4] = {};
 
-	TextureCoords TexCoords[3] = {};
-
-	Vec3 Col = Vec3(255, 0, 0);
 	Material* Material;
-	bool UseMeshMaterial = false;
-	bool HasTexture = false;
+
 	bool OverrideTextureColor = false;
 };
+
 
 class ObjectLoader
 {
@@ -448,6 +446,7 @@ public:
 
 	}
 };
+
 
 class Mesh
 {
@@ -467,7 +466,7 @@ class Mesh
 		this->NormalCount = 0;
 		this->VertexCount = 0;
 		this->ForceMatInfo(Material::GetNullMaterial());
-		this->CalculateNormals();
+		this->CalculateFaceNormals();
 	}
 
 
@@ -482,8 +481,8 @@ class Mesh
 		*this = m;
 		if (this->Normals.size() == 0)
 		{
-			this->CalculateNormals();
-		}
+			this->CalculateFaceNormals();
+S		}
 
 		this->ForceMatInfo(Mat);
 	}
@@ -687,12 +686,12 @@ class Mesh
 
 						if (texCoordIndex >= 0)
 						{
-							Tmp.TexCoords[i] = TexCache[texCoordIndex];
+							Tmp.Points.TexCoords[i] = TexCache[texCoordIndex];
 							TexCoordsIndices.push_back(texCoordIndex);
 						}
 						else
 						{
-							Tmp.TexCoords[i] = { 0, 0 };
+							Tmp.Points.TexCoords[i] = { 0, 0 };
 							TexCoordsIndices.push_back(-1);
 						}
 
@@ -711,7 +710,6 @@ class Mesh
 					}
 
 					Tmp.Material = CurrMat; 
-					Tmp.HasTexture = (Tmp.Material != nullptr && Tmp.Material->DiffuseMap != nullptr);
 
 					this->Triangles.push_back(Tmp);
 				}
@@ -733,8 +731,8 @@ class Mesh
 		this->TriangleCount = (int)Triangles.size();
 		this->SubMeshes = SubMeshCache;
 
-		if (Normals.size() == 0)
-			this->CalculateNormals();
+		if (Normals.size() != this->Triangles.size())
+			this->CalculateFaceNormals();
 
 #ifdef _DEBUG
 		TerraPGE::Core::LogInfo("[Mesh]", "Mesh Name: " + this->MeshName);
@@ -747,8 +745,9 @@ class Mesh
 	}
 
 
-	void CalculateNormals()
+	void CalculateFaceNormals()
 	{
+		this->Normals.clear();
 		for (Triangle& Tri : this->Triangles)
 		{
 			Vec3 Norm = (Tri.Points.Points[1] - Tri.Points.Points[0]).GetVec3().CrossNormalized((Tri.Points.Points[2] - Tri.Points.Points[0]));
@@ -757,11 +756,44 @@ class Mesh
 
 			for (int i = 0; i < 3; i++)
 			{
-				Tri.VertexNormals[i] = Norm;
+				Tri.Points.VertexNormals[i] = Norm;
 			}
 		}
 
 		this->NormalCount = (int)this->Normals.size();
+	}
+
+
+	void CalculateSmoothFaceNormals()
+	{
+		std::vector<Vec3> accumulatedNormals(this->VertexCache.size(), Vec3());
+
+		for (const IndexedTriangle& triangle : Triangles)
+		{
+			const uint32_t i0 = triangle.Indices[0];
+			const uint32_t i1 = triangle.Indices[1];
+			const uint32_t i2 = triangle.Indices[2];
+
+			const Vec3 edge1 = Vertices[i1].Position - Vertices[i0].Position;
+			const Vec3 edge2 = Vertices[i2].Position - Vertices[i0].Position;
+
+			const Vec3 faceNormal = edge1.Cross(edge2);
+
+			accumulatedNormals[i0] += faceNormal;
+			accumulatedNormals[i1] += faceNormal;
+			accumulatedNormals[i2] += faceNormal;
+		}
+
+		for (Vec3& normal : accumulatedNormals)
+		{
+			if (normal.LengthSquared() > 0.000001f)
+			{
+				normal.Normalize();
+			}
+		}
+
+		this->NormalCache = this->Normals;
+		this->Normals = Normals;
 	}
 
 
