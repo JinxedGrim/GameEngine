@@ -1,7 +1,7 @@
 #define _CRT_SECURE_NO_WARNINGS
 
 // If exporting as dll
-#define TPGE_EXPORTS
+//#define TPGE_EXPORTS
 
 #ifdef TPGE_EXPORTS
 #include "Exports.h"

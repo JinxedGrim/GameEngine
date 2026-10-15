@@ -51,7 +51,7 @@ class ExampleScene : public TerraPGE::Scene
 
 	TerraPGE::Renderable* SpawnCubeAt(Vec3 Position)
 	{
-		return DEBUG_NEW TerraPGE::Renderable(CubeMesh2, this->MainCamera, Vec3(1.0f, 1.0f, 1.0f), Vec3(0.0f, 0.0f, 0.0f), Position, TerraPGE::EngineShaders::Shader_Frag_Phong_Shadows);
+		return DEBUG_NEW TerraPGE::Renderable(CubeMesh2, this->MainCamera, Vec3(1.0f, 1.0f, 1.0f), Vec3(0.0f, 0.0f, 0.0f), Position, TerraPGE::EngineShaders::DefaultShader);
 	}
 
 
@@ -80,8 +80,8 @@ class ExampleScene : public TerraPGE::Scene
 		this->WorldBlockMat = Material::CreateMaterial(SoftUnlitMatAmbient, SoftUnlitMatDiffuse, SoftUnlitMatSpecular, 32.0f, "Unlit");
 		this->CubeMat = Material::CreateMaterial(SoftUnlitMatAmbient, SoftUnlitMatDiffuse, SoftUnlitMatSpecular, 32.0f, "SmileCubemat");
 		CubeMat->AddTexture(Txt);
-		this->CubeMsh = DEBUG_NEW Cube(1, 1, 1, CubeMat);
-		this->CubeMesh2 = DEBUG_NEW Cube(1, 1, 1, WorldBlockMat);
+		this->CubeMsh = DEBUG_NEW PrimitiveMeshes::Cube(1, 1, 1, CubeMat);
+		this->CubeMesh2 = DEBUG_NEW PrimitiveMeshes::Cube(1, 1, 1, WorldBlockMat);
 		this->LoadingMode++;
 		TerraPGE::UpdateLoadingScreen(Wnd, this);
 
@@ -96,13 +96,13 @@ class ExampleScene : public TerraPGE::Scene
 		Ak47Render = DEBUG_NEW TerraPGE::Renderable(CubeMesh2, this->MainCamera, Vec3(1.0f, 1.0f, 1.0f), Vec3(0.0f, 0.0f, 0.0f), Vec3(0.0f, 6.f, 4.0f), TerraPGE::EngineShaders::DefaultShader);
 		PlaneRender = DEBUG_NEW TerraPGE::Renderable(Plane, this->MainCamera, Vec3(2.0f, 1.0f, 2.0f), Vec3(0.0f, 0.0f, 0.0f), Vec3(0.0f, 0.0f, 0.0f), TerraPGE::EngineShaders::DefaultShader);
 		//TerraPGE::EngineShaders::Shader_Frag_Phong         Shader_Texture_Only
-		AABBColliderParams params = Collider::CalculateAABB(Ak47Render->mesh->Triangles);
+		AABBColliderParams params = Collider::CalculateAABB(Ak47Render->mesh);
 		Ak47Render->AddAABBCollider(params, 1.0f, 0.2f, DEFAULT_LAYER, COLLISION_MASK_EVERYTHING, InitialVelocity);
 		Ak47Render->collider.body.KineticFriction = ICE_KINETIC_FRICTION;
 		Ak47Render->collider.body.restitution = 0.35f;
 		CubeRender->AddAABBCollider(params, 5, 0.5f);
 
-		params = Collider::CalculateAABB(PlaneRender->mesh->Triangles);
+		params = Collider::CalculateAABB(PlaneRender->mesh);
 		PlaneRender->AddAABBCollider(params, 1000.0f, 0.1f);
 		PlaneRender->collider.body.KineticFriction = ICE_KINETIC_FRICTION;
 		PlaneRender->collider.PhysicsEnabled = false;
@@ -113,17 +113,18 @@ class ExampleScene : public TerraPGE::Scene
 		this->LoadingMode++;
 		TerraPGE::UpdateLoadingScreen(Wnd, this);
 
-		//for (int x = 0; x < 20; x++) 
-		//{
-		//	for (int z = 0; z < 20; z++) 
-		//	{
-		//		for (int y = 0; y <= 0; y++) 
-		//		{
-		//			TerraPGE::Renderable* Block = SpawnCubeAt(Vec3(x,y,z));
-		//			WorldCubes.push_back(Block);
-		//		}
-		//	}
-		//}
+		for (int x = 0; x < 20; x++) 
+		{
+			for (int z = 0; z < 20; z++) 
+			{
+				for (int y = 0; y <= 0; y++) 
+				{
+					TerraPGE::Renderable* Block = SpawnCubeAt(Vec3(x,y,z));
+					Block->mesh->ForceMatInfo(CubeMat);
+					WorldCubes.push_back(Block);
+				}
+			}
+		}
 	}
 
 
@@ -499,7 +500,7 @@ class ExampleScene : public TerraPGE::Scene
 		{
 			RaycastHit Out;
 
-			if (RaycastMesh(ray, obj->mesh->Triangles, &Out, obj->Transform._GetWorldMatrixPtr()))
+			if (RaycastMesh(ray, obj->mesh, &Out, obj->Transform._GetWorldMatrixPtr()))
 			{
 				if (Out.distance < Closest)
 				{
@@ -521,10 +522,10 @@ class ExampleScene : public TerraPGE::Scene
 		this->AddToRenderQueue(PlaneRender);
 		this->AddToRenderQueue(Ak47Render);
 
-		//for (TerraPGE::Renderable* Block : WorldCubes)
-		//{
-			//ToRender->push_back(Block);
-		//}
+		for (TerraPGE::Renderable* Block : WorldCubes)
+		{
+			this->AddToRenderQueue(Block);
+		}
 
 		this->AddLight(&Dl);
 

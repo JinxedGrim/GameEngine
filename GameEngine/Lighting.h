@@ -51,7 +51,7 @@ public:
 		this->DiffuseCoeff = DiffuseCoeff;
 		this->SpecularCoeff = SpecularCoeff;
 
-		this->LightMesh = CubeMesh;
+		this->LightMesh = PrimitiveMeshes::CubeMesh;
 		
 		// TODO Fix this
 		//this->LightMesh.Materials.at(0)->AmbientColor = LightColor;
@@ -330,7 +330,7 @@ public:
 		this->ConstantAttenuation = 0.0f;
 		this->LinearAttenuation = 0.0f;
 		this->QuadraticAttenuation = 0.0f;
-		this->LightMesh = Sphere(0.5f, 20, 20);
+		this->LightMesh = PrimitiveMeshes::Sphere(0.5f, 20, 20);
 		this->Type = LightTypes::PointLight;
 	}
 
@@ -339,7 +339,7 @@ public:
 		this->ConstantAttenuation = ConstantAttenuation;
 		this->LinearAttenuation = LinearAttenuation;
 		this->QuadraticAttenuation = QuadraticAttenuation;
-		this->LightMesh = Sphere(0.5f, 20, 20);
+		this->LightMesh = PrimitiveMeshes::Sphere(0.5f, 20, 20);
 		this->Type = LightTypes::PointLight;
 	}
 

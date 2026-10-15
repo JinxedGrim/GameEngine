@@ -254,16 +254,16 @@ public:
 	}
 
 
-    static AABBColliderParams CalculateAABB(const std::vector<Triangle>& triangles)
+    static AABBColliderParams CalculateAABB(const Mesh* mesh)
     {
         Vec3 minP(FLT_MAX, FLT_MAX, FLT_MAX);
         Vec3 maxP(-FLT_MAX, -FLT_MAX, -FLT_MAX);
 
-        for (const auto& tri : triangles)
+        for (const auto& tri : mesh->Triangles)
         {
             for (int i = 0; i < 3; i++)
             {
-                const Vec3 v = tri.Points.Points[i];
+                const Vec3 v = mesh->_VertBuffer.GetVertex(tri.VertexIndices[i]);
                 minP.x = std::min(minP.x, v.x);
                 minP.y = std::min(minP.y, v.y);
                 minP.z = std::min(minP.z, v.z);
@@ -281,23 +281,24 @@ public:
     }
 
 
-    static SphereColliderParams CalculateBoundingSphere(const std::vector<Triangle>& triangles)
+    static SphereColliderParams CalculateBoundingSphere(const Mesh& mesh)
     {
         Vec3 centroid(0.0f, 0.0f, 0.0f);
         size_t count = 0;
 
-        for (const auto& tri : triangles)
+        for (const auto& tri : mesh.Triangles)
             for (int i = 0; i < 3; i++)
             {
-                centroid += tri.Points.Points[i];
+                centroid += tri.GetPoint(mesh._VertBuffer, i);
                 count++;
             }
+
         centroid = centroid / static_cast<float>(count);
 
         float radius = 0.0f;
-        for (const auto& tri : triangles)
+        for (const Triangle& tri : mesh.Triangles)
             for (int i = 0; i < 3; i++)
-                radius = std::max(radius, (tri.Points.Points[i] - centroid).xyz().Magnitude());
+                radius = std::max(radius, (tri.GetPoint(mesh._VertBuffer, i) - centroid).Magnitude());
 
         SphereColliderParams result;
         result.Offset = centroid;

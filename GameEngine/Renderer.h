@@ -32,6 +32,7 @@ namespace TerraPGE::Renderer
 		}
 	};
 
+
 	static SIZE_T MaxMemoryMB = 0;
 	static CPUID CpuId(1);
 	static SupportedInstructions SimdInfo = { 0 };
@@ -174,7 +175,9 @@ namespace TerraPGE::Renderer
 		}
 	}
 
+
 	static bool SystemHasBeenProbed;
+
 
 	enum class RenderingBackendType: int
 	{
@@ -182,6 +185,7 @@ namespace TerraPGE::Renderer
 		MULTITHREADED = 1,
 		GPU = 2
 	};
+
 
 	class RenderingContext
 	{
@@ -688,82 +692,91 @@ namespace TerraPGE::Renderer
 			std::fill(Renderer::ShadowMap, Renderer::ShadowMap + Renderer::ShadowMapWidth * Renderer::ShadowMapHeight, 1.0f);
 			std::fill(Renderer::FrameBuffer, Renderer::FrameBuffer + (Renderer::sx * Renderer::sy * 3), 0.0f);
 		}
-	}
 
 
-	void SwapFrameBuffer(bool Hdr, bool GammaCorrection)
-	{
-		float hdrMask = Renderer::UseHDR ? 1.0f : 0.0f;
-		float gammaMask = Renderer::DoGammaCorrection ? 1.0f : 0.0f;
-
-		for (int i = 0; i < Renderer::sx * Renderer::sy; i++)
+		void SwapFrameBuffer(bool Hdr, bool GammaCorrection)
 		{
-			int index = i * 3;
-			float* ChannelPtr = Renderer::FrameBuffer + index;
-
-			float Rf, Gf, Bf = 0.0f;
-			int R, G, B = 0;
-
-			Rf = ChannelPtr[0];
-			Gf = ChannelPtr[1];
-			Bf = ChannelPtr[2];
-
-			// this is done to remove branches
-			Rf = Rf + hdrMask * ((Rf / (1.0f + Rf)) - Rf);
-			Gf = Gf + hdrMask * ((Gf / (1.0f + Gf)) - Gf);
-			Bf = Bf + hdrMask * ((Bf / (1.0f + Bf)) - Bf);
-
-			Rf = std::clamp<float>(Rf, 0, 1.0f);
-			Gf = std::clamp<float>(Gf, 0, 1.0f);
-			Bf = std::clamp<float>(Bf, 0, 1.0f);
-
-			// this is done to remove branches
+			float hdrMask = Renderer::UseHDR ? 1.0f : 0.0f;
 			float gammaMask = Renderer::DoGammaCorrection ? 1.0f : 0.0f;
-			Rf = Rf + gammaMask * (Color::LinearToSRGB_Channel(Rf) - Rf);
-			Gf = Gf + gammaMask * (Color::LinearToSRGB_Channel(Gf) - Gf);
-			Bf = Bf + gammaMask * (Color::LinearToSRGB_Channel(Bf) - Bf);
 
-			// Final transformation to RGB Space
-			R = Rf * 255.0f;
-			G = Gf * 255.0f;
-			B = Bf * 255.0f;
+			for (int i = 0; i < Renderer::sx * Renderer::sy; i++)
+			{
+				int index = i * 3;
+				float* ChannelPtr = Renderer::FrameBuffer + index;
 
-			int y = i / Renderer::sx;
-			int x = i % Renderer::sx;
+				float Rf, Gf, Bf = 0.0f;
+				int R, G, B = 0;
 
-			// Write to out buffer
-			EngineGdi->QuickSetPixel(x, y, RGB(R, G, B));
+				Rf = ChannelPtr[0];
+				Gf = ChannelPtr[1];
+				Bf = ChannelPtr[2];
+
+				// this is done to remove branches
+				Rf = Rf + hdrMask * ((Rf / (1.0f + Rf)) - Rf);
+				Gf = Gf + hdrMask * ((Gf / (1.0f + Gf)) - Gf);
+				Bf = Bf + hdrMask * ((Bf / (1.0f + Bf)) - Bf);
+
+				Rf = std::clamp<float>(Rf, 0, 1.0f);
+				Gf = std::clamp<float>(Gf, 0, 1.0f);
+				Bf = std::clamp<float>(Bf, 0, 1.0f);
+
+				// this is done to remove branches
+				float gammaMask = Renderer::DoGammaCorrection ? 1.0f : 0.0f;
+				Rf = Rf + gammaMask * (Color::LinearToSRGB_Channel(Rf) - Rf);
+				Gf = Gf + gammaMask * (Color::LinearToSRGB_Channel(Gf) - Gf);
+				Bf = Bf + gammaMask * (Color::LinearToSRGB_Channel(Bf) - Bf);
+
+				// Final transformation to RGB Space
+				R = Rf * 255.0f;
+				G = Gf * 255.0f;
+				B = Bf * 255.0f;
+
+				int y = i / Renderer::sx;
+				int x = i % Renderer::sx;
+
+				// Write to out buffer
+				EngineGdi->QuickSetPixel(x, y, RGB(R, G, B));
+			}
 		}
 	}
 
 
 	void RenderMesh(Camera* Cam, Renderable* Object, LightObject** SceneLights, size_t LightCount)
 	{
+		// initialize shader
+		ShaderArgs BaseArgs = ShaderArgs();
+		Vec3 WorldPos = Cam->Transform.GetWorldPosition();
+		Vec3 LDir = Cam->GetLookDirection();
+		Matrix* ViewMat = Cam->_GetViewMatrixPtr();
+		Matrix* ProjMat = Cam->_GetProjectionMatrixPtr();
+		Matrix* WorldMat = Object->Transform._GetWorldMatrixPtr();
+
+		VertexBuffer VertexData = Object->mesh->_VertBuffer.Copy();
+
+		BaseArgs.BindUniform<ShaderTypes>(TPGE_SHDR_TYPE_, (ShaderTypes*)(&Object->SHADER_TYPE));
+		BaseArgs.BindUniform<Vec3>(TPGE_SHDR_CAMERA_POS_, &WorldPos);
+		BaseArgs.BindUniform<Vec3>(TPGE_SHDR_CAMERA_LDIR_, &LDir);
+		BaseArgs.BindUniform<Matrix>(TPGE_SHDR_CAMERA_VIEW_MATRIX_, ViewMat);
+		BaseArgs.BindUniform<Matrix>(TPGE_SHDR_CAMERA_PROJ_MATRIX_, ProjMat);
+		BaseArgs.BindUniform<Matrix>(TPGE_SHDR_OBJ_MATRIX_, WorldMat);
+		BaseArgs.BindUniform<LightObject**>(TPGE_SHDR_LIGHT_OBJECTS_, &SceneLights);
+		BaseArgs.BindUniform<size_t>(TPGE_SHDR_LIGHT_COUNT_, &LightCount);
+
+
+		BaseArgs.BindUniform<VertexBuffer>(TPGE_SHDR_VERTEX_BUFFER, &VertexData);
+
+		//   add sub mesh somewhere here
 		std::vector<Triangle> ClipSpaceTris = VertexShader(Cam, Object);
+
+
 
 		for (const Triangle& ClipSpaceTri : ClipSpaceTris)
 		{
 			std::vector<Triangle> Clipped = Renderer::ClippingClipSpace(&ClipSpaceTri);
 
-			// initialize shader
-			ShaderArgs Args = ShaderArgs();
 
-			Vec3 WorldPos = Cam->Transform.GetWorldPosition();
-			Vec3 LDir = Cam->GetLookDirection();
-			Matrix* ViewMat = Cam->_GetViewMatrixPtr();
-			Matrix* ProjMat = Cam->_GetProjectionMatrixPtr();
-			Matrix* WorldMat = Object->Transform._GetWorldMatrixPtr();
+			// TODO make copy of shader args (non owning)
 
-
-			Args.BindUniform<ShaderTypes>(TPGE_SHDR_TYPE_, (ShaderTypes*)(&Object->SHADER_TYPE));
-			Args.BindUniform<Vec3>(TPGE_SHDR_CAMERA_POS_, &WorldPos);
-			Args.BindUniform<Vec3>(TPGE_SHDR_CAMERA_LDIR_, &LDir);
-			Args.BindUniform<Matrix>(TPGE_SHDR_CAMERA_VIEW_MATRIX_, ViewMat);
-			Args.BindUniform<Matrix>(TPGE_SHDR_CAMERA_PROJ_MATRIX_, ProjMat);
-			Args.BindUniform<Matrix>(TPGE_SHDR_OBJ_MATRIX_, WorldMat);
-			Args.BindUniform<LightObject**>(TPGE_SHDR_LIGHT_OBJECTS_, &SceneLights);
-			Args.BindUniform<size_t>(TPGE_SHDR_LIGHT_COUNT_, &LightCount);
-			Args.BindUniform<bool>(TPGE_SHDR_DEBUG_SHADOWS_, &TerraPGE::Renderer::DebugShadows);
 
 			// Draw each tri
 			for (Triangle& ToDraw : Clipped)
@@ -1359,6 +1372,7 @@ namespace TerraPGE::Renderer
 			else
 				SSE::RenderSkyboxByChunk(sky, Cam, y0, y1, width, height, Fov, Proj, CamRot);
 		}
+
 
 		inline void RenderSkybox(EnvironmentRenderable* sky, Camera* Cam, const uint64_t width, const uint64_t height)
 		{

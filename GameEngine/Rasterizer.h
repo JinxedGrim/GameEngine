@@ -103,6 +103,23 @@ namespace TerraPGE::Renderer
 
 	namespace RasterUtils
 	{
+		__inline bool ShouldCulltriangle(const Vec3& WorldSpacePos, Vec3 FaceNormal, const Vec3& CamPos)
+		{
+			//if ((TriNormal.Dot(WorldSpaceTri.Points[0] - Cam->Pos) < 0.0f) || !TerraPGE::DoCull || !MeshToRender->BackfaceCulling) // backface culling
+			float facing = FaceNormal.Dot(WorldSpacePos - CamPos);
+			return facing >= 0.0f;
+		}
+
+
+		__inline bool ShouldCulltriangle(const Vec3& ViewSpacePos, const Vec3& FaceNormal, const Matrix& ViewMatrix)
+		{
+			Vec3 viewPos = ViewSpacePos * ViewMatrix;
+			Vec3 normalVS = FaceNormal * ViewMatrix;
+			float facing = normalVS.Dot(viewPos);
+			return facing >= 0.0f;
+		}
+
+
 		Vec3 MapInterpedVec3ToColor(Vec3 p0, Vec3 p1, Vec3 p2, Vec3 InterpedVal)
 		{
 			Vec3 minPos = Vec3(
@@ -148,46 +165,41 @@ namespace TerraPGE::Renderer
 			return (Val - min) / (max - min);
 
 		}
+
+
+		__inline void TransformToWorld(VertexBuffer& Buffer, const Matrix& Model)
+		{
+			Buffer.TransformGeometry(Model);
+		}
+
+
+		__inline Triangle ProjectToViewSpace(VertexBuffer& Buffer, const Matrix& View)
+		{
+			Buffer.TransformGeometry(View);
+		}
 	}
 
 
-	__inline bool ShouldCulltriangle(const Vec3& WorldSpacePos, Vec3 FaceNormal, const Vec3& CamPos)
-	{
-		//if ((TriNormal.Dot(WorldSpaceTri.Points[0] - Cam->Pos) < 0.0f) || !TerraPGE::DoCull || !MeshToRender->BackfaceCulling) // backface culling
-		float facing = FaceNormal.Dot(WorldSpacePos - CamPos);
-		return facing >= 0.0f;
-	}
+	//__inline Triangle TransformToWorld(const Triangle& Tri, const Matrix& Model)
+	//{
+	//	Triangle out = Tri;
+	//	out.ApplyMatrix(Model);
+
+	//	for (int i = 0; i < 3; ++i)
+	//		out.WorldSpaceVerts.Points[i] = out.Points.Points[i];
+
+	//	return out;
+	//}
 
 
-	__inline bool ShouldCulltriangle(const Vec3& ViewSpacePos, const Vec3& FaceNormal, const Matrix& ViewMatrix)
-	{
-		Vec3 viewPos = ViewSpacePos * ViewMatrix;
-		Vec3 normalVS = FaceNormal * ViewMatrix;
-		float facing = normalVS.Dot(viewPos);
-		return facing >= 0.0f;
-	}
-
-
-	__inline Triangle TransformToWorld(const Triangle& Tri, const Matrix& Model)
-	{
-		Triangle out = Tri;
-		out.ApplyMatrix(Model);
-
-		for (int i = 0; i < 3; ++i)
-			out.WorldSpaceVerts.Points[i] = out.Points.Points[i];
-
-		return out;
-	}
-
-
-	__inline Triangle ProjectToViewSpace(const Triangle* Tri, Camera* Cam)
-	{
+//	__inline Triangle ProjectToViewSpace(const Triangle* Tri, Camera* Cam)
+//	{
 		// 3d Space -> Viewed Space
-		Triangle Result = *Tri;
-		Result.ApplyMatrix(Cam->GetViewMatrix());
+//		Triangle Result = *Tri;
+//		Result.ApplyMatrix(Cam->GetViewMatrix());
 
-		return Result;
-	}
+//		return Result;
+//	}
 
 
 	std::vector<Triangle> Clipping(const Triangle* Tri, const int sx, const int sy)
@@ -282,54 +294,36 @@ namespace TerraPGE::Renderer
 	}
 
 
-	std::vector<Triangle> VertexShader(Camera* Cam, Renderable* Object)
+	std::vector<Triangle> VertexShader(VertexBuffer VertexData, Camera* Cam, Renderable* Object)
 	{
 		std::vector<Triangle> ClipSpaceTris = {};
 		ClipSpaceTris.reserve(Object->mesh->Triangles.size());
 
 		Vec3 NormPos = Vec3(0, 0, 0);
 		Vec3 NormDir = Vec3(0, 0, 0);
-		Vec3 TriNormal;
+		Vec3 TriNormal = Vec3(0, 0, 0);
 
 		static const float INV_3 = 1.0f / 3.0f;
 
 
+		// TODO somewhere before this get vert buffer
 
-		for (const Triangle& Tri : Object->mesh->Triangles)
+		// 3D Space / World Space
+		RasterUtils::TransformToWorld(VertexData, Object->Transform.GetWorldMatrix());
+
+
+		for (Triangle& Tri : Object->mesh->Triangles)
 		{
-			// 3D Space / World Space
-			Triangle WorldSpaceTri = TransformToWorld(Tri, Object->Transform.GetWorldMatrix());
-
 			//TODO Fix this whole damn thing calc normals at mesh gen or at vertex shade time fuck the rest
-			TriNormal = Tri.FaceNormal;
-			if (Object->mesh->Normals.size() == 0)
+
+			for (int i = 0; i < 3; i++)
 			{
-				NormPos = ((Tri.Points.Points[0] + Tri.Points.Points[1] + Tri.Points.Points[2]) * INV_3);
-				NormDir = (Tri.Points.Points[1] - Tri.Points.Points[0]).GetVec3().CrossNormalized((Tri.Points.Points[2] - Tri.Points.Points[0])).Normalized();
-				TriNormal = -(WorldSpaceTri.Points.Points[1] - WorldSpaceTri.Points.Points[0]).GetVec3().CrossNormalized((WorldSpaceTri.Points.Points[2] - WorldSpaceTri.Points.Points[0])).Normalized(); // this line and the if statement is used for culling
-
-				for (int i = 0; i < 3; i++)
-				{
-					WorldSpaceTri.VertexNormals[i] *= Object->Transform.GetNormalMatrix();
-					WorldSpaceTri.VertexNormals[i].Normalize();
-				}
-
-				WorldSpaceTri.NormalPositions[0] = NormPos;
-				WorldSpaceTri.NormalPositions[1] = Tri.Points.Points[0];
-				WorldSpaceTri.NormalPositions[2] = Tri.Points.Points[1];
-				WorldSpaceTri.NormalPositions[3] = Tri.Points.Points[2];
-				WorldSpaceTri.NormDirections[0] = NormDir;
+				// use vert buffer
+				Tri.NormalIndices[i] *= Object->Transform.GetNormalMatrix();
 			}
-			else
-			{
-				for (int i = 0; i < 3; i++)
-				{
-					WorldSpaceTri.VertexNormals[i] *= Object->Transform.GetNormalMatrix();
-				}
 
-				NormDir = WorldSpaceTri.FaceNormal;
-				NormPos = WorldSpaceTri.NormalPositions[0];
-			}
+			NormDir = WorldSpaceTri.FaceNormal;
+			NormPos = WorldSpaceTri.Points.VertexPositions[0];
 
 			if (!ShouldCulltriangle(WorldSpaceTri.Points.Points[0], TriNormal, Cam->GetWorldPosition()) || !DoCull) // backface culling
 			{
@@ -376,20 +370,21 @@ namespace TerraPGE::Renderer
 		Vec3* FragNormal = GlobalArgs->GetVaryingAsPtr<Vec3>(TPGE_SHDR_FRAG_NORMAL_);
 		Vec2* PixelCoords = GlobalArgs->GetVaryingAsPtr<Vec2>(TPGE_SHDR_PIXEL_COORDS_);
 		bool* IsInShdow = GlobalArgs->GetVaryingAsPtr(TPGE_SHDR_IS_IN_SHADOW_);
+		VertexBuffer* Input = Args->GetUniformAsPtr<VertexBuffer>(TPGE_SHDR_VERTEX_BUFFER);
 
 		bool MidPixel = false;
 
 		BaryCoords Interp;
 
 		// Screen Space
-		Vec4 v0 = ScreenSpaceTri->Points.Points[0];
-		Vec4 v1 = ScreenSpaceTri->Points.Points[1];
-		Vec4 v2 = ScreenSpaceTri->Points.Points[2];
+		Vec4 v0 = ScreenSpaceTri->GetPoint(Input, 0);
+		Vec4 v1 = ScreenSpaceTri->GetPoint(Input, 1);
+		Vec4 v2 = ScreenSpaceTri->GetPoint(Input, 2);
 
 		// Extract per-vertex attributes
-		Vec3 uvw0 = ScreenSpaceTri->TexCoords[0].AsVec3();
-		Vec3 uvw1 = ScreenSpaceTri->TexCoords[1].AsVec3(); 
-		Vec3 uvw2 = ScreenSpaceTri->TexCoords[2].AsVec3();
+		Vec3 uvw0 = ScreenSpaceTri->Points.TexCoords[0].AsVec3();
+		Vec3 uvw1 = ScreenSpaceTri->Points.TexCoords[1].AsVec3(); 
+		Vec3 uvw2 = ScreenSpaceTri->Points.TexCoords[2].AsVec3();
 		Vec3 n0 = ScreenSpaceTri->FaceNormal, n1 = ScreenSpaceTri->FaceNormal, n2 = ScreenSpaceTri->FaceNormal;
 
 		Vec4 world0 = ScreenSpaceTri->WorldSpaceVerts.Points[0];
@@ -526,7 +521,7 @@ namespace TerraPGE::Renderer
 						// Debug dispatching
 						if (ScreenSpaceTri->OverrideTextureColor)
 						{
-							*FragmentColor = Color(ScreenSpaceTri->Col.x, ScreenSpaceTri->Col.y, ScreenSpaceTri->Col.z);
+							*FragmentColor = Color(ScreenSpaceTri->Color.x, ScreenSpaceTri->Color.y, ScreenSpaceTri->Color.z);
 						}
 						else if (ScreenSpaceTri->Material->DiffuseMap != nullptr)
 						{
@@ -585,11 +580,11 @@ namespace TerraPGE::Renderer
 
 
 	// input tri is clip space
-	void __fastcall BaryCentricRasterizerDepth(Triangle* ClipSpaceTri, float* Buffer, const SIZE_T BufferWidth, const SIZE_T BufferHeight)
+	void __fastcall BaryCentricRasterizerDepth(VertexBuffer& Input, Triangle* ClipSpaceTri, float* Buffer, const SIZE_T BufferWidth, const SIZE_T BufferHeight)
 	{
-		float z0 = ClipSpaceTri->Points.Points[0].z;
-		float z1 = ClipSpaceTri->Points.Points[1].z;
-		float z2 = ClipSpaceTri->Points.Points[2].z;
+		float z0 = ClipSpaceTri->GetPoint(Input, 0).z;
+		float z1 = ClipSpaceTri->GetPoint(Input, 1).z;
+		float z2 = ClipSpaceTri->GetPoint(Input, 2).z;
 
 		ClipSpaceTri->ApplyPerspectiveDivide();
 		ClipSpaceTri->Scale(Vec3((float)((BufferWidth - 1) * 0.5f), (float)((BufferHeight - 1) * 0.5f), 1.0f));

@@ -154,7 +154,8 @@ class ThreadManager
 	std::mutex CoutStream;
 	std::condition_variable TaskConditionVar;
 	std::condition_variable QueueSzConditionVar;
-	alignas(64) std::atomic<size_t> TasksInProgress{ 0 };
+	//alignas(64) std::atomic<size_t> TasksInProgress{ 0 };
+	size_t taskCount = 0;
 
 	void WorkerLoop()
 	{
@@ -176,26 +177,26 @@ class ThreadManager
 
 				Task = std::move(Queue.front());
 				Queue.pop();
-
-				TasksInProgress.fetch_add(1, std::memory_order_relaxed);
 			}
+
+			//TasksInProgress.fetch_add(1, std::memory_order_relaxed);
 
 			if (this->JoinThreads)
-			{
 				return;
-			}
 
-			if (Task)
+			Task();
+
+			bool AllFinished = false;
+
 			{
-				Task();
+				std::lock_guard<std::mutex> lock(QueueMutex);
 
-				{
-					std::lock_guard<std::mutex> lock(QueueMutex);
-					TasksInProgress.fetch_sub(1, std::memory_order_relaxed);
-				}
-
-				QueueSzConditionVar.notify_all(); // notify WaitUntilAllTasksFinished
+				--taskCount;
+				AllFinished = (taskCount == 0);
 			}
+
+			if (AllFinished)
+				QueueSzConditionVar.notify_all();
 		}
 	}
 
@@ -239,14 +240,16 @@ public:
 	template<typename FunctionToCall, typename... Arguments>
 	void EnqueueTask(FunctionToCall&& Func, Arguments&&... Args)
 	{
-		if (JoinThreads)
-			return;
-
 		std::function<void()> task = std::bind(std::forward<FunctionToCall>(Func), std::forward<Arguments>(Args)...);
 
 		{
 			std::lock_guard<std::mutex> lock(QueueMutex);
+
+			if (JoinThreads)
+				return;
+
 			Queue.emplace(std::move(task));
+			++taskCount;
 		}
 
 		this->TaskConditionVar.notify_one();
@@ -256,8 +259,8 @@ public:
 	{
 		std::unique_lock<std::mutex> Lock(QueueMutex);
 
-		QueueSzConditionVar.wait(Lock, [this]() {
-			return Queue.empty() && TasksInProgress.load(std::memory_order_relaxed) == 0;
+		QueueSzConditionVar.wait(Lock, [this] {
+			return taskCount == 0;
 			});
 	}
 

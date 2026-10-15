@@ -243,7 +243,7 @@ class Image2D
 	}
 
 
-	Color GetColorAtPixel(int x, int y) const
+	Color GetColorAtPixel(const int x, const int y) const
 	{
 		int index = (x + this->Width * y) * 3;
 
@@ -255,13 +255,13 @@ class Image2D
 	}
 
 
-	Color GetColorAtPixel(float u, float v) const
+	__inline Color GetColorAtPixel(const float U, const float V) const
 	{
-		u = (u) * (float)(this->Width - 1);
-		v = (v) * (float)(this->Height - 1);
+		float u = (U) * (float)(this->Width - 1);
+		float v = (V) * (float)(this->Height - 1);
 
 		u = std::clamp(u, 0.0f, (float)this->Width-1);
-		v = std::clamp( v, 0.0f, (float)this->Height-1);
+		v = std::clamp(v, 0.0f, (float)this->Height-1);
 
 		return this->GetColorAtPixel((int)u, (int)v);
 	}

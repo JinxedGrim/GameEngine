@@ -269,7 +269,7 @@ bool RayIntersectsCapsule(const Ray& ray, const Vec3& p0, const Vec3& p1, float 
 
 // this overload is meant only to be used for a WorldRay && local set of triangles
 // it will first transform the ray into the objects space then it will it preform the ray cast
-bool RaycastMesh(Ray ray, const std::vector<Triangle>& triangles, RaycastHit* outHit, const Matrix* ObjectWorld)
+bool RaycastMesh(Ray ray, const Mesh* mesh, RaycastHit* outHit, const Matrix* ObjectWorld)
 {
 	bool foundHit = false;
 	float closest = FLT_MAX;
@@ -284,11 +284,11 @@ bool RaycastMesh(Ray ray, const std::vector<Triangle>& triangles, RaycastHit* ou
 	ray.origin = Vec4(ray.origin, 1.0f) * InverseWorld;
 	ray.direction = (ray.direction * InvNormal).Normalized();
 
-	for (const Triangle& tri : triangles)
+	for (const Triangle& tri : mesh->Triangles)
 	{
-		Vec3 v0 = tri.Points.Points[0];
-		Vec3 v1 = tri.Points.Points[1];
-		Vec3 v2 = tri.Points.Points[2];
+		Vec3 v0 = tri.GetPoint(mesh->_VertBuffer, 0);
+		Vec3 v1 = tri.GetPoint(mesh->_VertBuffer, 1);
+		Vec3 v2 = tri.GetPoint(mesh->_VertBuffer, 2);
 
 		if (RayIntersectsTriangle(ray, v0, v1, v2, &temp))
 		{
@@ -312,18 +312,19 @@ bool RaycastMesh(Ray ray, const std::vector<Triangle>& triangles, RaycastHit* ou
 }
 
 
-bool RaycastMesh(const Ray& ray, const std::vector<Triangle>& triangles, RaycastHit* outHit)
+bool RaycastMesh(const Ray& ray, const Mesh* mesh, RaycastHit* outHit)
 {
 	bool foundHit = false;
 	float closest = FLT_MAX;
 
 	RaycastHit temp;
 
-	for (const Triangle& tri : triangles)
+	for (const Triangle& tri : mesh->Triangles)
 	{
-		Vec3 v0 = tri.Points.Points[0];
-		Vec3 v1 = tri.Points.Points[1];
-		Vec3 v2 = tri.Points.Points[2];
+		Vec3 v0 = tri.GetPoint(mesh->_VertBuffer, 0);
+		Vec3 v1 = tri.GetPoint(mesh->_VertBuffer, 1);
+		Vec3 v2 = tri.GetPoint(mesh->_VertBuffer, 2);
+
 		if (RayIntersectsTriangle(ray, v0, v1, v2, &temp))
 		{
 			if (temp.distance < closest)

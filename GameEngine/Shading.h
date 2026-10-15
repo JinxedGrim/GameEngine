@@ -11,6 +11,7 @@
 // this shading system is cool but performs too slow.
 // move to 'functor'?
 
+//GGX Microfacet Distribution function
 
 // New proposal
 // System has struct of param info each info contains an ID and an index.
@@ -26,6 +27,12 @@ enum class ShaderTypes
 struct ShaderUniform
 {
 	const void* Data = nullptr;
+};
+
+
+struct ShaderOutput
+{
+	void* Data = nullptr;
 };
 
 
@@ -291,10 +298,12 @@ namespace TerraPGE
 	DEFINE_UNIFORM(TPGE_SHDR_CAMERA_VIEW_MATRIX_, Matrix);
 	DEFINE_UNIFORM(TPGE_SHDR_CAMERA_PROJ_MATRIX_, Matrix);
 	DEFINE_UNIFORM(TPGE_SHDR_OBJ_MATRIX_, Matrix);
-	DEFINE_UNIFORM(TPGE_SHDR_TRI_, Triangle);
+	DEFINE_UNIFORM(TPGE_SHDR_TRI_, Triangle); // this might become a varying
 	DEFINE_UNIFORM(TPGE_SHDR_LIGHT_COUNT_, size_t);
 	DEFINE_UNIFORM(TPGE_SHDR_LIGHT_OBJECTS_, LightObject**);
 	DEFINE_UNIFORM(TPGE_SHDR_DEBUG_SHADOWS_, bool);
+
+	DEFINE_BUFFER(TPGE_SHDR_VERTEX_BUFFER, VertexBuffer);
 
 	DEFINE_VARYING(TPGE_SHDR_FRAG_NORMAL_, Vec3);
 	DEFINE_VARYING(TPGE_SHDR_FRAG_COLOR_, Color);
@@ -388,10 +397,13 @@ namespace TerraPGE
 			{
 				const size_t LightCount = *(Args->GetUniformAsPtr<size_t>(TPGE_SHDR_LIGHT_COUNT_));
 				LightObject** Lights = *Args->GetUniformAsPtr<LightObject**>(TPGE_SHDR_LIGHT_OBJECTS_);
+				VertexBuffer Input = *Args->GetUniformAsPtr<VertexBuffer>(TPGE_SHDR_VERTEX_BUFFER);
 
 				const Triangle* Tri = Args->GetUniformAsPtr<Triangle>(TPGE_SHDR_TRI_);
 				const Vec3* FragPos = Args->GetVaryingAsPtr<Vec3>(TPGE_SHDR_FRAG_POS_);
 				const Vec3* FragNormal = Args->GetVaryingAsPtr<Vec3>(TPGE_SHDR_FRAG_NORMAL_);
+
+
 				Color* FragColor = Args->GetVaryingAsPtr<Color>(TPGE_SHDR_FRAG_COLOR_);
 				const Vec2* PixelCoords = Args->GetVaryingAsPtr<Vec2>(TPGE_SHDR_PIXEL_COORDS_);
 				LightObject* Light = nullptr;
@@ -401,11 +413,15 @@ namespace TerraPGE
 					return;
 				}
 
+				Vec3 P1 = Tri->GetPoint(Input, 0);
+				Vec3 P2 = Tri->GetPoint(Input, 1);
+				Vec3 P3 = Tri->GetPoint(Input, 2);
+
 				Light = *Lights;
 
-				Vec3 Centroid = ((Tri->Points.Points[0] + Tri->Points.Points[1] + Tri->Points.Points[2]) / 3.0f);
-				Vec3 BaryCoords = CalculateBarycentricCoordinatesScreenSpace(*PixelCoords, Vec2(Centroid.x, Centroid.y), Vec2(Tri->Points.Points[1].x, Tri->Points.Points[1].y), Vec2(Tri->Points.Points[2].x, Tri->Points.Points[2].y));
-				Vec3 BaryCoords2 = CalculateBarycentricCoordinatesScreenSpace(*PixelCoords, Vec2(Tri->Points.Points[0].x, Tri->Points.Points[0].y), Vec2(Tri->Points.Points[1].x, Tri->Points.Points[1].y), Vec2(Centroid.x, Centroid.y));
+				Vec3 Centroid = ((P1 + P2 + P3) / 3.0f);
+				Vec3 BaryCoords = CalculateBarycentricCoordinatesScreenSpace(*PixelCoords, Vec2(Centroid.x, Centroid.y), Vec2(P2.x, P2.y), Vec2(P3.x, P3.y));
+				Vec3 BaryCoords2 = CalculateBarycentricCoordinatesScreenSpace(*PixelCoords, Vec2(P1.x, P1.y), Vec2(P2.x, P2.y), Vec2(Centroid.x, Centroid.y));
 
 				float Intensity = 1.0f;
 				Vec3 LDir = (Light->Transform.GetLocalPosition() - *FragPos).Normalized();
@@ -425,6 +441,7 @@ namespace TerraPGE
 		const auto WHACK_SHADER = [](ShaderArgs* Args)
 		{
 			const Triangle* Tri = Args->GetUniformAsPtr<Triangle>(TPGE_SHDR_TRI_);
+			VertexBuffer Input = *Args->GetUniformAsPtr<VertexBuffer>(TPGE_SHDR_VERTEX_BUFFER);
 			Material* Mat = Tri->Material;
 			LightObject** Lights = *Args->GetUniformAsPtr<LightObject**>(TPGE_SHDR_LIGHT_OBJECTS_);
 			Color* FragColor = Args->GetVaryingAsPtr<Color>(TPGE_SHDR_FRAG_COLOR_);
@@ -438,7 +455,11 @@ namespace TerraPGE
 
 			Light = *Lights;
 
-			Vec3 LDir = (Light->Transform.GetLocalPosition() - ((Tri->Points.Points[0] + Tri->Points.Points[1] + Tri->Points.Points[2]) / 3.0f)).Normalized();
+			Vec3 P1 = Tri->GetPoint(Input, 0);
+			Vec3 P2 = Tri->GetPoint(Input, 1);
+			Vec3 P3 = Tri->GetPoint(Input, 2);
+
+			Vec3 LDir = (Light->Transform.GetLocalPosition() - ((P1 + P2 + P3) / 3.0f)).Normalized();
 
 			float Li = std::max<float>(0.0f, Tri->FaceNormal.Dot(LDir));
 
@@ -456,6 +477,7 @@ namespace TerraPGE
 		static __inline void Shader_Phong_LOW_LOD(ShaderArgs* Args)
 		{
 			Color* FragColor = Args->GetVaryingAsPtr<Color>(TPGE_SHDR_FRAG_COLOR_);
+			VertexBuffer Input = *Args->GetUniformAsPtr<VertexBuffer>(TPGE_SHDR_VERTEX_BUFFER);
 
 			const Triangle* Tri = Args->GetUniformAsPtr<Triangle>(TPGE_SHDR_TRI_);
 			const size_t LightCount = *(Args->GetUniformAsPtr<size_t>(TPGE_SHDR_LIGHT_COUNT_));
@@ -470,7 +492,11 @@ namespace TerraPGE
 
 			Light = *Lights;
 
-			Vec3 LDir = (Light->Transform.GetLocalPosition() - ((Tri->Points.Points[0] + Tri->Points.Points[1] + Tri->Points.Points[2]) / 3.0f)).Normalized();
+			Vec3 P1 = Tri->GetPoint(Input, 0);
+			Vec3 P2 = Tri->GetPoint(Input, 1);
+			Vec3 P3 = Tri->GetPoint(Input, 2);
+
+			Vec3 LDir = (Light->Transform.GetLocalPosition() - ((P1 + P2 + P3) / 3.0f)).Normalized();
 
 			float Li = std::max<float>(0.0f, Tri->FaceNormal.Dot(LDir));
 
@@ -491,6 +517,11 @@ namespace TerraPGE
 			const Vec3* LookDir = Args->GetUniformAsPtr<Vec3>(TPGE_SHDR_CAMERA_LDIR_);
 			LightObject** Lights = Args->GetUniformAsRef<LightObject**>(TPGE_SHDR_LIGHT_OBJECTS_);
 			Color* FragColor = Args->GetVaryingAsPtr<Color>(TPGE_SHDR_FRAG_COLOR_);
+			VertexBuffer Input = *Args->GetUniformAsPtr<VertexBuffer>(TPGE_SHDR_VERTEX_BUFFER);
+
+			Vec3 P1 = Tri->GetPoint(Input, 0);
+			Vec3 P2 = Tri->GetPoint(Input, 1);
+			Vec3 P3 = Tri->GetPoint(Input, 2);
 
 			LightObject* Light = nullptr;
 			if (LightCount <= 0)
@@ -501,7 +532,7 @@ namespace TerraPGE
 			Light = *Lights;
 
 			float Intensity = 1.0f;
-			Vec3 LDir = (Light->Transform.GetLocalPosition() - ((Tri->Points.Points[0] + Tri->Points.Points[1] + Tri->Points.Points[2]) / 3.0f)).Normalized();
+			Vec3 LDir = (Light->Transform.GetLocalPosition() - ((P1 + P2 + P3) / 3.0f)).Normalized();
 			float Li = Tri->FaceNormal.Dot(LDir);
 
 			Intensity = std::max<float>(0.0f, Li);
@@ -523,6 +554,8 @@ namespace TerraPGE
 		static __inline void  DefaultShader(ShaderArgs* Args)
 		{
 			const Triangle* Tri = Args->GetUniformAsPtr<Triangle>(TPGE_SHDR_TRI_);
+			VertexBuffer Input = *Args->GetUniformAsPtr<VertexBuffer>(TPGE_SHDR_VERTEX_BUFFER);
+
 			const size_t LightCount = *(Args->GetUniformAsPtr<size_t>(TPGE_SHDR_LIGHT_COUNT_));
 			const Material* Mat = Tri->Material;
 			const Vec3* LookDir = Args->GetUniformAsPtr<Vec3>(TPGE_SHDR_CAMERA_LDIR_);
@@ -611,6 +644,8 @@ namespace TerraPGE
 		{
 			const Triangle* Tri = Args->GetUniformAsPtr<Triangle>(TPGE_SHDR_TRI_);
 			const size_t LightCount = *Args->GetUniformAsPtr<size_t>(TPGE_SHDR_LIGHT_COUNT_);
+			VertexBuffer Input = *Args->GetUniformAsPtr<VertexBuffer>(TPGE_SHDR_VERTEX_BUFFER);
+
 			const Material* Mat = Tri->Material;
 			const Vec3* CamLookDir = Args->GetUniformAsPtr<Vec3>(TPGE_SHDR_CAMERA_LDIR_);
 
@@ -685,33 +720,37 @@ namespace TerraPGE
 
 		
 		static __inline void Shader_Texture_Only(ShaderArgs* Args)
+		{
+			VertexBuffer Input = *Args->GetUniformAsPtr<VertexBuffer>(TPGE_SHDR_VERTEX_BUFFER);
+
+			const Triangle* Tri = Args->GetUniformAsPtr<Triangle>(TPGE_SHDR_TRI_);
+			TextureCoords* UVW = Args->GetVaryingAsPtr<TextureCoords>(TPGE_SHDR_TEX_UVW_);
+			Color* FragColor = Args->GetVaryingAsPtr<Color>(TPGE_SHDR_FRAG_COLOR_);
+
+			Vec3 TexturCol = Vec3();
+
+			if (Tri->Material->DiffuseMap != nullptr)
 			{
-				const Triangle* Tri = Args->GetUniformAsPtr<Triangle>(TPGE_SHDR_TRI_);
-				TextureCoords* UVW = Args->GetVaryingAsPtr<TextureCoords>(TPGE_SHDR_TEX_UVW_);
-				Color* FragColor = Args->GetVaryingAsPtr<Color>(TPGE_SHDR_FRAG_COLOR_);
-
-				Vec3 TexturCol = Vec3();
-
-				if (Tri->Material->DiffuseMap != nullptr)
-				{
-					TexturCol = Tri->Material->DiffuseMap->GetPixelColor(UVW->u, 1.0f - UVW->v).GetRGB();
-					FragColor->R = std::clamp<float>(TexturCol.x, 0.0f, 255.0f);
-					FragColor->G = std::clamp<float>(TexturCol.y, 0.0f, 255.0f);
-					FragColor->B = std::clamp<float>(TexturCol.z, 0.0f, 255.0f);
-					FragColor->A = 255.0f;
-				}
-				else
-				{
-					FragColor->R = 255.0f;
-					FragColor->G = 0.0f;
-					FragColor->B = 255.0f;
-					FragColor->A = 255.0f;
-				}
-			};
+				TexturCol = Tri->Material->DiffuseMap->GetPixelColor(UVW->u, 1.0f - UVW->v).GetRGB();
+				FragColor->R = std::clamp<float>(TexturCol.x, 0.0f, 255.0f);
+				FragColor->G = std::clamp<float>(TexturCol.y, 0.0f, 255.0f);
+				FragColor->B = std::clamp<float>(TexturCol.z, 0.0f, 255.0f);
+				FragColor->A = 255.0f;
+			}
+			else
+			{
+				FragColor->R = 255.0f;
+				FragColor->G = 0.0f;
+				FragColor->B = 255.0f;
+				FragColor->A = 255.0f;
+			}
+		};
 
 
 		static __inline void Shader_Sample_Texture(ShaderArgs* Args)
 		{
+			VertexBuffer Input = *Args->GetUniformAsPtr<VertexBuffer>(TPGE_SHDR_VERTEX_BUFFER);
+
 			const Triangle* Tri = Args->GetUniformAsPtr<Triangle>(TPGE_SHDR_TRI_);
 			TextureCoords* UVW = Args->GetVaryingAsPtr<TextureCoords>(TPGE_SHDR_TEX_UVW_);
 			Color* FragColor = Args->GetVaryingAsPtr<Color>(TPGE_SHDR_FRAG_COLOR_);
