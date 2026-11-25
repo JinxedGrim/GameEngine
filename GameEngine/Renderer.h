@@ -741,6 +741,20 @@ namespace TerraPGE::Renderer
 	}
 
 
+	void ProjectToScreenSpace(const std::vector<Triangle>& ClippedTriangles, )
+	{
+		for (const Triangle& Tri : ClippedTriangles)
+		{
+			// Clip Space -> NDC Space
+			Tri.ApplyPerspectiveDivide();
+
+			// Offset to viewport space (Ndc -> Screen Space)
+			Tri.Scale(Vec3((float)(Renderer::sx * 0.5f), (float)(Renderer::sy * 0.5f), 1.0f));
+			Tri.Translate(Vec3((float)(Renderer::sx * 0.5f), (float)(Renderer::sy * 0.5f), 0.0f));
+		}
+	}
+
+
 	void RenderMesh(Camera* Cam, Renderable* Object, LightObject** SceneLights, size_t LightCount)
 	{
 		// initialize shader
@@ -777,19 +791,13 @@ namespace TerraPGE::Renderer
 
 			// TODO make copy of shader args (non owning)
 
+			ProjectToScreenSpace(Clipped, &VertexData)
 
 			// Draw each tri
 			for (Triangle& ToDraw : Clipped)
 			{
-				// Clip Space -> NDC Space
-				ToDraw.ApplyPerspectiveDivide();
-
-				// Offset to viewport space (Ndc -> Screen Space)
-				ToDraw.Scale(Vec3((float)(Renderer::sx * 0.5f), (float)(Renderer::sy * 0.5f), 1.0f));
-				ToDraw.Translate(Vec3((float)(Renderer::sx * 0.5f), (float)(Renderer::sy * 0.5f), 0.0f));
-
 				//SceneLights, LightCount
-				Args.BindUniform<Triangle>(TPGE_SHDR_TRI_, &ToDraw);
+				BaseArgs.BindUniform<Triangle>(TPGE_SHDR_TRI_, &ToDraw);
 
 
 				// Calc lighting (only if lighting is applied at a tri level)

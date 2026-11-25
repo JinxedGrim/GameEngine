@@ -302,6 +302,7 @@ namespace TerraPGE
 	DEFINE_UNIFORM(TPGE_SHDR_LIGHT_COUNT_, size_t);
 	DEFINE_UNIFORM(TPGE_SHDR_LIGHT_OBJECTS_, LightObject**);
 	DEFINE_UNIFORM(TPGE_SHDR_DEBUG_SHADOWS_, bool);
+	DEFINE_UNIFORM(TPGE_SHDR_MATERIAL_, Material);
 
 	DEFINE_BUFFER(TPGE_SHDR_VERTEX_BUFFER, VertexBuffer);
 
@@ -321,7 +322,7 @@ namespace TerraPGE
 			{
 				const Triangle* Tri = Args->GetUniformAsPtr<Triangle>(TPGE_SHDR_TRI_);
 				const size_t LightCount = *(Args->GetUniformAsPtr<size_t>(TPGE_SHDR_LIGHT_COUNT_));
-				const Material* Mat = Tri->Material;
+				const Material* Mat = Args->GetUniformAsPtr<Material>(TPGE_SHDR_MATERIAL_);
 				const Vec3* CamLookDir = Args->GetUniformAsPtr<Vec3>(TPGE_SHDR_CAMERA_LDIR_);
 				LightObject** Lights = *Args->GetUniformAsPtr<LightObject**>(TPGE_SHDR_LIGHT_OBJECTS_);
 
@@ -442,7 +443,7 @@ namespace TerraPGE
 		{
 			const Triangle* Tri = Args->GetUniformAsPtr<Triangle>(TPGE_SHDR_TRI_);
 			VertexBuffer Input = *Args->GetUniformAsPtr<VertexBuffer>(TPGE_SHDR_VERTEX_BUFFER);
-			Material* Mat = Tri->Material;
+			const Material* Mat = Args->GetUniformAsPtr<Material>(TPGE_SHDR_MATERIAL_);
 			LightObject** Lights = *Args->GetUniformAsPtr<LightObject**>(TPGE_SHDR_LIGHT_OBJECTS_);
 			Color* FragColor = Args->GetVaryingAsPtr<Color>(TPGE_SHDR_FRAG_COLOR_);
 			const size_t LightCount = *(Args->GetUniformAsPtr<size_t>(TPGE_SHDR_LIGHT_COUNT_));
@@ -481,7 +482,7 @@ namespace TerraPGE
 
 			const Triangle* Tri = Args->GetUniformAsPtr<Triangle>(TPGE_SHDR_TRI_);
 			const size_t LightCount = *(Args->GetUniformAsPtr<size_t>(TPGE_SHDR_LIGHT_COUNT_));
-			Material* Mat = Tri->Material;
+			const Material* Mat = Args->GetUniformAsPtr<Material>(TPGE_SHDR_MATERIAL_);
 			LightObject** Lights = *Args->GetUniformAsPtr<LightObject**>(TPGE_SHDR_LIGHT_OBJECTS_);
 
 			LightObject* Light = nullptr;
@@ -513,7 +514,7 @@ namespace TerraPGE
 		{
 			const Triangle* Tri = Args->GetUniformAsPtr<Triangle>(TPGE_SHDR_TRI_);
 			const size_t LightCount = *(Args->GetUniformAsPtr<size_t>(TPGE_SHDR_LIGHT_COUNT_));
-			Material* Mat = Tri->Material;
+			const Material* Mat = Args->GetUniformAsPtr<Material>(TPGE_SHDR_MATERIAL_);
 			const Vec3* LookDir = Args->GetUniformAsPtr<Vec3>(TPGE_SHDR_CAMERA_LDIR_);
 			LightObject** Lights = Args->GetUniformAsRef<LightObject**>(TPGE_SHDR_LIGHT_OBJECTS_);
 			Color* FragColor = Args->GetVaryingAsPtr<Color>(TPGE_SHDR_FRAG_COLOR_);
@@ -557,7 +558,7 @@ namespace TerraPGE
 			VertexBuffer Input = *Args->GetUniformAsPtr<VertexBuffer>(TPGE_SHDR_VERTEX_BUFFER);
 
 			const size_t LightCount = *(Args->GetUniformAsPtr<size_t>(TPGE_SHDR_LIGHT_COUNT_));
-			const Material* Mat = Tri->Material;
+			const Material* Mat = Args->GetUniformAsPtr<Material>(TPGE_SHDR_MATERIAL_);
 			const Vec3* LookDir = Args->GetUniformAsPtr<Vec3>(TPGE_SHDR_CAMERA_LDIR_);
 			const Vec3* CamPos = Args->GetUniformAsPtr<Vec3>(TPGE_SHDR_CAMERA_POS_);
 
@@ -646,7 +647,7 @@ namespace TerraPGE
 			const size_t LightCount = *Args->GetUniformAsPtr<size_t>(TPGE_SHDR_LIGHT_COUNT_);
 			VertexBuffer Input = *Args->GetUniformAsPtr<VertexBuffer>(TPGE_SHDR_VERTEX_BUFFER);
 
-			const Material* Mat = Tri->Material;
+			const Material* Mat = Args->GetUniformAsPtr<Material>(TPGE_SHDR_MATERIAL_);
 			const Vec3* CamLookDir = Args->GetUniformAsPtr<Vec3>(TPGE_SHDR_CAMERA_LDIR_);
 
 			Vec3* FragPos = Args->GetVaryingAsPtr<Vec3>(TPGE_SHDR_FRAG_POS_);
@@ -726,12 +727,13 @@ namespace TerraPGE
 			const Triangle* Tri = Args->GetUniformAsPtr<Triangle>(TPGE_SHDR_TRI_);
 			TextureCoords* UVW = Args->GetVaryingAsPtr<TextureCoords>(TPGE_SHDR_TEX_UVW_);
 			Color* FragColor = Args->GetVaryingAsPtr<Color>(TPGE_SHDR_FRAG_COLOR_);
+			const Material* Mat = Args->GetUniformAsPtr<Material>(TPGE_SHDR_MATERIAL_);
 
 			Vec3 TexturCol = Vec3();
 
-			if (Tri->Material->DiffuseMap != nullptr)
+			if (Mat->DiffuseMap != nullptr)
 			{
-				TexturCol = Tri->Material->DiffuseMap->GetPixelColor(UVW->u, 1.0f - UVW->v).GetRGB();
+				TexturCol = Mat->DiffuseMap->GetPixelColor(UVW->u, 1.0f - UVW->v).GetRGB();
 				FragColor->R = std::clamp<float>(TexturCol.x, 0.0f, 255.0f);
 				FragColor->G = std::clamp<float>(TexturCol.y, 0.0f, 255.0f);
 				FragColor->B = std::clamp<float>(TexturCol.z, 0.0f, 255.0f);
@@ -754,12 +756,13 @@ namespace TerraPGE
 			const Triangle* Tri = Args->GetUniformAsPtr<Triangle>(TPGE_SHDR_TRI_);
 			TextureCoords* UVW = Args->GetVaryingAsPtr<TextureCoords>(TPGE_SHDR_TEX_UVW_);
 			Color* FragColor = Args->GetVaryingAsPtr<Color>(TPGE_SHDR_FRAG_COLOR_);
+			const Material* Mat = Args->GetUniformAsPtr<Material>(TPGE_SHDR_MATERIAL_);
 
 			Vec3 TexturCol = Vec3();
 
-			if (Tri->Material->DiffuseMap != nullptr)
+			if (Mat->DiffuseMap != nullptr)
 			{
-				TexturCol = Tri->Material->DiffuseMap->GetPixelColor(UVW->u, 1.0f - UVW->v).GetRGB();
+				TexturCol = Mat->DiffuseMap->GetPixelColor(UVW->u, 1.0f - UVW->v).GetRGB();
 				FragColor->R = std::clamp<float>(TexturCol.x, 0.0f, 255.0f);
 				FragColor->G = std::clamp<float>(TexturCol.y, 0.0f, 255.0f);
 				FragColor->B = std::clamp<float>(TexturCol.z, 0.0f, 255.0f);
